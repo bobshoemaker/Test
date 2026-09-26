@@ -1,0 +1,19 @@
+{
+  "name": "brickhouse",
+  "version": "0.4.0",
+  "private": true,
+  "description": "Photos of a house in, a buildable brick model with a checked build manual out.",
+  "license": "UNLICENSED",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server/server.js",
+    "demo": "BRICKHOUSE_FAKE=1 node src/server/server.js",
+    "test": "node --test test/*.test.js",
+    "compile": "node scripts/compile.js",
+    "design": "node scripts/design.js",
+    "bundle": "node scripts/bundle.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0"
+  }
+}
