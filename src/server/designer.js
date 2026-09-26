@@ -73,7 +73,7 @@ async function callClaude(client, params) {
  */
 async function designHouse({
   client, model, photos = [], notes = '', target = 1200, mode = 'design', design = null,
-  effort = null, maxRounds = 7, maxTokens = 32000, onEvent = () => {},
+  effort = null, maxRounds = 7, maxTokens = 64000, onEvent = () => {},
 }) {
   const content = photos.map((p) => ({ type: 'image', source: { type: 'base64', media_type: p.mediaType, data: p.data } }));
   if (mode === 'fix') {
@@ -85,14 +85,20 @@ async function designHouse({
   }
   const messages = [{ role: 'user', content }];
   let lastDraft = null, compiles = 0;
+  const usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
 
   for (let round = 0; round < maxRounds; round++) {
     onEvent({ type: 'status', message: round === 0
       ? (mode === 'fix' ? 'Claude is fixing the design…' : 'Claude is studying the photos…')
       : `Claude is revising the design (round ${round + 1})…` });
-    const params = { model, max_tokens: maxTokens, system: SPEC, tools: [COMPILE_TOOL], messages };
+    // max_tokens includes thinking, which runs long at xhigh and max. Automatic caching moves the
+    // breakpoint to the end of each request, so every round reads the photos and earlier drafts from cache.
+    const params = { model, max_tokens: maxTokens, system: SPEC, tools: [COMPILE_TOOL], messages, cache_control: { type: 'ephemeral' } };
     if (effort) params.output_config = { effort };
     const msg = await callClaude(client, params);
+    const u = msg.usage || {};
+    usage.input += u.input_tokens || 0; usage.cacheRead += u.cache_read_input_tokens || 0;
+    usage.cacheWrite += u.cache_creation_input_tokens || 0; usage.output += u.output_tokens || 0;
     // Keep the whole assistant turn, thinking blocks included; the API requires them in tool loops.
     messages.push({ role: 'assistant', content: msg.content });
 
@@ -104,7 +110,7 @@ async function designHouse({
       if (!isDesign(final)) final = lastDraft;
       if (!isDesign(final)) throw new Error('Claude did not return a design.');
       final.source = 'photos';
-      return { design: final, result: compile(final), compiles, rounds: round + 1 };
+      return { design: final, result: compile(final), compiles, rounds: round + 1, usage };
     }
 
     const results = [];
@@ -135,7 +141,7 @@ async function designHouse({
   }
 
   if (lastDraft) {
-    return { design: lastDraft, result: compile(lastDraft), compiles, rounds: maxRounds,
+    return { design: lastDraft, result: compile(lastDraft), compiles, rounds: maxRounds, usage,
       note: 'Stopped at the round limit; this is the last compiled draft.' };
   }
   throw new Error('Claude did not produce a design within the round limit.');

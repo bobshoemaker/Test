@@ -33,6 +33,8 @@ const photos = args.map((f) => {
     } });
   const s = res.result.stats;
   console.log(`Done in ${Math.round((Date.now() - t0) / 1000)} s: ${s.pieces} pieces, ${res.result.errors.length} errors, ${res.result.warnings.length} warnings${res.note ? ' (' + res.note + ')' : ''}`);
+  const u = res.usage;
+  if (u) console.log(`Tokens: ${u.input} input, ${u.cacheRead} cache read, ${u.cacheWrite} cache write, ${u.output} output`);
   const file = out || `designs/generated/${(res.design.name || 'house').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json`;
   fs.writeFileSync(file, JSON.stringify(res.design, null, 2));
   console.log(`Saved ${file}`);

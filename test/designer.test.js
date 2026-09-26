@@ -7,9 +7,9 @@ const { makeFakeClient } = require('../src/server/fakeClient');
 test('the loop compiles drafts, reports errors to Claude, and returns a clean design', async () => {
   const client = makeFakeClient({ delayMs: 0 });
   const seen = [];
-  const sent = [];
+  const sent = [], sentParams = [];
   const create = client.messages.create.bind(client.messages);
-  client.messages.create = async (params) => { sent.push(JSON.parse(JSON.stringify(params.messages))); return create(params); };
+  client.messages.create = async (params) => { sentParams.push(params); sent.push(JSON.parse(JSON.stringify(params.messages))); return create(params); };
   const out = await designHouse({
     client, model: 'fake', photos: [{ mediaType: 'image/jpeg', data: 'AAAA' }], target: 800,
     onEvent: (ev) => seen.push(ev),
@@ -29,6 +29,8 @@ test('the loop compiles drafts, reports errors to Claude, and returns a clean de
   // The first request carries the photo and the task.
   assert.equal(sent[0][0].content[0].type, 'image');
   assert.match(sent[0][0].content.at(-1).text, /Aim for about 800 pieces/);
+  // Every round asks for automatic caching and leaves room for long thinking.
+  for (const p of sentParams) { assert.deepEqual(p.cache_control, { type: 'ephemeral' }); assert.equal(p.max_tokens, 64000); }
 });
 
 test('extractJson accepts fenced and surrounded JSON', () => {
