@@ -67,4 +67,28 @@ DESIGN
 ${JSON.stringify(design)}`;
 }
 
-module.exports = { SPEC, designTask, fixTask, example };
+// Parts mode: the house is built over several short turns, each compiled right away, so a
+// preview exists after every part and no single turn has to plan the whole model.
+const PARTS = [
+  { name: 'Walls', task: 'PART 1 OF 4, WALLS. Set name, place, scale, facts, assumed and the full phases list for all four parts. Then write the walls of every building (house, garage, any outbuilding) with every door, window and garage-door opening. Nothing else yet.' },
+  { name: 'Roofs', task: 'PART 2 OF 4, ROOFS AND TRIM. Add roofs, parapets and their caps, bands, awnings and bay roofs. Leave the walls alone unless the compiler flags them.' },
+  { name: 'Site', task: 'PART 3 OF 4, THE LOT. Add the street, sidewalk, driveway, entry stairs and railings, walks, planters and retaining walls, patio paving, fences and gates.' },
+  { name: 'Planting', task: 'PART 4 OF 4, PLANTING AND FINISH. Add trees, cacti, shrubs and other sub-builds. Then fix every remaining error and warning and bring the piece count near the target. When it compiles with 0 errors and 0 warnings, reply with only the final design JSON.' },
+];
+
+function partsTask({ photoCount, notes, target }) {
+  return `TASK
+Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes from the agent: "${notes}"` : ''}. The finished design should have about ${target} pieces (parts plus window glass plus the baseplate), within 10 percent.
+
+WORK IN PARTS. You build the design in ${PARTS.length} parts, one part per turn; each turn tells you which part to do. In every part:
+- Add that part's ops to the design so far and call compile_design on the complete design right away. The compiler is fast and exact. Send a rough draft early and let it find collisions and support problems; don't work out coordinates in your head.
+- Fix what it reports for this part, using at most 3 compiles. Problems caused by ops that belong to a later part can wait.
+- Then reply with one short sentence saying what you built. Only the last part ends with the design JSON.
+
+EXAMPLE of a valid finished design (a two-story house built from three listing photos, 778 pieces, 0 errors):
+${JSON.stringify(JSON.parse(example()))}
+
+${PARTS[0].task}`;
+}
+
+module.exports = { SPEC, designTask, fixTask, partsTask, PARTS, example };

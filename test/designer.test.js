@@ -33,6 +33,23 @@ test('the loop compiles drafts, reports errors to Claude, and returns a clean de
   for (const p of sentParams) { assert.deepEqual(p.cache_control, { type: 'ephemeral' }); assert.equal(p.max_tokens, 64000); }
 });
 
+test('parts mode builds in four appended turns and reports each part', async () => {
+  const client = makeFakeClient({ delayMs: 0 });
+  const sent = [];
+  const create = client.messages.create.bind(client.messages);
+  client.messages.create = async (params) => { sent.push(JSON.parse(JSON.stringify(params.messages))); return create(params); };
+  const seen = [];
+  const out = await designHouse({ client, model: 'fake', mode: 'parts', photos: [{ mediaType: 'image/jpeg', data: 'AAAA' }], onEvent: (ev) => seen.push(ev) });
+  assert.deepEqual(seen.filter((e) => e.type === 'part').map((e) => e.name), ['Walls', 'Roofs', 'Site', 'Planting']);
+  assert.equal(seen.filter((e) => e.type === 'partDone').length, 4);
+  assert.equal(seen.find((e) => e.type === 'draft').part, 'Walls');
+  assert.match(sent[0][0].content.at(-1).text, /PART 1 OF 4, WALLS/);
+  // Each part's request extends the previous one; nothing earlier is edited.
+  for (let i = 1; i < sent.length; i++) assert.deepEqual(sent[i].slice(0, sent[i - 1].length), sent[i - 1]);
+  assert.match(sent.at(-1).at(-1).content[0].text, /PART 4 OF 4/);
+  assert.equal(out.result.errors.length, 0);
+});
+
 test('extractJson accepts fenced and surrounded JSON', () => {
   assert.deepEqual(extractJson('```json\n{"a":1}\n```'), { a: 1 });
   assert.deepEqual(extractJson('Here it is: {"a":2} done'), { a: 2 });

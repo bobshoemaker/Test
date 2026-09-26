@@ -2,6 +2,7 @@
 // Photos to design from the command line, using the same loop as the server.
 //   node scripts/design.js front.jpg side.jpg --notes "garage on the right" --target 1200 --out designs/my-house.json
 //   Options: --model claude-opus-5-5  --effort high|xhigh|max  --max-tokens 128000  --fake (scripted Claude, no key)
+//            --parts  build in four turns (walls, roofs, site, planting); saves each compiled draft next to --out
 const fs = require('node:fs');
 const path = require('node:path');
 const { designHouse } = require('../src/server/designer');
@@ -12,7 +13,7 @@ const flag = (name) => { const i = args.indexOf('--' + name); if (i >= 0) { args
 const notes = opt('notes', ''), target = Number(opt('target', 1200)), out = opt('out', null);
 const model = opt('model', process.env.BRICKHOUSE_MODEL || 'claude-opus-5-5'), effort = opt('effort', process.env.BRICKHOUSE_EFFORT || null);
 const maxTokens = Number(opt('max-tokens', 64000));
-const fake = flag('fake');
+const fake = flag('fake'), parts = flag('parts');
 const types = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' };
 const photos = args.map((f) => {
   const t = types[path.extname(f).toLowerCase()]; if (!t) throw new Error(`Unsupported image type: ${f}`);
@@ -26,11 +27,21 @@ const photos = args.map((f) => {
     client = require('../src/server/client').makeAnthropicClient();
     if (!client) { console.error('Set BRICKHOUSE_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY (or pass --fake).'); process.exit(2); }
   }
-  const t0 = Date.now();
-  const res = await designHouse({ client, model, effort, maxTokens, photos, notes, target,
+  const t0 = Date.now(), clock = () => `[${Math.floor((Date.now() - t0) / 60000)}:${String(Math.floor((Date.now() - t0) / 1000) % 60).padStart(2, '0')}]`;
+  const base = (out || 'designs/generated/house.json').replace(/\.json$/, '');
+  const res = await designHouse({ client, model, effort, maxTokens, photos, notes, target, mode: parts ? 'parts' : 'design',
     onEvent: (ev) => {
-      if (ev.type === 'status') console.log(ev.message);
-      if (ev.type === 'draft') console.log(`  draft ${ev.n}: ${ev.stats.pieces} pieces, ${ev.errors} errors, ${ev.warnings} warnings`);
+      if (ev.type === 'status') console.log(`${clock()} ${ev.message}`);
+      if (ev.type === 'part') console.log(`\n${clock()} === Part ${ev.n} of ${ev.of}: ${ev.name} ===`);
+      if (ev.type === 'progress') console.log(`${clock()}   ...${ev.block === 'tool_use' ? 'writing the design' : ev.block === 'text' ? 'replying' : ev.block === 'thinking' ? 'thinking' : 'waiting for the model'} (${ev.secs} s into this turn)`);
+      if (ev.type === 'thought') console.log(`${clock()}   thinking: ${ev.text.replace(/\s+/g, ' ').slice(0, 400)}`);
+      if (ev.type === 'draft') {
+        const file = `${base}.draft-${ev.n}.json`;
+        fs.writeFileSync(file, JSON.stringify(ev.design, null, 2));
+        console.log(`${clock()}   draft ${ev.n}${ev.part ? ' (' + ev.part + ')' : ''}: ${ev.stats.pieces} pieces, ${ev.errors} errors, ${ev.warnings} warnings -> ${file}`);
+        ev.problems.slice(0, 5).forEach((p) => console.log(`${clock()}     ${p}`));
+      }
+      if (ev.type === 'partDone') console.log(`${clock()} Part ${ev.n} done${ev.summary ? ': ' + ev.summary : ''} (${ev.usage.output} output tokens so far)`);
     } });
   const s = res.result.stats;
   console.log(`Done in ${Math.round((Date.now() - t0) / 1000)} s: ${s.pieces} pieces, ${res.result.errors.length} errors, ${res.result.warnings.length} warnings${res.note ? ' (' + res.note + ')' : ''}`);
