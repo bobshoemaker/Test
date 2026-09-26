@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Brickhouse</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#E9EFF5; --panel:#FFFFFF; --stage:#D9E2EB; --ink:#16253A; --muted:#56677D; --line:#C5D2DE;
+  --accent:#F2B705; --accent-ink:#16253A; --good:#2F8F5B; --flag:#C8412B; --chip:#F1F5F9; --code:#F4F7FA;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E1724; --panel:#162234; --stage:#0B131F; --ink:#E6EDF5; --muted:#92A3B8; --line:#26374E;
+    --accent:#F2B705; --accent-ink:#16253A; --good:#4DBB7F; --flag:#EE6A52; --chip:#1D2B40; --code:#111B2A; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E1724; --panel:#162234; --stage:#0B131F; --ink:#E6EDF5; --muted:#92A3B8; --line:#26374E;
+  --accent:#F2B705; --accent-ink:#16253A; --good:#4DBB7F; --flag:#EE6A52; --chip:#1D2B40; --code:#111B2A; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding:16px 16px 40px}
+header{margin-bottom:12px}
+h1{margin:0;font-weight:800;font-stretch:112%;font-size:clamp(26px,5.2vw,40px);line-height:1.04;letter-spacing:-.01em}
+.sub{margin:4px 0 10px;color:var(--muted);font-size:15px;max-width:64ch}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips span{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:3px 10px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.chips b{color:var(--ink);font-weight:700;margin-right:3px}
+.grid{display:grid;grid-template-columns:1fr;gap:14px}
+@media (min-width:960px){.grid{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);align-items:start}.stagecol{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}}
+.stage{position:relative;background:var(--stage);border-radius:14px;overflow:hidden;height:min(54vh,560px);min-height:320px}
+@media (min-width:960px){.stage{height:min(72vh,680px)}}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+canvas:active{cursor:grabbing}
+.tools{position:absolute;left:8px;top:8px;right:8px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none}
+.tools button{pointer-events:auto}
+.seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg button{border:0;background:none;padding:6px 10px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{color:var(--ink);background:var(--chip)}
+.modebadge{position:absolute;left:10px;bottom:60px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:13px;border-radius:7px;padding:3px 9px;display:none}
+.showcase{position:absolute;left:8px;right:8px;bottom:8px;display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 8px}
+.showcase .lbl{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1 1 auto}
+.showcase .lbl b{color:var(--ink);font-variant-numeric:tabular-nums}
+.bar{flex:0 0 26%;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--accent)}
+button,select,input,textarea{font:inherit;color:inherit}
+.btn{white-space:nowrap;border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:8px 12px;font-size:14px;font-weight:600;cursor:pointer}
+.btn.sm{padding:5px 10px;font-size:13px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn:disabled{opacity:.4;cursor:default}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.tabs{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--line)}
+.tabs button{border:0;background:none;padding:12px 4px;font-size:15px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.pane{padding:16px}
+.pane[hidden]{display:none}
+.big{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 10px;margin-bottom:16px}
+.big div{display:flex;flex-direction:column}
+.big b{font-size:30px;font-weight:800;font-stretch:84%;line-height:1;font-variant-numeric:tabular-nums}
+.big span{font-size:13px;color:var(--muted);margin-top:4px}
+.big .ok b{color:var(--good)} .big .bad b{color:var(--flag)}
+h2{font-size:16px;font-weight:700;margin:18px 0 6px}
+ul.facts{margin:0;padding-left:18px;font-size:15px}
+ul.facts li{margin:2px 0}
+.note{color:var(--muted);font-size:14px;margin:8px 0 0;max-width:62ch}
+.problems{margin:8px 0 0;padding-left:18px;font-size:14px}
+.problems li{margin:3px 0}
+.problems .e{color:var(--flag)}
+.toggle{display:flex;align-items:center;gap:8px;font-size:14px;margin-top:14px}
+.legend{display:flex;gap:12px;font-size:13px;color:var(--muted);margin-top:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.stephead{display:flex;gap:14px;align-items:center}
+.stepnum{flex:none;min-width:76px;height:76px;padding:0 8px;border-radius:12px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:800;font-stretch:78%;font-size:44px;line-height:1;font-variant-numeric:tabular-nums}
+.steptitle{font-size:19px;font-weight:700;margin:0}
+.stepof{color:var(--muted);font-size:14px;margin:2px 0 0}
+.subtag[hidden]{display:none}
+.subtag{display:inline-block;margin-top:5px;font-size:12.5px;font-weight:700;border:1.5px solid var(--ink);border-radius:6px;padding:1px 7px}
+.callout{margin:14px 0;border:2px solid var(--ink);border-radius:10px;padding:10px;display:flex;flex-wrap:wrap;gap:8px;min-height:52px}
+.chip{display:flex;align-items:center;gap:8px;background:var(--chip);border-radius:8px;padding:6px 9px;font-size:14px}
+.sw{width:16px;height:16px;border-radius:4px;border:1px solid rgba(0,0,0,.25);flex:none;display:inline-block}
+.chip .q{font-weight:750;font-variant-numeric:tabular-nums}
+.nav{display:flex;gap:8px;align-items:center}
+.nav input[type=range]{flex:1;accent-color:var(--accent)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+th{text-align:left;font-weight:600;color:var(--muted);padding:6px;border-bottom:1px solid var(--line);font-size:13px;position:sticky;top:0;background:var(--panel)}
+td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+td.n{text-align:right;font-weight:700}
+.tablewrap{overflow:auto;max-height:440px;margin-top:10px}
+textarea.code{width:100%;height:420px;margin-top:10px;background:var(--code);color:var(--ink);border:1px solid var(--line);border-radius:10px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;padding:10px;white-space:pre;overflow:auto;tab-size:2}
+textarea.xml{width:100%;height:140px;margin-top:10px;background:var(--code);color:var(--ink);border:1px solid var(--line);border-radius:8px;font-size:12px;padding:8px}
+.out{font-size:14px;margin-top:10px}
+.card{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--chip);margin-bottom:6px}
+.photos{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.photos img{width:76px;height:76px;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
+.target{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--muted)}
+.target input{width:78px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-variant-numeric:tabular-nums}
+textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel);font-size:15px;resize:vertical}
+.status-err{color:var(--flag)}
+.pick{display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-size:14px;color:var(--muted)}
+.pick select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="title">Loading…</h1>
+    <p class="sub" id="subline"></p>
+    <div class="chips" id="chips"></div>
+    <label class="pick" id="pickWrap" hidden>Design <select id="designPick"></select></label>
+  </header>
+  <div class="grid">
+    <div class="stagecol">
+      <div class="stage" id="stage">
+        <canvas id="cv" aria-label="3D brick model. Drag to rotate, pinch or scroll to zoom."></canvas>
+        <div class="tools">
+          <div class="seg" role="group" aria-label="Camera">
+            <button data-view="q" aria-pressed="true">3/4</button><button data-view="f" aria-pressed="false">Front</button><button data-view="t" aria-pressed="false">Top</button>
+          </div>
+          <div class="seg"><button id="spin" aria-pressed="false">Spin</button></div>
+        </div>
+        <div class="modebadge" id="modebadge">Sub-build</div>
+        <div class="showcase">
+          <button class="btn sm primary" id="play">Play build</button>
+          <span class="lbl" id="showLbl"><b>Finished</b></span>
+          <span class="bar"><i id="barFill"></i></span>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="tabs" role="tablist">
+        <button role="tab" aria-selected="true" data-tab="model">Model</button>
+        <button role="tab" aria-selected="false" data-tab="manual">Manual</button>
+        <button role="tab" aria-selected="false" data-tab="parts">Parts</button>
+        <button role="tab" aria-selected="false" data-tab="design">Design</button>
+      </div>
+      <section class="pane" id="pane-model">
+        <div class="big">
+          <div><b id="sPieces">0</b><span>pieces</span></div>
+          <div><b id="sSteps">0</b><span>steps</span></div>
+          <div><b id="sPages">0</b><span>manual pages</span></div>
+          <div><b id="sMs">0</b><span>compile</span></div>
+          <div id="sErr"><b>0</b><span>errors</span></div>
+          <div id="sWarn"><b>0</b><span>warnings</span></div>
+        </div>
+        <p class="note" id="verdict" style="margin-top:0;color:var(--ink)"></p>
+        <ul class="problems" id="problems"></ul>
+        <div id="refWrap" hidden><h2>Your photos</h2><div class="photos" id="refPhotos"></div></div>
+        <h2 id="factsTitle">From the listing</h2>
+        <ul class="facts" id="facts"></ul>
+        <h2>Assumed</h2>
+        <p class="note" style="margin-top:0" id="assumed"></p>
+        <label class="toggle"><input type="checkbox" id="stress"> Color by connection strength</label>
+        <div class="legend"><span><i style="background:#D64B34"></i>under 0.5 joints per stud</span><span><i style="background:#E8A93A"></i>0.5 to 1</span><span><i style="background:#3E9E68"></i>1 or more</span></div>
+      </section>
+      <section class="pane" id="pane-manual" hidden>
+        <div class="stephead">
+          <div class="stepnum" id="stepNum">1</div>
+          <div><p class="steptitle" id="stepTitle">…</p><p class="stepof" id="stepOf"></p><span class="subtag" id="subTag" hidden></span></div>
+        </div>
+        <div class="callout" id="stepParts" aria-label="Parts added in this step"></div>
+        <div class="nav">
+          <button class="btn" id="prev">Back</button>
+          <input type="range" id="slider" min="0" max="0" value="0" aria-label="Step">
+          <button class="btn primary" id="next">Next</button>
+        </div>
+        <div class="row"><button class="btn" id="startOver">Start from step 1</button><button class="btn" id="finished">Finished model</button></div>
+      </section>
+      <section class="pane" id="pane-parts" hidden>
+        <div class="big" style="grid-template-columns:repeat(3,1fr)">
+          <div><b id="pLots">0</b><span>lots to source</span></div>
+          <div><b id="pPieces">0</b><span>pieces</span></div>
+          <div><b id="pCost">$0</b><span>rough parts cost</span></div>
+        </div>
+        <div class="row" style="margin-top:0"><button class="btn primary" id="copyXml">Copy BrickLink wanted list</button></div>
+        <textarea class="xml" id="xmlOut" hidden readonly aria-label="BrickLink wanted list XML"></textarea>
+        <div class="tablewrap"><table><thead><tr><th></th><th>Part</th><th>No.</th><th>Color</th><th style="text-align:right">Qty</th></tr></thead><tbody id="partsBody"></tbody></table></div>
+        <p class="note">Cost uses placeholder per-piece prices by part type. Paste the wanted list into BrickLink for real quotes.</p>
+      </section>
+      <section class="pane" id="pane-design" hidden>
+        <div class="card">
+          <h2 style="margin-top:0">Design from photos</h2>
+          <p class="note" style="margin-top:0;color:var(--ink)" id="photoIntro">Checking for the design server…</p>
+          <div id="photoControls" hidden>
+            <div class="row" id="pickRow"><button class="btn" id="pickBtn">Choose photos</button><input type="file" id="photoInput" multiple hidden>
+              <label class="target">About <input type="number" id="target" value="1200" min="300" max="2500" step="50" inputmode="numeric"> pieces</label></div>
+            <div class="photos" id="thumbs"></div>
+            <textarea class="notes" id="notes" rows="2" placeholder="Anything the photos don't show, like the roof color or which side the garage is on"></textarea>
+            <div class="row"><button class="btn primary" id="designBtn">Design from photos</button><button class="btn" id="stopBtn" hidden>Stop</button><button class="btn" id="lastBtn" hidden>Load last photo design</button></div>
+            <div class="out" id="photoStatus" aria-live="polite"></div>
+          </div>
+        </div>
+        <h2>Design code</h2>
+        <p class="note" style="margin-top:0;color:var(--ink)">The engine turns this into parts, checks every stud joint in build order, and writes the manual. Edit it and compile to see what breaks.</p>
+        <div class="row"><button class="btn primary" id="compileBtn">Compile</button><button class="btn" id="revertBtn">Undo edits</button></div>
+        <div class="out" id="compileOut"></div>
+        <textarea class="code" id="designSrc" spellcheck="false" aria-label="Design source"></textarea>
+      </section>
+    </div>
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="/engine.js"></script>
+<script src="/viewer/app.js"></script>
+</body>
+</html>
