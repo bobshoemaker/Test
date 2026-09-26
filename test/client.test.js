@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { anthropicKey, makeAnthropicClient } = require('../src/server/client');
 
 function withEnv(vars, fn) {
-  const keys = ['BRICKHOUSE_ANTHROPIC_API_KEY', 'BRICKHOUSE_ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL'];
+  const keys = ['BRICKHOUSE_ANTHROPIC_API_KEY', 'BRICKHOUSE_ANTHROPIC_BASE_URL', 'BRICKHOUSE_ANTHROPIC_WORKSPACE_ID', 'ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL'];
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   for (const k of keys) delete process.env[k];
   Object.assign(process.env, vars);
@@ -27,3 +27,12 @@ test('the Brickhouse key wins and ignores an inherited ANTHROPIC_BASE_URL', () =
 test('plain ANTHROPIC_API_KEY still works', () => withEnv({ ANTHROPIC_API_KEY: 'sk-plain' }, () => {
   assert.equal(makeAnthropicClient().apiKey, 'sk-plain');
 }));
+
+test('a workspace id is sent as the anthropic-workspace-id header', () => {
+  withEnv({ BRICKHOUSE_ANTHROPIC_API_KEY: 'sk-org', BRICKHOUSE_ANTHROPIC_WORKSPACE_ID: 'wrkspc_test' }, () => {
+    assert.equal(makeAnthropicClient()._options.defaultHeaders['anthropic-workspace-id'], 'wrkspc_test');
+  });
+  withEnv({ BRICKHOUSE_ANTHROPIC_API_KEY: 'sk-ws' }, () => {
+    assert.equal(makeAnthropicClient()._options.defaultHeaders, undefined);
+  });
+});
