@@ -5,6 +5,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { designHouse } = require('./designer');
+const { lookupAddress, fetchMapillaryImage } = require('./lookup');
 
 const ROOT = path.resolve(__dirname, '../..');
 loadDotEnv(path.join(ROOT, '.env'));
@@ -73,6 +74,12 @@ async function handleDesign(req, res) {
   const photos = (body.photos || []).slice(0, MAX_PHOTOS).filter((p) => p && /^image\/(jpeg|png|webp|gif)$/.test(p.mediaType) && typeof p.data === 'string');
   const target = Math.max(300, Math.min(2500, Number(body.target) || 1200));
   const notes = String(body.notes || '').slice(0, 1500);
+  // Credits for looked-up photos (source, author, license) travel with the saved design,
+  // including through a fix round, where Claude rewrites the design.
+  const rawCredits = body.mode === 'fix' ? body.design && body.design.photoCredits : body.credits;
+  const credits = (Array.isArray(rawCredits) ? rawCredits : []).slice(0, MAX_PHOTOS)
+    .map((c) => c && ({ credit: String(c.credit || '').slice(0, 200), license: String(c.license || '').slice(0, 60), page: String(c.page || '').slice(0, 300) }))
+    .filter((c) => c && c.credit);
 
   res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' });
   const emit = (ev) => res.write(JSON.stringify(ev) + '\n');
@@ -82,6 +89,7 @@ async function handleDesign(req, res) {
       client, model: MODEL, effort: EFFORT, photos, notes, target,
       mode: body.mode === 'fix' ? 'fix' : 'design', design: body.design || null, onEvent: emit,
     });
+    if (credits.length) out.design.photoCredits = credits;
     const name = `${slug(out.design.name)}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
     fs.writeFileSync(path.join(ROOT, 'designs/generated', name + '.json'), JSON.stringify(out.design, null, 2));
     emit({ type: 'done', design: out.design, stats: out.result.stats, errors: out.result.errors.length,
@@ -93,6 +101,20 @@ async function handleDesign(req, res) {
   res.end();
 }
 
+async function handleLookup(req, res) {
+  let body;
+  try { body = JSON.parse(await readBody(req)); } catch (e) { return send(res, 400, { error: e.message }); }
+  try { send(res, 200, await lookupAddress(body.address)); } catch (e) { send(res, 502, { error: e.message }); }
+}
+
+async function handlePhoto(res, id) {
+  if (!process.env.MAPILLARY_TOKEN) return send(res, 503, { error: 'Set MAPILLARY_TOKEN in .env.' });
+  try {
+    const img = await fetchMapillaryImage(id, process.env.MAPILLARY_TOKEN);
+    send(res, 200, img.bytes, img.mediaType);
+  } catch (e) { send(res, 502, { error: e.message }); }
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   try {
@@ -101,7 +123,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, fs.readFileSync(path.join(ROOT, file)), type);
     }
     if (req.method === 'GET' && url.pathname === '/api/health') {
-      return send(res, 200, { ok: true, model: FAKE ? 'fake' : MODEL, effort: EFFORT, ready: FAKE || !!process.env.ANTHROPIC_API_KEY, maxPhotos: MAX_PHOTOS });
+      return send(res, 200, { ok: true, model: FAKE ? 'fake' : MODEL, effort: EFFORT, ready: FAKE || !!process.env.ANTHROPIC_API_KEY, maxPhotos: MAX_PHOTOS, streetPhotos: !!process.env.MAPILLARY_TOKEN });
     }
     if (req.method === 'GET' && url.pathname === '/api/designs') return send(res, 200, listDesigns());
     const m = /^\/designs\/((?:generated\/)?[a-z0-9._-]+)\.json$/i.exec(url.pathname);
@@ -111,6 +133,9 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, fs.readFileSync(file));
     }
     if (req.method === 'POST' && url.pathname === '/api/design') return handleDesign(req, res);
+    if (req.method === 'POST' && url.pathname === '/api/lookup') return handleLookup(req, res);
+    const ph = /^\/api\/photo\/(\d{1,20})$/.exec(url.pathname);
+    if (req.method === 'GET' && ph) return handlePhoto(res, ph[1]);
     send(res, 404, { error: 'Not found' });
   } catch (e) {
     send(res, 500, { error: e.message });

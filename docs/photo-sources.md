@@ -35,3 +35,14 @@ photos, so a license that covers display alone may not be enough.
 
 Address in, then try MLS feed, then aerial imagery, then Mapillary; if nothing usable comes
 back, ask the agent for three photos. Every source feeds the same design loop.
+
+## What's built (src/server/lookup.js)
+
+- Geocoding: OpenStreetMap Nominatim, then the US Census geocoder. Nominatim's public server
+  allows about one request a second, needs an identifying User-Agent (set
+  `BRICKHOUSE_CONTACT`) and isn't meant for production volume; move to a self-hosted or paid
+  geocoder before launch. The Census geocoder often matches only the street segment, so those
+  lookups show photos from both sides of the street and the person picks.
+- Photos: Mapillary only, with the person confirming which photos show the house. Credits and
+  license go into the design's `photoCredits`. Panoramas are skipped for now.
+- Not built: MLS feed, aerial imagery, photographer platforms. They need contracts first.

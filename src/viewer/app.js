@@ -259,6 +259,8 @@ function showDesign(d){
   $('factsTitle').textContent=d.source==='photos'?'What the photos show':'From the listing';
   $('facts').innerHTML=(d.facts||[]).map(f=>`<li>${esc(f)}</li>`).join('');
   $('assumed').textContent=d.assumed||'';
+  const cr=d.photoCredits||[]; $('credits').hidden=!cr.length;
+  $('credits').innerHTML=cr.map(c=>`<li>Photo: ${/^https:\/\//.test(c.page||'')?`<a href="${esc(c.page)}" target="_blank" rel="noopener">${esc(c.credit)}</a>`:esc(c.credit)}${c.license?', '+esc(c.license):''}</li>`).join('');
   return R;
 }
 function problemsHtml(){ return [...R.errors.map(x=>`<li class="e">${esc(x.msg)}${x.op!=null?` (design step ${x.op+1})`:''}</li>`),...R.warnings.map(x=>`<li>${esc(x.msg)}</li>`)].slice(0,15).join(''); }
@@ -274,8 +276,9 @@ $('revertBtn').onclick=()=>{ $('designSrc').value=DESIGN_TEXT; run(DESIGN_TEXT);
 
 // ---------- design from photos (local server: POST /api/design, NDJSON progress) ----------
 let photos=[], photoUrls=[], busyCtl=null, health=null;
+const photoCredit=new WeakMap(); // File -> credit for photos found by address lookup
 function status(html,err){ $('photoStatus').innerHTML=err?`<span class="status-err">${html}</span>`:html; }
-function setBusy(b){ $('designBtn').disabled=b; $('pickBtn').disabled=b; $('stopBtn').hidden=!b; $('compileBtn').disabled=b; $('revertBtn').disabled=b; }
+function setBusy(b){ $('designBtn').disabled=b; $('pickBtn').disabled=b; $('addrBtn').disabled=b; $('useCands').disabled=b; $('stopBtn').hidden=!b; $('compileBtn').disabled=b; $('revertBtn').disabled=b; }
 function renderThumbs(){
   photoUrls.forEach(u=>URL.revokeObjectURL(u)); photoUrls=photos.map(f=>URL.createObjectURL(f));
   const html=photoUrls.map((u,i)=>`<img src="${u}" alt="House photo ${i+1}">`).join('');
@@ -291,8 +294,41 @@ async function toPayload(file){
 }
 $('pickBtn').onclick=()=>$('photoInput').click();
 $('photoInput').accept='image/jpeg,image/png,image/webp';
-$('photoInput').onchange=e=>{ const max=(health&&health.maxPhotos)||6; photos=[...e.target.files].slice(0,max); renderThumbs();
-  status(e.target.files.length>max?`Using the first ${max} photos.`:''); };
+$('photoInput').onchange=e=>{ const max=(health&&health.maxPhotos)||6; photos=[...photos.filter(f=>photoCredit.has(f)),...e.target.files].slice(0,max); renderThumbs();
+  status(photos.length>=max?`Using the first ${max} photos.`:''); e.target.value=''; };
+
+// ---------- address lookup: POST /api/lookup, then pick candidate street photos ----------
+let cands=[];
+function addrStatus(html,err){ $('addrStatus').innerHTML=err?`<span class="status-err">${html}</span>`:html; }
+$('addrForm').onsubmit=async e=>{
+  e.preventDefault(); const address=$('addrInput').value.trim(); if(!address) return;
+  $('addrBtn').disabled=true; cands=[]; $('cands').innerHTML=''; $('candRow').hidden=true; addrStatus('Looking up the address…');
+  try{
+    const res=await fetch('/api/lookup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({address})});
+    const j=await res.json(); if(!res.ok) throw new Error(j.error||`Server error ${res.status}`);
+    cands=j.photos.map(p=>({...p,on:false}));
+    const where=j.place?`Found ${esc(j.place.label)} (${j.place.precision==='building'?'building':'street'} match, ${esc(j.place.source)}).`:'';
+    addrStatus([where,...j.notes.map(esc)].filter(Boolean).join(' ')+(cands.length?` Tap the photos that show this house, front first.`:''));
+    $('cands').innerHTML=cands.map((c,i)=>`<button type="button" class="cand" data-i="${i}" aria-pressed="false"><img loading="lazy" src="${esc(c.thumb&&/^https:\/\//.test(c.thumb)?c.thumb:'/api/photo/'+c.id)}" alt="Street photo ${i+1}"><span>${c.distanceM} m away${c.capturedAt?', '+esc(c.capturedAt):''}<br>${esc(c.credit)}</span></button>`).join('');
+    $('cands').querySelectorAll('.cand').forEach(b=>b.onclick=()=>{ const c=cands[+b.dataset.i]; c.on=!c.on; b.setAttribute('aria-pressed',c.on); });
+    $('candRow').hidden=!cands.length;
+    const n=$('notes'); if(j.place&&!n.value.includes(j.place.label)) n.value=(n.value?n.value+'\n':'')+`Address: ${j.place.label}`;
+  }catch(err){ addrStatus(esc(err.message),true); }
+  finally{ $('addrBtn').disabled=false; }
+};
+$('useCands').onclick=async()=>{
+  const pick=cands.filter(c=>c.on), max=(health&&health.maxPhotos)||6;
+  if(!pick.length){ addrStatus('Tap one or more photos first.',true); return; }
+  $('useCands').disabled=true;
+  try{
+    for(const c of pick){ if(photos.length>=max) break; if(photos.some(f=>f.name===`mapillary-${c.id}.jpg`)) continue;
+      const res=await fetch('/api/photo/'+c.id); if(!res.ok){ const j=await res.json().catch(()=>({})); throw new Error(j.error||`Couldn't download photo ${c.id}`); }
+      const f=new File([await res.blob()],`mapillary-${c.id}.jpg`,{type:res.headers.get('content-type')||'image/jpeg'});
+      photoCredit.set(f,{credit:c.credit,license:c.license,page:c.page}); photos.push(f); }
+    renderThumbs(); addrStatus(`Added. ${photos.length} photo${photos.length===1?'':'s'} ready; you can still add your own.`);
+  }catch(err){ addrStatus(esc(err.message),true); }
+  finally{ $('useCands').disabled=false; }
+};
 $('stopBtn').onclick=()=>{ if(busyCtl) busyCtl.abort(); };
 $('lastBtn').hidden=true;
 
@@ -303,7 +339,8 @@ async function askServer(mode){
   const ctl=new AbortController(); busyCtl=ctl; setBusy(true); const t0=Date.now();
   status(mode==='design'?'Preparing photos…':'Sending the design back to Claude…');
   try{
-    const body={mode,notes,target,photos:mode==='design'?await Promise.all(photos.map(toPayload)):[],design:mode==='fix'?curDesign:undefined};
+    const body={mode,notes,target,photos:mode==='design'?await Promise.all(photos.map(toPayload)):[],design:mode==='fix'?curDesign:undefined,
+      credits:mode==='design'?photos.map(f=>photoCredit.get(f)).filter(Boolean):undefined};
     status(mode==='design'?'Claude is studying the photos. This usually takes a few minutes.':'Claude is fixing the design…');
     const res=await fetch('/api/design',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:ctl.signal});
     if(!res.ok){ const j=await res.json().catch(()=>({})); throw new Error(j.error||`Server error ${res.status}`); }
@@ -356,7 +393,7 @@ async function boot(){
   if(!health){ $('photoIntro').textContent='Start the server with npm start to design from photos.'; return; }
   if(!health.ready){ $('photoIntro').textContent='Add ANTHROPIC_API_KEY to .env and restart the server to design from photos (or run with BRICKHOUSE_FAKE=1 to try the flow).'; return; }
   $('photoControls').hidden=false;
-  $('photoIntro').textContent=`Pick up to ${health.maxPhotos} exterior photos, front first. Claude (${health.model}) studies them, writes a design, compiles it here, fixes what the checker flags, and saves it.`;
+  $('photoIntro').textContent=`Enter the address to find street photos${health.streetPhotos?'':' (needs MAPILLARY_TOKEN)'}, or pick up to ${health.maxPhotos} exterior photos, front first. Claude (${health.model}) studies them, writes a design, compiles it here, fixes what the checker flags, and saves it.`;
   renderThumbs();
 }
 boot();

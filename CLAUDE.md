@@ -21,9 +21,15 @@ closing gift that realtors give clients: a brick model of the house they just bo
 - `src/server/designer.js`: the Claude loop. Sends photos + SPEC + task, gives Claude a
   `compile_design` tool that runs the engine in-process, feeds errors back, returns the final
   design. Keeps whole assistant turns (thinking blocks included) as the API requires.
+- `src/server/lookup.js`: address to candidate photos. Geocodes with OpenStreetMap Nominatim
+  (building-level when OSM has the address) then the US Census geocoder (street-level), finds
+  Mapillary street photos aimed at the house (`rankPhotos`, pure and tested), and fetches a
+  chosen photo by numeric id only. Each photo carries credit and license; the server stores
+  them on the design as `photoCredits` and the viewer shows them.
 - `src/server/server.js`: zero-dependency HTTP server. Serves the viewer and designs; `POST
   /api/design` streams NDJSON events (`status`, `draft`, `done`, `error`) and saves results to
-  `designs/generated/`.
+  `designs/generated/`. `POST /api/lookup {address}` returns the place and ranked candidate
+  photos; `GET /api/photo/<mapillary id>` proxies one image.
 - `src/viewer/`: single-page three.js (r128, CDN) viewer: model, manual (sub-builds shown on
   their own), parts and BrickLink XML, design editor, photo upload.
 - `designs/`: hand-built reference designs. `634-unit-a.json` was built by hand from three
@@ -40,6 +46,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
     node scripts/compile.js designs/634-unit-a.json --steps
     node scripts/design.js a.jpg b.jpg --target 1200 --out designs/new.json
     node scripts/bundle.js designs/634-unit-a.json
+    node scripts/lookup.js "12 Elm St, Springfield, IL" --take 1,2 --out photos/elm   # needs MAPILLARY_TOKEN
 
 Model defaults to `claude-opus-5-5` (`BRICKHOUSE_MODEL`). Opus 5.5 always uses adaptive
 thinking; set depth with `BRICKHOUSE_EFFORT` (low, medium, high, xhigh, max), which is sent
@@ -77,7 +84,7 @@ before changing API parameters.
   real runs need prompt tuning; compare results with `designs/634-unit-a.json` using the
   same three photos.
 
-## Photo sources (read before building address lookup)
+## Photo sources (read before changing address lookup)
 
 Don't scrape Zillow, Redfin or Google Street View: their terms prohibit it and listing photos
 are copyrighted. Legitimate sources, in order of preference, are in `docs/photo-sources.md`:
@@ -92,6 +99,8 @@ its license terms checked for a physical derived product.
    close to the hand-built reference.
 2. PDF manual export (one step per page, parts callouts, cover, inventory).
 3. BrickLink price and availability check for the parts list.
-4. Address box that pulls property facts (stories, size, year) and photos from a licensed source.
+4. Address box: done for geocoding and Mapillary street photos. Still to do: MLS feed (RESO)
+   and oblique aerial imagery as photo sources, property facts (stories, size, year), and
+   cropping Mapillary panoramas, which are skipped today and are much of recent coverage.
 5. Mobile client (Flutter) on top of the server API.
 6. Scale option (studs per foot) so small houses can use more of the baseplate.
