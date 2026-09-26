@@ -104,7 +104,7 @@ async function designHouse({
 
     const uses = msg.content.filter((b) => b.type === 'tool_use');
     if (!uses.length) {
-      if (msg.stop_reason === 'max_tokens' && !lastDraft) throw new Error('Claude ran out of output tokens. Lower the piece target or raise maxTokens.');
+      if (msg.stop_reason === 'max_tokens' && !lastDraft) throw new Error(`Claude ran out of output tokens (${usage.output} used). Lower the piece target or effort, or raise maxTokens.`);
       const text = msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n');
       let final = extractJson(text);
       if (!isDesign(final)) final = lastDraft;

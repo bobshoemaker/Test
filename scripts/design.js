@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Photos to design from the command line, using the same loop as the server.
 //   node scripts/design.js front.jpg side.jpg --notes "garage on the right" --target 1200 --out designs/my-house.json
-//   Options: --model claude-opus-5-5  --effort high|xhigh|max  --fake (scripted Claude, no key)
+//   Options: --model claude-opus-5-5  --effort high|xhigh|max  --max-tokens 128000  --fake (scripted Claude, no key)
 const fs = require('node:fs');
 const path = require('node:path');
 const { designHouse } = require('../src/server/designer');
@@ -11,6 +11,7 @@ const opt = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 
 const flag = (name) => { const i = args.indexOf('--' + name); if (i >= 0) { args.splice(i, 1); return true; } return false; };
 const notes = opt('notes', ''), target = Number(opt('target', 1200)), out = opt('out', null);
 const model = opt('model', process.env.BRICKHOUSE_MODEL || 'claude-opus-5-5'), effort = opt('effort', process.env.BRICKHOUSE_EFFORT || null);
+const maxTokens = Number(opt('max-tokens', 64000));
 const fake = flag('fake');
 const types = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' };
 const photos = args.map((f) => {
@@ -26,7 +27,7 @@ const photos = args.map((f) => {
     if (!client) { console.error('Set BRICKHOUSE_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY (or pass --fake).'); process.exit(2); }
   }
   const t0 = Date.now();
-  const res = await designHouse({ client, model, effort, photos, notes, target,
+  const res = await designHouse({ client, model, effort, maxTokens, photos, notes, target,
     onEvent: (ev) => {
       if (ev.type === 'status') console.log(ev.message);
       if (ev.type === 'draft') console.log(`  draft ${ev.n}: ${ev.stats.pieces} pieces, ${ev.errors} errors, ${ev.warnings} warnings`);
