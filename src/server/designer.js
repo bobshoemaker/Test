@@ -88,10 +88,13 @@ async function callClaude(client, params, onEvent = () => {}) {
  * @param {'design'|'parts'|'fix'} [o.mode]  'parts' builds walls, roofs, site and planting in separate turns
  * @param {object} [o.design]   required for mode 'fix'
  * @param {function} [o.onEvent] receives {type:'status'|'part'|'progress'|'thought'|'draft'|'partDone', ...}
+ * @param {function} [o.render] async design -> [{label, data}] base64 PNGs; each compile result then
+ *                   carries renders of the draft so Claude can compare it with the photos
+ * @param {number} [o.partsLimit] parts mode: stop after this many parts (for trying out one part)
  */
 async function designHouse({
   client, model, photos = [], notes = '', target = 1200, mode = 'design', design = null,
-  effort = null, maxRounds = 7, maxTokens = 64000, onEvent = () => {},
+  effort = null, maxRounds = 7, maxTokens = 64000, onEvent = () => {}, render = null, partsLimit = PARTS.length,
 }) {
   const content = photos.map((p) => ({ type: 'image', source: { type: 'base64', media_type: p.mediaType, data: p.data } }));
   if (mode === 'fix') {
@@ -151,8 +154,17 @@ async function designHouse({
         const res = compile(d);
         d.source = 'photos';
         st.lastDraft = d;
-        onEvent({ type: 'draft', n: st.compiles, part, design: d, stats: res.stats, errors: res.errors.length, warnings: res.warnings.length, problems: problemList(res, 8) });
-        results.push({ type: 'tool_result', tool_use_id: tu.id, content: JSON.stringify(summarize(res)) });
+        let renders = [];
+        if (render) {
+          try { renders = await render(d); } catch (e) { onEvent({ type: 'status', message: `Rendering failed: ${e.message}` }); }
+        }
+        onEvent({ type: 'draft', n: st.compiles, part, design: d, stats: res.stats, errors: res.errors.length, warnings: res.warnings.length, problems: problemList(res, 8), renders });
+        const body = [{ type: 'text', text: JSON.stringify(summarize(res)) }];
+        if (renders.length) {
+          body.push({ type: 'text', text: `Renders of this draft (${renders.map((r) => r.label).join('; ')}). Compare them with the photos.` });
+          for (const r of renders) body.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: r.data } });
+        }
+        results.push({ type: 'tool_result', tool_use_id: tu.id, content: renders.length ? body : body[0].text });
       }
       messages.push({ role: 'user', content: results });
     }
@@ -176,7 +188,8 @@ async function designHouse({
   }
 
   let msg = null;
-  for (let i = 0; i < PARTS.length; i++) {
+  const count = Math.min(partsLimit, PARTS.length);
+  for (let i = 0; i < count; i++) {
     const part = PARTS[i];
     // Each later part is a new user turn appended to the same conversation (append-only).
     if (i > 0) messages.push({ role: 'user', content: [{ type: 'text', text: part.task }] });

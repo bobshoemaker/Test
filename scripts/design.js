@@ -3,6 +3,7 @@
 //   node scripts/design.js front.jpg side.jpg --notes "garage on the right" --target 1200 --out designs/my-house.json
 //   Options: --model claude-opus-5-5  --effort high|xhigh|max  --max-tokens 128000  --fake (scripted Claude, no key)
 //            --parts  build in four turns (walls, roofs, site, planting); saves each compiled draft next to --out
+//            --parts-limit 1  stop after the first N parts   --no-render  don't send renders of each draft
 const fs = require('node:fs');
 const path = require('node:path');
 const { designHouse } = require('../src/server/designer');
@@ -13,7 +14,8 @@ const flag = (name) => { const i = args.indexOf('--' + name); if (i >= 0) { args
 const notes = opt('notes', ''), target = Number(opt('target', 1200)), out = opt('out', null);
 const model = opt('model', process.env.BRICKHOUSE_MODEL || 'claude-opus-5-5'), effort = opt('effort', process.env.BRICKHOUSE_EFFORT || null);
 const maxTokens = Number(opt('max-tokens', 64000));
-const fake = flag('fake'), parts = flag('parts');
+const partsLimit = Number(opt('parts-limit', 4));
+const fake = flag('fake'), parts = flag('parts'), noRender = flag('no-render');
 const types = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' };
 const photos = args.map((f) => {
   const t = types[path.extname(f).toLowerCase()]; if (!t) throw new Error(`Unsupported image type: ${f}`);
@@ -29,7 +31,10 @@ const photos = args.map((f) => {
   }
   const t0 = Date.now(), clock = () => `[${Math.floor((Date.now() - t0) / 60000)}:${String(Math.floor((Date.now() - t0) / 1000) % 60).padStart(2, '0')}]`;
   const base = (out || 'designs/generated/house.json').replace(/\.json$/, '');
-  const res = await designHouse({ client, model, effort, maxTokens, photos, notes, target, mode: parts ? 'parts' : 'design',
+  const renderer = noRender ? null : await require('../src/server/render').makeRenderer().catch((e) => { console.log(`Renders off: ${e.message}`); return null; });
+  if (!noRender && !renderer) console.log('Renders off: Playwright is not installed.');
+  const res = await designHouse({ client, model, effort, maxTokens, photos, notes, target, mode: parts ? 'parts' : 'design', partsLimit,
+    render: renderer && renderer.render,
     onEvent: (ev) => {
       if (ev.type === 'status') console.log(`${clock()} ${ev.message}`);
       if (ev.type === 'part') console.log(`\n${clock()} === Part ${ev.n} of ${ev.of}: ${ev.name} ===`);
@@ -40,9 +45,11 @@ const photos = args.map((f) => {
         fs.writeFileSync(file, JSON.stringify(ev.design, null, 2));
         console.log(`${clock()}   draft ${ev.n}${ev.part ? ' (' + ev.part + ')' : ''}: ${ev.stats.pieces} pieces, ${ev.errors} errors, ${ev.warnings} warnings -> ${file}`);
         ev.problems.slice(0, 5).forEach((p) => console.log(`${clock()}     ${p}`));
+        (ev.renders || []).forEach((r, i) => fs.writeFileSync(`${base}.draft-${ev.n}-${i ? 'three-quarter' : 'front'}.png`, Buffer.from(r.data, 'base64')));
+        if ((ev.renders || []).length) console.log(`${clock()}   renders -> ${base}.draft-${ev.n}-front.png, -three-quarter.png`);
       }
       if (ev.type === 'partDone') console.log(`${clock()} Part ${ev.n} done${ev.summary ? ': ' + ev.summary : ''} (${ev.usage.output} output tokens so far)`);
-    } });
+    } }).finally(() => renderer && renderer.close());
   const s = res.result.stats;
   console.log(`Done in ${Math.round((Date.now() - t0) / 1000)} s: ${s.pieces} pieces, ${res.result.errors.length} errors, ${res.result.warnings.length} warnings${res.note ? ' (' + res.note + ')' : ''}`);
   const u = res.usage;

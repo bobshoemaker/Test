@@ -50,6 +50,22 @@ test('parts mode builds in four appended turns and reports each part', async () 
   assert.equal(out.result.errors.length, 0);
 });
 
+test('each compile result carries renders of the draft when a renderer is given', async () => {
+  const client = makeFakeClient({ delayMs: 0 });
+  const sent = [];
+  const create = client.messages.create.bind(client.messages);
+  client.messages.create = async (params) => { sent.push(JSON.parse(JSON.stringify(params.messages))); return create(params); };
+  const render = async () => [{ label: 'front', data: 'PNG1' }, { label: 'three-quarter', data: 'PNG2' }];
+  let drafted = null;
+  await designHouse({ client, model: 'fake', mode: 'parts', partsLimit: 1, render, photos: [{ mediaType: 'image/jpeg', data: 'AAAA' }],
+    onEvent: (ev) => { if (ev.type === 'draft') drafted = ev; } });
+  const result = sent[1].at(-1).content[0];
+  assert.equal(result.type, 'tool_result');
+  assert.deepEqual(result.content.filter((b) => b.type === 'image').map((b) => b.source.data), ['PNG1', 'PNG2']);
+  assert.equal(drafted.renders.length, 2);
+  assert.equal(sent.length, 2, 'partsLimit 1 stops after the first part');
+});
+
 test('extractJson accepts fenced and surrounded JSON', () => {
   assert.deepEqual(extractJson('```json\n{"a":1}\n```'), { a: 1 });
   assert.deepEqual(extractJson('Here it is: {"a":2} done'), { a: 2 });
