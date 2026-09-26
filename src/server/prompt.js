@@ -39,7 +39,7 @@ RULES
 - Match the photos: number of stories, garage position and door, entry and porch, bays and balconies, roof shape and color, wall and trim colors, window count and placement on each visible side, driveway, walks, fences, trees and planting.
 - Put what the photos show in "facts" (short strings) and what you had to guess in "assumed" (one or two sentences). Never present a guess as a fact.
 - Real detail beats filler: trim, stone, bands, brackets, planting, fences, trees. The piece target is a budget, not a quota: don't add hedge courses, oversized canopies or extra rows just to reach it.
-- Garage doors: fill the opening with a dark color ("Black", "Dark Bluish Gray", or "Trans-Black" for dark glass panels), nearly as wide as the garage and 3 or 4 courses tall, starting at the garage floor. Clear glass reads as a hole.
+- Garage doors: fill the opening with a solid dark color ("Black" or "Dark Bluish Gray"; transparent colors render as a hole), nearly as wide as the garage and 3 or 4 courses tall, starting at the garage floor. Clear glass reads as a hole.
 - Sloped lots: when the house sits above the street (steps up to the front door), build a solid foundation under the raised part first (a walls or fill op of bricks, as tall as the rise) and start those walls on top of it with "base". Keep the garage at street level when the photos show it there.
 - Stairs: build them from fill ops at rising y, each step at least 2 studs deep and resting on the step below; the top step meets the floor at the door.
 
