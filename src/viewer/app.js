@@ -391,7 +391,7 @@ async function boot(){
   try{ health=await (await fetch('/api/health')).json(); }catch(e){ health=null; }
   loadDesignList();
   if(!health){ $('photoIntro').textContent='Start the server with npm start to design from photos.'; return; }
-  if(!health.ready){ $('photoIntro').textContent='Add ANTHROPIC_API_KEY to .env and restart the server to design from photos (or run with BRICKHOUSE_FAKE=1 to try the flow).'; return; }
+  if(!health.ready){ $('photoIntro').textContent='Add BRICKHOUSE_ANTHROPIC_API_KEY to .env and restart the server to design from photos (or run with BRICKHOUSE_FAKE=1 to try the flow).'; return; }
   $('photoControls').hidden=false;
   $('photoIntro').textContent=`Enter the address to find street photos${health.streetPhotos?'':' (needs MAPILLARY_TOKEN)'}, or pick up to ${health.maxPhotos} exterior photos, front first. Claude (${health.model}) studies them, writes a design, compiles it here, fixes what the checker flags, and saves it.`;
   renderThumbs();

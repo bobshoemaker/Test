@@ -1,11 +1,12 @@
 // Brickhouse server. Serves the viewer and designs, and runs photo-to-model jobs.
-//   npm start                      real Claude (needs ANTHROPIC_API_KEY)
+//   npm start                      real Claude (needs BRICKHOUSE_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY)
 //   BRICKHOUSE_FAKE=1 npm start    scripted Claude, no key needed
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { designHouse } = require('./designer');
 const { lookupAddress, fetchMapillaryImage } = require('./lookup');
+const { anthropicKey, makeAnthropicClient } = require('./client');
 
 const ROOT = path.resolve(__dirname, '../..');
 loadDotEnv(path.join(ROOT, '.env'));
@@ -27,10 +28,7 @@ function loadDotEnv(file) {
 
 function makeClient() {
   if (FAKE) return require('./fakeClient').makeFakeClient();
-  if (!process.env.ANTHROPIC_API_KEY) return null;
-  const Anthropic = require('@anthropic-ai/sdk');
-  const C = Anthropic.default || Anthropic;
-  return new C({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return makeAnthropicClient();
 }
 
 const STATIC = {
@@ -68,7 +66,7 @@ function slug(s) { return String(s || 'house').toLowerCase().replace(/[^a-z0-9]+
 
 async function handleDesign(req, res) {
   const client = makeClient();
-  if (!client) return send(res, 503, { error: 'Set ANTHROPIC_API_KEY in .env, or run with BRICKHOUSE_FAKE=1 to try the flow.' });
+  if (!client) return send(res, 503, { error: 'Set BRICKHOUSE_ANTHROPIC_API_KEY (or ANTHROPIC_API_KEY) in .env, or run with BRICKHOUSE_FAKE=1 to try the flow.' });
   let body;
   try { body = JSON.parse(await readBody(req)); } catch (e) { return send(res, 400, { error: e.message }); }
   const photos = (body.photos || []).slice(0, MAX_PHOTOS).filter((p) => p && /^image\/(jpeg|png|webp|gif)$/.test(p.mediaType) && typeof p.data === 'string');
@@ -123,7 +121,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, fs.readFileSync(path.join(ROOT, file)), type);
     }
     if (req.method === 'GET' && url.pathname === '/api/health') {
-      return send(res, 200, { ok: true, model: FAKE ? 'fake' : MODEL, effort: EFFORT, ready: FAKE || !!process.env.ANTHROPIC_API_KEY, maxPhotos: MAX_PHOTOS, streetPhotos: !!process.env.MAPILLARY_TOKEN });
+      return send(res, 200, { ok: true, model: FAKE ? 'fake' : MODEL, effort: EFFORT, ready: FAKE || !!anthropicKey(), maxPhotos: MAX_PHOTOS, streetPhotos: !!process.env.MAPILLARY_TOKEN });
     }
     if (req.method === 'GET' && url.pathname === '/api/designs') return send(res, 200, listDesigns());
     const m = /^\/designs\/((?:generated\/)?[a-z0-9._-]+)\.json$/i.exec(url.pathname);
@@ -145,7 +143,7 @@ const server = http.createServer(async (req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => {
     console.log(`Brickhouse on http://localhost:${PORT}  (model: ${FAKE ? 'fake' : MODEL}${EFFORT ? ', effort ' + EFFORT : ''})`);
-    if (!FAKE && !process.env.ANTHROPIC_API_KEY) console.log('No ANTHROPIC_API_KEY: the viewer works, photo design is off. Add a key to .env or use BRICKHOUSE_FAKE=1.');
+    if (!FAKE && !anthropicKey()) console.log('No Anthropic API key: the viewer works, photo design is off. Add a key to .env or use BRICKHOUSE_FAKE=1.');
   });
 }
 

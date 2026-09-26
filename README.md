@@ -10,7 +10,7 @@ manual and a BrickLink parts list.
     npm run demo      # try the photo flow with a scripted Claude, no API key
     open http://localhost:5173
 
-To use real Claude, copy `.env.example` to `.env`, add your `ANTHROPIC_API_KEY`, and run
+To use real Claude, copy `.env.example` to `.env`, add your key as `BRICKHOUSE_ANTHROPIC_API_KEY` (plain `ANTHROPIC_API_KEY` also works), and run
 `npm start`. In the Design tab, pick exterior photos (front first) and choose "Design from photos".
 Claude writes a design, the engine compiles and checks it, Claude fixes what the checker
 flags, and the result is saved to `designs/generated/`.

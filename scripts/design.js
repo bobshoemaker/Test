@@ -22,8 +22,8 @@ const photos = args.map((f) => {
   let client;
   if (fake) client = require('../src/server/fakeClient').makeFakeClient({ delayMs: 50 });
   else {
-    if (!process.env.ANTHROPIC_API_KEY) { console.error('Set ANTHROPIC_API_KEY (or pass --fake).'); process.exit(2); }
-    const A = require('@anthropic-ai/sdk'); client = new (A.default || A)();
+    client = require('../src/server/client').makeAnthropicClient();
+    if (!client) { console.error('Set BRICKHOUSE_ANTHROPIC_API_KEY or ANTHROPIC_API_KEY (or pass --fake).'); process.exit(2); }
   }
   const t0 = Date.now();
   const res = await designHouse({ client, model, effort, photos, notes, target,
