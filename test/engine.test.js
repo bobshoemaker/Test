@@ -7,8 +7,10 @@ const { compile } = require('../src/engine/engine.js');
 
 const load = (name) => JSON.parse(fs.readFileSync(path.join(__dirname, '../designs', name + '.json'), 'utf8'));
 const clone = (x) => JSON.parse(JSON.stringify(x));
+// warnings other than the bare-floor one, for small test houses built without a floor
+const roofWarnings = (r) => r.warnings.map((w) => w.msg).filter((m) => !/baseplate shows/.test(m));
 
-for (const [name, pieces] of [['savannah-dr', 1208], ['634-unit-a', 778]]) {
+for (const [name, pieces] of [['savannah-dr', 1249], ['634-unit-a', 804]]) {
   test(`${name} compiles clean`, () => {
     const r = compile(load(name));
     assert.deepEqual(r.errors.map((e) => e.msg), []);
@@ -80,7 +82,7 @@ const lHouse = (roofs) => ({ name: 'L', phases: ['Walls', 'Roof'], ops: [lWalls,
 
 test('one roof over an L-shaped union meets itself with a valley, and matches a plain hip on one rectangle', () => {
   const union = compile(lHouse([{ rects: [[4, 6, 20, 14], [4, 14, 12, 24]] }]));
-  assert.deepEqual([union.errors.length, union.warnings.length], [0, 0]);
+  assert.deepEqual([union.errors.length, roofWarnings(union).length], [0, 0]);
   const box = { op: 'walls', phase: 'Walls', color: 'White', courses: [0, 3], base: 0, segments: [[4, 6, 20, 6], [4, 7, 4, 14], [20, 7, 20, 14], [5, 14, 19, 14]] };
   const one = (roof) => compile({ name: 'b', phases: ['Walls', 'Roof'], ops: [box, { op: 'roof', phase: 'Roof', base: 12, color: 'Dark Orange', ...roof }] }).stats.pieces;
   assert.equal(one({ rects: [[4, 6, 20, 14]] }), one({ rect: [4, 6, 20, 14] }));
@@ -97,7 +99,7 @@ test('a roof leaning on a taller building rises into its wall there and has an e
   const lean = (height) => compile({ name: 'lean', phases: ['Walls', 'Roof'], ops: [{ ...tower, courses: [0, height] }, shed,
     { op: 'roof', phase: 'Roof', base: 12, color: 'Dark Orange', rects: [[4, 4, 11, 14]], against: [[12, 2, 20, 10]] }] });
   const tall = lean(7);
-  assert.deepEqual([tall.errors.length, tall.warnings.map((w) => w.msg)], [0, []]);
+  assert.deepEqual([tall.errors.length, roofWarnings(tall)], [0, []]);
   // Past the tower (z 11 to 14) the roof has an eave: a plate sits one stud outside the shed's east wall.
   assert.ok(tall.parts.some((p) => p.kind === 'plate' && p.y === 12 && p.x <= 12 && p.x + p.w > 12 && p.z <= 13 && p.z + p.d > 13));
   // A tower no taller than the shed leaves the leaning edge showing.
@@ -119,7 +121,7 @@ test('wall details hang on side-stud bricks set in the wall, and need them', () 
     openings: [{ cells: [6, 16, 6, 16], courses: [2, 2], fill: { part: 'snot', face: 'S' } }, { cells: [10, 16, 11, 16], courses: [3, 3], fill: { part: 'snot', face: 'S' } }] };
   const d = (details) => ({ name: 'd', phases: ['W', 'D'], ops: [walls, ...details.map((x) => ({ op: 'detail', phase: 'D', ...x }))] });
   const ok = compile(d([{ kind: 'lantern', at: [[6, 6, 16]] }, { kind: 'house number', at: [[10, 9, 16]] }]));
-  assert.deepEqual([ok.errors, ok.warnings], [[], []]);
+  assert.deepEqual([ok.errors, roofWarnings(ok)], [[], []]);
   const mounted = ok.parts.filter((p) => p.mount);
   assert.deepEqual(mounted.map((p) => [p.name, p.z]), [['Bracket 1 x 1 - 1 x 1', 17], ['Tile 1 x 2 (on side studs)', 17]]);
   // only the bracket hangs on the side stud; the lamp stands on the bracket's stud, and its cap on the cone
@@ -150,4 +152,39 @@ test('a door must meet the ground in front of it, and a garage door needs a driv
   assert.equal(msgs(door), '', 'a person door one step up is fine');
   door.ops[0].openings[0].kind = 'window';
   assert.match(compile(door).errors.map((e) => e.msg).join(' '), /Opening kind "window"/);
+});
+
+test('the baseplate may not show inside a building, and a floor op tiles exactly the inside', () => {
+  const walls = { op: 'walls', phase: 'a', color: 'White', courses: [0, 3], base: 0, segments: [[10, 10, 17, 10], [10, 15, 17, 15], [10, 11, 10, 14], [17, 11, 17, 14]] };
+  const bare = compile({ name: 'b', phases: ['a'], ops: [walls] });
+  assert.match(bare.warnings.map((w) => w.msg).join(' '), /baseplate shows inside a building at 24 studs/);
+  const floored = compile({ name: 'f', phases: ['a'], ops: [walls, { op: 'floor', phase: 'a', color: 'Tan' }] });
+  assert.doesNotMatch(floored.warnings.map((w) => w.msg).join(' '), /baseplate shows/);
+  const tiles = floored.parts.filter((p) => p.op === 1);
+  assert.equal(tiles.reduce((a, p) => a + p.w * p.d, 0), 24);
+  assert.ok(tiles.every((p) => p.x >= 11 && p.x + p.w <= 17 && p.z >= 11 && p.z + p.d <= 15 && p.y === 0));
+  // a low garden wall is not a building: nothing inside it is flagged
+  const garden = compile({ name: 'g', phases: ['a'], ops: [{ ...walls, courses: [0, 1] }] });
+  assert.doesNotMatch(garden.warnings.map((w) => w.msg).join(' '), /baseplate shows/);
+});
+
+test('a lift-off roof must hold together, rest on the walls and carry nothing else', () => {
+  const seg = [[5, 5, 12, 5], [5, 10, 12, 10], [5, 6, 5, 9], [12, 6, 12, 9]];
+  const base = [{ op: 'walls', phase: 'a', color: 'White', courses: [0, 3], base: 0, segments: seg }, { op: 'floor', phase: 'a', color: 'Tan' }];
+  const roof = { op: 'roof', phase: 'b', rect: [5, 5, 12, 10], base: 12, color: 'Dark Orange', liftoff: 'Main roof' };
+  const d = (extra = []) => ({ name: 'l', phases: ['a', 'b'], ops: [...base, roof, ...extra] });
+  const ok = compile(d());
+  assert.deepEqual(ok.errors.map((e) => e.msg), []);
+  assert.deepEqual(ok.stats.liftoff, ['Main roof']);
+  assert.ok(ok.parts.filter((p) => p.op === 2).every((p) => p.liftoff === 'Main roof'));
+  // one layer of deck plates only holds together through the walls under it, so it comes apart when lifted
+  const deck = { op: 'fill', phase: 'b', kind: 'plate', color: 'White', rects: [[5, 5, 12, 10]], y: 12, liftoff: 'Flat' };
+  const flat = (extra) => compile({ name: 'f', phases: ['a', 'b'], ops: [...base, deck, ...extra] }).errors.map((e) => e.msg);
+  assert.match(flat([]).join(' '), /Lift-off roof "Flat" comes apart into \d+ pieces/);
+  // a tile layer on top crosses the plates' seams and ties it into one piece
+  const tiles = { op: 'fill', phase: 'b', kind: 'tile', color: 'Light Bluish Gray', rects: [[5, 5, 12, 10]], y: 13, liftoff: 'Flat' };
+  assert.deepEqual(flat([tiles]), []);
+  // a brick standing on the deck but not part of the roof stops it lifting
+  const stuck = flat([{ op: 'place', phase: 'b', part: 'brick:1x1', color: 'Red', at: [8, 13, 7] }, { ...tiles, rects: [[5, 5, 7, 10], [9, 5, 12, 10], [8, 5, 8, 6], [8, 8, 8, 10]] }]);
+  assert.match(stuck.join(' '), /sits on lift-off roof "Flat" but isn't part of it/);
 });

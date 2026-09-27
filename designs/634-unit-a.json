@@ -51,6 +51,7 @@
        {"cells":[5,10,5,11],   "courses":[1,2], "fill":{"part":"win22","color":"Dark Green"}},
        {"cells":[9,2,12,2],    "courses":[0,2], "fill":{"part":"win43","color":"Dark Green"}}
      ]},
+    {"op":"floor", "phase":"Ground floor", "note":"Floor tiles inside the walls, so no baseplate shows through the windows", "kind":"tile", "color":"Tan"},
 
     {"op":"place", "phase":"Balcony, bay floor and awning", "note":"Balcony floor",
      "part":"plate:4x2", "color":"Dark Green", "at":[14,12,19]},

@@ -236,6 +236,7 @@
        {"part":"brick:2x2", "color":"Trans-Clear", "at":[0,2,1]},
        {"part":"tile:2x1", "color":"Red", "at":[0,2,3]},
        {"part":"plate:2x2", "color":"Red", "at":[0,5,1]}
-     ]}
+     ]},
+    {"op":"floor", "phase":"Ground floor and garage", "note":"Floor tiles inside the walls (last, so it only fills what nothing else claimed), so no baseplate shows through the windows", "kind":"tile", "color":"Tan"}
   ]
 }

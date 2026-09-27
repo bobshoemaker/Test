@@ -50,7 +50,7 @@ base.position.set(0,-0.07,0); base.receiveShadow=true; scene.add(base);
 
 // ---------- state ----------
 let R=null, root=null, inst=[], specials=[], studs=null, studRecs=[], meshes=[];
-let stepIdx=0, showAll=true, stress=false, mode='main';
+let stepIdx=0, showAll=true, stress=false, mode='main', lifted=false;
 let DESIGN_TEXT='';
 
 function strengthHex(p){ const area=p.shape==='arch'?4:p.w*p.d; const r=R.jn.get(p.id)/area; return r<0.5?'#D64B34':r<1?'#E8A93A':'#3E9E68'; }
@@ -113,6 +113,7 @@ function makeSpecial(p){
 
 // ---------- visibility & color ----------
 function partState(p){
+  if(lifted&&p.liftoff) return [false,false];
   if(showAll) return [true,false];
   const s=R.steps[stepIdx];
   if(s.kind==='sub'){ const v=p.sub===s.sub&&p.copy===0&&p.buildStep<=stepIdx; return [v,v&&p.buildStep===stepIdx]; }
@@ -207,6 +208,7 @@ function renderStep(){
 $('prev').onclick=()=>{ stopPlay(); if(showAll){ showAll=false; stepIdx=R.steps.length-1; } else stepIdx=Math.max(0,stepIdx-1); renderStep(); };
 $('next').onclick=()=>{ stopPlay(); if(stepIdx>=R.steps.length-1) showAll=true; else stepIdx++; renderStep(); };
 $('slider').oninput=e=>{ stopPlay(); showAll=false; stepIdx=+e.target.value; renderStep(); };
+$('lift').onclick=()=>{ lifted=!lifted; $('lift').setAttribute('aria-pressed',lifted); $('lift').textContent=lifted?'Roof on':'Lift roof'; applyState(); };
 $('startOver').onclick=()=>{ stopPlay(); showAll=false; stepIdx=0; renderStep(); };
 $('finished').onclick=()=>{ stopPlay(); showAll=true; stepIdx=R.steps.length-1; renderStep(); };
 
@@ -258,7 +260,7 @@ $('stress').onchange=e=>{ stress=e.target.checked; applyState(); };
 let curDesign=null;
 function esc(t){ return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function showDesign(d){
-  curDesign=d; R=compile(d); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,1,PLATE/32); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
+  curDesign=d; R=compile(d); lifted=false; $('lift').hidden=!(R.stats.liftoff&&R.stats.liftoff.length); $('lift').textContent='Lift roof'; $('lift').setAttribute('aria-pressed','false'); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,1,PLATE/32); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
   buildScene(); renderReport(); renderParts(); renderStep(); frame();
   $('title').textContent=d.name||'Brick house'; document.title=(d.name||'Brick house')+', brick model';
   $('subline').textContent=(d.place?d.place+'. ':'')+'A closing-gift brick model with a full build manual.';

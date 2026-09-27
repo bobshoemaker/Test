@@ -14,7 +14,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   that turns design ops into parts, the brick packer (staggers seams, repairs stacked seams),
   the checker (collisions, build-order support, sub-build attachment, connectivity to the
   baseplate, single-stud and seam warnings, doors that miss the ground in front of them and
-  garage doors with no drive to the edge of the plate), manual step grouping, and the inventory.
+  garage doors with no drive to the edge of the plate, baseplate showing inside a building,
+  lift-off roofs that wouldn't come off in one piece), manual step grouping, and the inventory.
   Dependency-free; runs in the browser (globals) and in Node (require).
 - `src/server/prompt.js`: `SPEC`, the design language written for Claude. It is the source of
   truth for what a design may contain. When you add an op, part or field to the engine,
@@ -61,7 +62,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   `designs/generated/`. `POST /api/lookup {address}` returns the place and ranked candidate
   photos; `GET /api/photo/<mapillary id>` proxies one image.
 - `src/viewer/`: single-page three.js (r128, CDN) viewer: model, manual (sub-builds shown on
-  their own), parts and BrickLink XML, design editor, photo upload.
+  their own), parts and BrickLink XML, design editor, photo upload, and "Lift roof" for designs
+  whose roof ops carry `"liftoff"` (floors show underneath; the rooms too when there was a plan).
 - `designs/`: hand-built reference designs. `634-unit-a.json` was built by hand from three
   listing photos; use it as the quality bar for photo-generated designs.
 - `scripts/`: `compile.js` (check a design), `design.js` (photos to design from the CLI),
