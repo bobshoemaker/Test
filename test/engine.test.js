@@ -222,3 +222,33 @@ test('a lift-off roof rests on tiled wall tops, located by corner studs, and is 
   const loose = d([...house, { op: 'fill', phase: 'a', kind: 'tile', color: 'White', rects: [...ring, ...corners.map(([x, z]) => [x, z, x, z])], y: 12 }, ...roof(13)]);
   assert.match(loose.errors.map((e) => e.msg).join(' '), /Lift-off roof "Roof" is held on by 0 studs/);
 });
+
+test('fixtures stand on their own, ride on a lift-off roof, and a big bare roof gets a hint', () => {
+  const { FIXTURES } = require('../src/engine/engine.js');
+  for (const kind of Object.keys(FIXTURES)) {
+    const r = compile({ name: kind, phases: ['p'], ops: [{ op: 'fixture', phase: 'p', kind, at: [[10, 0, 10], [20, 0, 20]] }] });
+    assert.deepEqual([kind, r.errors.length, r.warnings.length, r.subs[0].copies], [kind, 0, 0, 2]);
+  }
+  // a 20 x 20 seated flat roof: bare, it gets a hint; with a vent pipe and an HVAC unit on the deck it
+  // still lifts off in one piece
+  const seg = [[4, 4, 23, 4], [4, 23, 23, 23], [4, 5, 4, 22], [23, 5, 23, 22]];
+  const corners = [[4, 4], [23, 4], [4, 23], [23, 23]];
+  const ring = [[5, 4, 22, 4], [5, 23, 22, 23], [4, 5, 4, 22], [23, 5, 23, 22]];
+  const base = [{ op: 'walls', phase: 'a', color: 'White', courses: [0, 3], base: 0, segments: seg },
+    { op: 'places', phase: 'a', part: 'plate:1x1', color: 'White', y: 12, at: corners },
+    { op: 'fill', phase: 'a', kind: 'tile', color: 'White', rects: ring, y: 12 },
+    { op: 'fill', phase: 'b', kind: 'plate', color: 'White', rects: [[4, 4, 23, 23]], y: 13, liftoff: 'Roof' }];
+  const tiles = { op: 'fill', phase: 'b', kind: 'tile', color: 'Light Bluish Gray', rects: [[4, 4, 23, 23]], y: 14, liftoff: 'Roof' };
+  const floor = { op: 'floor', phase: 'a', color: 'Tan' };
+  const bare = compile({ name: 'b', phases: ['a', 'b'], ops: [...base, tiles, floor] });
+  assert.deepEqual([bare.errors.length, bare.warnings.length], [0, 0]);
+  assert.match(bare.hints.map((h) => h.msg).join(' '), /Lift-off roof "Roof" has an open \d+ x \d+ stretch of plain tile/);
+  const kitted = compile({ name: 'k', phases: ['a', 'b'], ops: [...base,
+    { op: 'fixture', phase: 'b', kind: 'vent pipe', at: [[8, 14, 8]], liftoff: 'Roof' },
+    { op: 'fixture', phase: 'b', kind: 'hvac unit', at: [[14, 14, 14]], liftoff: 'Roof' }, tiles, floor] });
+  assert.deepEqual([kitted.errors.map((e) => e.msg), kitted.warnings.length], [[], 0]);
+  assert.ok(kitted.parts.filter((p) => p.op === 5).every((p) => p.liftoff === 'Roof'), 'fixtures on the roof come off with it');
+  // without the roof's liftoff the fixture pins the roof down
+  const pinned = compile({ name: 'p', phases: ['a', 'b'], ops: [...base, { op: 'fixture', phase: 'b', kind: 'vent pipe', at: [[8, 14, 8]] }, tiles, floor] });
+  assert.match(pinned.errors.map((e) => e.msg).join(' '), /sits on lift-off roof "Roof" but isn't part of it/);
+});

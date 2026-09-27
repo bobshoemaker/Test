@@ -16,7 +16,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   baseplate, single-stud and seam warnings, doors that miss the ground in front of them and
   garage doors with no drive to the edge of the plate, baseplate showing inside a building,
   lift-off roofs that wouldn't come off in one piece or grip more than a few locating studs;
-  a lift-off roof is built on its own like a sub-build and rests on tiled wall tops), manual step grouping, and the inventory.
+  a lift-off roof is built on its own like a sub-build and rests on tiled wall tops), hints (never
+  blocking) for big open stretches of plain tile, a fixture library for roofs (skylight, HVAC unit,
+  vents, solar panel, hatch, chimney), manual step grouping, and the inventory.
   Dependency-free; runs in the browser (globals) and in Node (require).
 - `src/server/prompt.js`: `SPEC`, the design language written for Claude. It is the source of
   truth for what a design may contain. When you add an op, part or field to the engine,

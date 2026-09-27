@@ -42,6 +42,8 @@ function summarize(result, planProblems = []) {
     errors: result.errors.length + planProblems.length,
     warnings: result.warnings.length,
     problems: [...planProblems.map((p) => `error: ${p}`), ...problemList(result, 22)].slice(0, 22),
+    // suggestions, not problems: they never block a design
+    ...((result.hints || []).length ? { hints: result.hints.slice(0, 3).map((h) => h.msg) } : {}),
   };
 }
 

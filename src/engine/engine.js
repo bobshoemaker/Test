@@ -68,6 +68,16 @@ const PLANTS = {
     P('roundplate1','Yellow',0,8,0),P('roundplate1','Green',1,8,0),P('roundplate1','Green',0,8,1),P('roundplate1','Yellow',1,8,1)]},
 };
 
+// Roof and yard fixtures for the "fixture" op, placed like plants (on studs, from the corner stud).
+const FIXTURES = {
+  'skylight':{name:'Skylight', parts:[P('plate:2x2','White',0,0,0),P('tile:2x2','Trans-Clear',0,1,0)]},
+  'hvac unit':{name:'HVAC unit', parts:[P('plate:2x4','Light Bluish Gray',0,0,0),P('brick:2x4','Light Gray',0,1,0),P('tile:2x2','Dark Bluish Gray',0,4,0),P('tile:2x2','Light Gray',0,4,2)]},
+  'vent pipe':{name:'Vent pipe', parts:[P('plate:1x2','Dark Bluish Gray',0,0,0),P('round1','Light Gray',0,1,0),P('roundplate1','Dark Bluish Gray',0,4,0)]},
+  'solar panel':{name:'Solar panel', parts:[P('plate:2x4','Light Bluish Gray',0,0,0),P('tile:2x4','Black',0,1,0)]},
+  'roof hatch':{name:'Roof hatch', parts:[P('plate:2x2','Light Bluish Gray',0,0,0),P('tile:2x2','Dark Bluish Gray',0,1,0)]},
+  'chimney':{name:'Chimney', parts:[P('brick:2x2','White',0,0,0),P('brick:2x2','White',0,3,0),P('plate:2x2','Dark Bluish Gray',0,6,0),P('roundplate1','Black',0,7,0)]},
+};
+
 const N4 = [[1,0],[-1,0],[0,1],[0,-1]];
 const DOOR_KINDS = ['door','garage door'];
 const GRIP_MAX = 12; // studs a lift-off roof may grip: enough to locate it, few enough to lift it off
@@ -355,7 +365,10 @@ function compile(design){
         if(op.cap!=='none') pack(outer,'tile',op.y+1,meta);
         break; }
       case 'fill': {
-        const level=new Map(); for(const r of op.rects) for(const [x,z] of rectCells(r)) level.set(x+','+z,op.color);
+        // "mix" scatters other colors through the fill (weathered roofs, varied paving), like a roof's mix
+        const pick=(x,z)=>{ if(!op.mix) return op.color; let u=((((x*73856093)^(z*19349663)^((op.y||0)*83492791))>>>0)%1000)/1000;
+          for(const [mc,fr] of op.mix){ if(u<fr) return mc; u-=fr; } return op.color; };
+        const level=new Map(); for(const r of op.rects) for(const [x,z] of rectCells(r)) level.set(x+','+z,pick(x,z));
         pack(level,op.kind||'tile',op.y||0,meta); break; }
       case 'floor': { // every stud inside the buildings (within rects, if given) at height y
         const lim=op.rects?new Set(op.rects.flatMap(r=>rectCells(r)).map(([x,z])=>x+','+z)):null, level=new Map();
@@ -394,9 +407,9 @@ function compile(design){
           else errors.push({msg:`Unknown detail "${op.kind}"; details are lantern, house number, plaque, vent`, op:i});
         }
         break; }
-      case 'plant': {
-        const def=PLANTS[String(op.kind||'').toLowerCase()];
-        if(!def){ errors.push({msg:`Unknown plant "${op.kind}"; the library has ${Object.keys(PLANTS).join(', ')}`, op:i}); break; }
+      case 'plant': case 'fixture': {
+        const LIB=op.op==='plant'?PLANTS:FIXTURES, def=LIB[String(op.kind||'').toLowerCase()];
+        if(!def){ errors.push({msg:`Unknown ${op.op} "${op.kind}"; the library has ${Object.keys(LIB).join(', ')}`, op:i}); break; }
         const si=subs.length; subs.push({name:def.name, phase:op.phase, copies:op.at.length, op:i, partIds:[]});
         op.at.forEach((c,ci)=>def.parts.forEach((pp,pi)=>{
           const q=place(pp.part,c[0]+pp.at[0],c[1]+pp.at[1],c[2]+pp.at[2],0,pp.color==='bloom'?(op.bloom||'Bright Pink'):pp.color,Object.assign({},meta,{sub:si,copy:ci,tpl:pi}),true);
@@ -417,6 +430,9 @@ function compile(design){
     ps.sort((a,b)=>a.y-b.y||a.id-b.id).forEach((p,k)=>{ p.liftoff=name; p.sub=si; p.copy=0; p.tpl=k; });
     subs.push({name, phase:last.phase, copies:1, op:last.op, partIds:ps.map(p=>p.id), liftoff:true});
   }
+  // plants and fixtures whose op names a lift-off roof stand on it and come off with it
+  const riders=new Map();
+  for(const p of parts){ const op=design.ops[p.op]; if(op&&op.liftoff&&p.liftoff===undefined){ p.liftoff=String(op.liftoff); if(!riders.has(p.liftoff)) riders.set(p.liftoff,[]); riders.get(p.liftoff).push(p.id); } }
 
   // ---------- manual steps ----------
   const STEP_MAX=8, SUB_MAX=4, steps=[];
@@ -526,7 +542,7 @@ function compile(design){
     if(bare.length) warnings.push({msg:`The baseplate shows inside a building at ${bare.length} stud${bare.length===1?'':'s'}, from (${bare[0]}): cover the floors inside the walls with a floor op (tiles at y 0) so no green shows through windows or under a lift-off roof`, op:null}); }
   // lift-off roofs: ops sharing a "liftoff" name come off as one piece, so they must hold together
   // on their own and nothing else may rest on them
-  { for(const [name,ps] of liftGroups){ const ids=new Set(ps.map(p=>p.id));
+  { for(const [name,ps] of liftGroups){ const ids=new Set([...ps.map(p=>p.id),...(riders.get(name)||[])]);
       const gp=new Map([...ids].map(id=>[id,id])), gf=a=>{ while(gp.get(a)!==a){ gp.set(a,gp.get(gp.get(a))); a=gp.get(a);} return a; };
       let held=0; const onTop=new Set();
       for(const [a,b] of joints){ const ia=ids.has(a), ib=b!=='base'&&ids.has(b);
@@ -550,6 +566,25 @@ function compile(design){
       if(run===3) warnings.push({msg:`Wall seam between (${a}) and (${b}) runs straight up through 3 courses from height ${y-6}`, op:null});
     } }
 
+  // ---------- hints (not problems): big bare stretches of plain tile, such as a roof or patio ----------
+  const hints=[];
+  { const topAt=new Map(); for(const p of parts) for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++){ const k=(p.x+a)+','+(p.z+b), t=topAt.get(k); if(!t||p.y+p.h>t.y+t.h) topAt.set(k,p); }
+    const bare=k=>{ const p=topAt.get(k); return p&&p.kind==='tile'&&(p.sub===undefined||p.liftoff)?p:null; }, seen=new Set(), MIN=Math.round(BASE*BASE/16), SIDE=Math.ceil(BASE/5);
+    for(const [k0] of topAt){ if(seen.has(k0)||!bare(k0)) continue;
+      const h=bare(k0).y+1, comp=[], q=[k0], colors=new Set(); let edge=false; seen.add(k0);
+      while(q.length){ const k=q.pop(), [x,z]=k.split(',').map(Number); comp.push([x,z]); colors.add(bare(k).color); if(x===0||z===0||x===BASE-1||z===BASE-1) edge=true;
+        for(const [dx,dz] of N4){ const nk=(x+dx)+','+(z+dz), np=bare(nk); if(np&&np.y+1===h&&!seen.has(nk)){ seen.add(nk); q.push(nk); } } }
+      if(edge||comp.length<MIN) continue;
+      // the largest open square with nothing on it: scattered fixtures break it up, plain repetition doesn't
+      const inC=new Set(comp.map(c=>c.join(','))), xs=comp.map(c=>c[0]), zs=comp.map(c=>c[1]), x0=Math.min(...xs), z0=Math.min(...zs);
+      const dp=new Map(); let side=0, at=null;
+      for(let x=x0;x<=Math.max(...xs);x++) for(let z=z0;z<=Math.max(...zs);z++){ if(!inC.has(x+','+z)) continue;
+        const v=1+Math.min(dp.get((x-1)+','+z)||0,dp.get(x+','+(z-1))||0,dp.get((x-1)+','+(z-1))||0); dp.set(x+','+z,v); if(v>side){ side=v; at=[x-v+1,z-v+1]; } }
+      if(side<SIDE) continue;
+      const roof=parts[bare(k0).id-1].liftoff;
+      hints.push({msg:`${roof?`Lift-off roof "${roof}"`:'A tiled area'} has an open ${side} x ${side} stretch of plain tile with nothing on it, from (${at[0]}, ${at[1]}) to (${at[0]+side-1}, ${at[1]+side-1}) at height ${h}. If the photos or an overhead view show what's there, add it (${roof?'fixture ops for skylights, vents, HVAC units, solar panels or a roof hatch, listed before the roof tiles so they stand on the deck, with the roof\'s "liftoff"':'furniture, pots, planters or a pattern'}); a "mix" of close colors also breaks up repetition. Not required.`, side, cells:comp.length}); }
+  }
+
   // ---------- inventory ----------
   const lots=new Map(); const add=(no,name,color,cost,kind)=>{ const k=no+'|'+color; const e=lots.get(k)||{no,name,color,q:0,cost,kind}; e.q++; lots.set(k,e); };
   add(BASEPLATE.no,BASEPLATE.name,BASEPLATE.color,BASEPLATE.cost,'baseplate');
@@ -560,7 +595,7 @@ function compile(design){
   const pieces=parts.length+glassN+1;
   const pages=1+Math.ceil(inventory.length/24)+steps.length;
   const ms=clock.now()-t0;
-  return {parts,steps,subs,errors,warnings,joints,jn,inventory,occ,
+  return {parts,steps,subs,errors,warnings,hints,joints,jn,inventory,occ,
     stats:{liftoff:[...new Set(parts.filter(p=>p.liftoff).map(p=>p.liftoff))],pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32}};
 }
-if(typeof module!=='undefined') module.exports={compile,COLORS,SPECIAL,SIZE_PARTS,PLANTS};
+if(typeof module!=='undefined') module.exports={compile,COLORS,SPECIAL,SIZE_PARTS,PLANTS,FIXTURES};
