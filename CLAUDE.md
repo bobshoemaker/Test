@@ -85,6 +85,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
     npm test                                  # engine + designer loop, no API key needed
     npm run demo                              # server with a scripted Claude (no key)
     npm start                                 # real Claude; needs BRICKHOUSE_ANTHROPIC_API_KEY (or ANTHROPIC_API_KEY)
+                                              # BRICKHOUSE_PASSWORD puts the site behind a password (hosting: docs/deploy.md)
                                               # an organization-scoped key also needs BRICKHOUSE_ANTHROPIC_WORKSPACE_ID
     node scripts/compile.js designs/634-unit-a.json --steps
     node scripts/design.js a.jpg b.jpg --target 1200 --out designs/new.json

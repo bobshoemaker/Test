@@ -169,8 +169,24 @@ async function handlePhoto(res, id) {
   } catch (e) { send(res, 502, { error: e.message }); }
 }
 
+// On a public host, BRICKHOUSE_PASSWORD puts the whole site behind a browser password prompt (any
+// user name), so strangers can't spend the API key. /healthz stays open for the host's health check.
+const PASSWORD = process.env.BRICKHOUSE_PASSWORD || '';
+function authorized(req) {
+  if (!PASSWORD) return true;
+  const m = /^Basic (.+)$/.exec(req.headers.authorization || '');
+  const given = Buffer.from(m ? Buffer.from(m[1], 'base64').toString('utf8').replace(/^[^:]*:/, '') : '');
+  const want = Buffer.from(PASSWORD);
+  return given.length === want.length && require('node:crypto').timingSafeEqual(given, want);
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  if (url.pathname === '/healthz') return send(res, 200, { ok: true });
+  if (!authorized(req)) {
+    res.writeHead(401, { 'www-authenticate': 'Basic realm="Brickhouse", charset="UTF-8"', 'content-type': 'text/plain' });
+    return res.end('Password required.');
+  }
   try {
     if (req.method === 'GET' && STATIC[url.pathname]) {
       const [file, type] = STATIC[url.pathname];
