@@ -81,6 +81,7 @@ function compile(design){
   const errors=[], warnings=[], parts=[], occ=new Map(), subs=[];
   const phases=design.phases||[]; const phaseIdx=new Map(phases.map((p,i)=>[p,i]));
   const wallCourse=new Map(); const wallPairs=new Set(); const wallCourses=new Map();
+  const abutEdges=[];
 
   const commit=p=>{ p.id=parts.length+1; parts.push(p); for(const v of p.occ) occ.set(K3(v[0],v[1],v[2]),p.id); return p; };
   const blocked=p=>{ for(const v of p.occ){ if(v[0]<0||v[1]<0||v[0]>=BASE||v[1]>=BASE) return -1; const o=occ.get(K3(v[0],v[1],v[2])); if(o) return o; } return 0; };
@@ -174,6 +175,46 @@ function compile(design){
     return out;
   }
 
+  // A hip roof over the union of several rectangles (an L or T): each plate course steps in one stud
+  // from the outline of the whole shape (8-neighbour distance), so valleys form at inside corners
+  // and wings meet without gaps. "against" lists rectangles of a taller building the roof leans on:
+  // there the roof keeps rising into its wall (no eave), and everywhere else it has an eave.
+  // Same fascia, mix and cheese slopes as a one-rectangle roof.
+  function roofUnion(op,meta,i){
+    const cellsOf=rs=>{ const out=new Set(); for(const r of rs||[]){ const [a,b,c,d]=r; for(let x=Math.min(a,c);x<=Math.max(a,c);x++) for(let z=Math.min(b,d);z<=Math.max(b,d);z++) out.add(x+','+z); } return out; };
+    const inside=cellsOf(op.rects), against=cellsOf(op.against);
+    for(const k of against) inside.delete(k);
+    const eave=new Set(inside);
+    for(const k of inside){ const [x,z]=k.split(',').map(Number); for(let dx=-1;dx<=1;dx++) for(let dz=-1;dz<=1;dz++){ const n=(x+dx)+','+(z+dz); if(!against.has(n)) eave.add(n); } }
+    // depth: 8-neighbour steps to the nearest cell that is neither roof nor the building leaned on
+    const solid=k=>eave.has(k)||against.has(k), depth=new Map(), q=[];
+    for(const k of eave){ const [x,z]=k.split(',').map(Number); let edge=false;
+      for(let dx=-1;dx<=1&&!edge;dx++) for(let dz=-1;dz<=1;dz++) if((dx||dz)&&!solid((x+dx)+','+(z+dz))){ edge=true; break; }
+      if(edge){ depth.set(k,1); q.push([x,z]); } }
+    for(let h=0;h<q.length;h++){ const [x,z]=q[h], d=depth.get(x+','+z);
+      for(let dx=-1;dx<=1;dx++) for(let dz=-1;dz<=1;dz++){ const k=(x+dx)+','+(z+dz); if(eave.has(k)&&!depth.has(k)){ depth.set(k,d+1); q.push([x+dx,z+dz]); } } }
+    if(!depth.size) return;
+    const maxD=Math.max(...depth.values()), ids=[];
+    for(let r=0;r+1<=maxD;r++){
+      const last=r+3>maxD, level=new Map();
+      for(const [k,d] of depth) if(d>=r+1&&(last||d<=r+2)) level.set(k,(r===0&&op.fascia)?op.fascia:op.color);
+      if(!level.size) break;
+      ids.push(...pack(level,'plate',op.base+r,meta));
+      if(last) break;
+    }
+    // where it leans on the other building, that building has to rise above the roof
+    const lean=[]; for(const k of eave){ const [x,z]=k.split(',').map(Number); for(const [dx,dz] of N4) if(against.has((x+dx)+','+(z+dz))) lean.push([x,z,dx,dz]); }
+    if(lean.length) abutEdges.push({op:i, side:'leaning', cells:lean, ids});
+    const dep=(x,z)=>against.has(x+','+z)?Infinity:(depth.get(x+','+z)||0);
+    for(const id of ids){ const p=parts[id-1], top=p.y+p.h;
+      for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++){ const x=p.x+a, z=p.z+b; if(occ.has(K3(x,z,top))) continue;
+        let best=null; for(const [dn,dx,dz] of [['S',0,1],['N',0,-1],['E',1,0],['W',-1,0]]){ const v=dep(x+dx,z+dz); if(!best||v<best[1]) best=[dn,v]; }
+        let cc=op.cap||op.color;
+        if(op.mix){ const hsh=((x*73856093)^(z*19349663)^(top*83492791))>>>0; let u=(hsh%1000)/1000;
+          for(const [mc,fr] of op.mix){ if(u<fr){ cc=mc; break; } u-=fr; } }
+        const qq=place('cheese',x,top,z,0,cc,meta,false); if(qq) qq.dir=best[0]; } }
+  }
+
   (design.ops||[]).forEach((op,i)=>{
     const meta={op:i, phase:op.phase};
     if(op.phase===undefined || !phaseIdx.has(op.phase)){ errors.push({msg:`Step ${i+1} uses phase "${op.phase}", which isn't in the phase list`, op:i}); return; }
@@ -215,6 +256,7 @@ function compile(design){
         }
         break; }
       case 'roof': {
+        if(op.rects){ roofUnion(op,meta,i); break; }
         const [x0,z0,x1,z1]=op.rect, gb=new Set(op.gable||[]), ab=new Set([...(op.abut||[]),...gb]);
         const m={W:ab.has('W')?0:1,E:ab.has('E')?0:1,N:ab.has('N')?0:1,S:ab.has('S')?0:1};
         const reg=r=>({x0:x0+r*m.W,x1:x1-r*m.E,z0:z0+r*m.N,z1:z1-r*m.S});
@@ -231,6 +273,11 @@ function compile(design){
           ids.push(...pack(level,'plate',op.base+r,meta));
           if(last) break;
         }
+        // An abutted side has no eave: its stepped edge must run against something at least as tall.
+        for(const side of ab) if(!gb.has(side)){
+          const cells=[]; if(side==='W'||side==='E') for(let z=z0;z<=z1;z++) cells.push([side==='W'?x0:x1,z,side==='W'?-1:1,0]);
+          else for(let x=x0;x<=x1;x++) cells.push([x,side==='N'?z0:z1,0,side==='N'?-1:1]);
+          abutEdges.push({op:i, side, cells, ids}); }
         const E=reg(-1);
         for(const id of ids){ const p=parts[id-1], top=p.y+p.h;
           for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++){ const x=p.x+a, z=p.z+b; if(occ.has(K3(x,z,top))) continue;
@@ -332,6 +379,15 @@ function compile(design){
   const root=f('base');
   for(const p of parts) if(f(p.id)!==root&&!flagged.has(p.id)){ errors.push({msg:`${p.name} #${p.id} at (${p.x}, ${p.y}, ${p.z}) isn't connected to the baseplate`, op:p.op, part:p.id}); flagged.add(p.id); }
   for(const p of parts){ const area=p.shape==='arch'?4:p.w*p.d; if(area>=2&&jn.get(p.id)<=1&&!flagged.has(p.id)) warnings.push({msg:`${p.name} #${p.id} at (${p.x}, ${p.y}, ${p.z}) is held by a single stud`, op:p.op, part:p.id}); }
+  // roof edges left showing: an abutted side whose neighbour (a wall or another roof) stays lower
+  if(abutEdges.length){
+    const colTop=new Map(); for(const p of parts) for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++){ const k=(p.x+a)+','+(p.z+b); colTop.set(k,Math.max(colTop.get(k)||0,p.y+p.h)); }
+    for(const e of abutEdges){
+      const mine=new Map(); for(const id of e.ids){ const p=parts[id-1]; for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++){ const k=(p.x+a)+','+(p.z+b); mine.set(k,Math.max(mine.get(k)||0,p.y+p.h)); } }
+      const bad=e.cells.filter(([x,z,dx,dz])=>{ const t=mine.get(x+','+z)||0; return t>0&&(colTop.get((x+dx)+','+(z+dz))||0)<t-1; });
+      if(bad.length) warnings.push({msg:`Roof ${e.side==='leaning'?'leans on another building':`abuts on its ${e.side} side`}, but the roof's stepped edge shows above what's beside it at ${bad.length} stud${bad.length===1?'':'s'}, from (${bad[0][0]}, ${bad[0][1]}). Give wings that meet one roof with "rects", or abut only against a wall that rises above the roof`, op:e.op});
+    }
+  }
   // stacked seams
   const courses=[...wallCourses.keys()].sort((a,b)=>a-b);
   for(const pr of wallPairs){ const [a,b]=pr.split('|'); let run=0;

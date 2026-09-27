@@ -8,7 +8,7 @@ const { compile } = require('../src/engine/engine.js');
 const load = (name) => JSON.parse(fs.readFileSync(path.join(__dirname, '../designs', name + '.json'), 'utf8'));
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
-for (const [name, pieces] of [['savannah-dr', 1202], ['634-unit-a', 778]]) {
+for (const [name, pieces] of [['savannah-dr', 1208], ['634-unit-a', 778]]) {
   test(`${name} compiles clean`, () => {
     const r = compile(load(name));
     assert.deepEqual(r.errors.map((e) => e.msg), []);
@@ -71,4 +71,35 @@ test('seam repair never merges tiles into a length tiles do not come in', () => 
     { op: 'fill', phase: 'p', kind: 'tile', color: 'White', rects: [[0, 0, 2, 0]], y: 2 }];
   const r = compile({ name: 't', phases: ['p'], ops });
   assert.deepEqual(r.errors.map((e) => e.msg), []);
+});
+
+// An L-shaped house: a 17 x 9 main block with a 9 x 11 wing off its south-west corner.
+const lWalls = { op: 'walls', phase: 'Walls', color: 'White', courses: [0, 3], base: 0,
+  segments: [[4, 6, 20, 6], [4, 7, 4, 24], [5, 24, 12, 24], [12, 14, 12, 23], [13, 14, 20, 14], [20, 7, 20, 13]] };
+const lHouse = (roofs) => ({ name: 'L', phases: ['Walls', 'Roof'], ops: [lWalls, ...roofs.map((r) => ({ op: 'roof', phase: 'Roof', base: 12, color: 'Dark Orange', ...r }))] });
+
+test('one roof over an L-shaped union meets itself with a valley, and matches a plain hip on one rectangle', () => {
+  const union = compile(lHouse([{ rects: [[4, 6, 20, 14], [4, 14, 12, 24]] }]));
+  assert.deepEqual([union.errors.length, union.warnings.length], [0, 0]);
+  const box = { op: 'walls', phase: 'Walls', color: 'White', courses: [0, 3], base: 0, segments: [[4, 6, 20, 6], [4, 7, 4, 14], [20, 7, 20, 14], [5, 14, 19, 14]] };
+  const one = (roof) => compile({ name: 'b', phases: ['Walls', 'Roof'], ops: [box, { op: 'roof', phase: 'Roof', base: 12, color: 'Dark Orange', ...roof }] }).stats.pieces;
+  assert.equal(one({ rects: [[4, 6, 20, 14]] }), one({ rect: [4, 6, 20, 14] }));
+});
+
+test('two hips abutting each other leave a stepped edge showing, and the compiler says so', () => {
+  const r = compile(lHouse([{ rect: [4, 6, 20, 14] }, { rect: [4, 15, 12, 24], abut: ['N'] }]));
+  assert.match(r.warnings.map((w) => w.msg).join(' '), /Roof abuts on its N side, but the roof's stepped edge shows/);
+});
+
+test('a roof leaning on a taller building rises into its wall there and has an eave elsewhere', () => {
+  const tower = { op: 'walls', phase: 'Walls', color: 'White', courses: [0, 7], base: 0, segments: [[12, 2, 20, 2], [12, 3, 12, 10], [20, 3, 20, 10], [13, 10, 19, 10]] };
+  const shed = { op: 'walls', phase: 'Walls', color: 'White', courses: [0, 3], base: 0, segments: [[4, 4, 11, 4], [4, 5, 4, 14], [5, 14, 11, 14], [11, 5, 11, 13]] };
+  const lean = (height) => compile({ name: 'lean', phases: ['Walls', 'Roof'], ops: [{ ...tower, courses: [0, height] }, shed,
+    { op: 'roof', phase: 'Roof', base: 12, color: 'Dark Orange', rects: [[4, 4, 11, 14]], against: [[12, 2, 20, 10]] }] });
+  const tall = lean(7);
+  assert.deepEqual([tall.errors.length, tall.warnings.map((w) => w.msg)], [0, []]);
+  // Past the tower (z 11 to 14) the roof has an eave: a plate sits one stud outside the shed's east wall.
+  assert.ok(tall.parts.some((p) => p.kind === 'plate' && p.y === 12 && p.x <= 12 && p.x + p.w > 12 && p.z <= 13 && p.z + p.d > 13));
+  // A tower no taller than the shed leaves the leaning edge showing.
+  assert.match(lean(3).warnings.map((w) => w.msg).join(' '), /Roof leans on another building, but/);
 });

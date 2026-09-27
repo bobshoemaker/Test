@@ -89,8 +89,8 @@
        {"cells":[12,10,12,11], "courses":[5,6], "fill":{"part":"win22"}}
      ]},
 
-    {"op":"roof", "phase":"Garage and front roofs", "note":"Garage hip roof leaning into the house",
-     "rect":[2,13,11,24], "base":12, "abut":["E"], "color":"Dark Orange", "fascia":"White",
+    {"op":"roof", "phase":"Garage and front roofs", "note":"Garage hip roof leaning into the house where it meets it, with an eave where the garage runs past the house front",
+     "rects":[[2,13,11,24]], "against":[[12,5,29,20]], "base":12, "color":"Dark Orange", "fascia":"White",
      "mix":[["Medium Nougat",0.07],["Reddish Brown",0.04]]},
     {"op":"roof", "phase":"Garage and front roofs", "note":"Front bay roof",
      "rect":[20,21,28,22], "base":12, "abut":["N"], "color":"Dark Orange", "fascia":"White",
