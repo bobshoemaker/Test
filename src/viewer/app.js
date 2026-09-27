@@ -314,6 +314,7 @@ $('addrForm').onsubmit=async e=>{
     $('cands').querySelectorAll('.cand').forEach(b=>b.onclick=()=>{ const c=cands[+b.dataset.i]; c.on=!c.on; b.setAttribute('aria-pressed',c.on); });
     $('candRow').hidden=!cands.length;
     const n=$('notes'); if(j.place&&!n.value.includes(j.place.label)) n.value=(n.value?n.value+'\n':'')+`Address: ${j.place.label}`;
+    if(j.terrain&&j.terrain.note&&!n.value.includes('Terrain (USGS')) n.value+='\n'+j.terrain.note;
   }catch(err){ addrStatus(esc(err.message),true); }
   finally{ $('addrBtn').disabled=false; }
 };

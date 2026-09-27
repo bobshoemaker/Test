@@ -28,6 +28,12 @@ closing gift that realtors give clients: a brick model of the house they just bo
   what the photos show and asks up to five questions about what they leave open (a roof hidden
   by a parapet, an unseen side), each with buildable options and a recommended one, plus a
   landscaping style. The owner's answers go into the design task as binding choices.
+- `src/server/terrain.js`: street and slope for an address, from OpenStreetMap street positions
+  (Overpass) and USGS 3DEP elevations (public domain, no key). Finds the street the house faces
+  and reports, in model terms, how the street rises across the baseplate and the lot rises toward
+  the back, as a note for the survey and design (`/api/lookup` adds it; `--address` on the
+  scripts). The street slope is measured well; the lot's rise is smoothed and interpolated under
+  the house, so the note defers to the photos there. Not Street View: Google's terms bar it.
 - `src/server/footprint.js`: floor plan to locked walls. With a plan, parts mode first has Claude
   read the footprint off a pixel-gridded copy (`submit_footprint`: labeled rooms for scale,
   blocks as rectangles, doors, stairs, street side). This module scales it to studs from the
@@ -65,6 +71,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
     node scripts/design.js a.jpg b.jpg --plan plan.png --parts --effort high --out designs/generated/x.json
                                               # plan first, then four parts; drafts, renders and overlays saved next to --out
     node scripts/survey.js a.jpg b.jpg --out survey.json          # questions for the owner; then design.js --choices survey.json
+    node scripts/terrain.js "3221 Griffith Park Blvd, Los Angeles, CA"   # street and slope; --address on survey.js/design.js adds it
     node scripts/bundle.js designs/634-unit-a.json
     node scripts/lookup.js "12 Elm St, Springfield, IL" --take 1,2 --out photos/elm   # needs MAPILLARY_TOKEN
 

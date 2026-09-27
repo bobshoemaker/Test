@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { designHouse, surveyHouse } = require('./designer');
 const { lookupAddress, fetchMapillaryImage } = require('./lookup');
+const { lookupTerrain } = require('./terrain');
 const { anthropicKey, makeAnthropicClient } = require('./client');
 
 const ROOT = path.resolve(__dirname, '../..');
@@ -127,7 +128,14 @@ async function handleDesign(req, res) {
 async function handleLookup(req, res) {
   let body;
   try { body = JSON.parse(await readBody(req)); } catch (e) { return send(res, 400, { error: e.message }); }
-  try { send(res, 200, await lookupAddress(body.address)); } catch (e) { send(res, 502, { error: e.message }); }
+  try {
+    const r = await lookupAddress(body.address);
+    // Street and slope, best effort: a lookup still works when the elevation or street service is down.
+    if (r.place) {
+      try { const t = await lookupTerrain(r.place, body.address); r.terrain = { note: t.note, street: t.street && t.street.name, analysis: t.analysis }; } catch (e) { r.notes = [...(r.notes || []), `No terrain: ${e.message}`]; }
+    }
+    send(res, 200, r);
+  } catch (e) { send(res, 502, { error: e.message }); }
 }
 
 async function handlePhoto(res, id) {

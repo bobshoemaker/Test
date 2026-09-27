@@ -8,6 +8,7 @@
 //            --footprint <out>.footprint.json  reuse a saved footprint instead of reading the plan again
 //            --no-footprint  send the plan as a picture only, without locking the walls to it
 //            --resume <draft>.json --from-part 2  continue from a design whose earlier parts are done
+//            --address "..."  add the street and slope from USGS elevations and OpenStreetMap to the notes
 //            --choices survey.json [--answer id=option ...]  the owner's answers from scripts/survey.js
 //            --parts-limit 1  stop after the first N parts   --no-render  don't send renders of each draft
 const fs = require('node:fs');
@@ -17,7 +18,9 @@ const { designHouse, resolveChoices } = require('../src/server/designer');
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 ? args.splice(i, 2)[1] : def; };
 const flag = (name) => { const i = args.indexOf('--' + name); if (i >= 0) { args.splice(i, 1); return true; } return false; };
-const notes = opt('notes', ''), target = Number(opt('target', 1200)), out = opt('out', null);
+const address = opt('address', null);
+let notes = opt('notes', '');
+const target = Number(opt('target', 1200)), out = opt('out', null);
 const model = opt('model', process.env.BRICKHOUSE_MODEL || 'claude-opus-5-5'), effort = opt('effort', process.env.BRICKHOUSE_EFFORT || null);
 const maxTokens = Number(opt('max-tokens', 64000));
 const partsLimit = Number(opt('parts-limit', 4)), planFile = opt('plan', null), footprintFile = opt('footprint', null);
@@ -32,7 +35,20 @@ const readImage = (f) => {
 };
 const photos = args.map(readImage), plan = planFile ? readImage(planFile) : null;
 
+// --address: geocode it and add the street and slope (USGS elevations, OpenStreetMap streets) to the notes.
+async function addTerrain() {
+  if (!address) return;
+  const place = await require('../src/server/lookup').geocode(address);
+  if (!place) { console.log(`Terrain skipped: ${address} not found.`); return; }
+  try {
+    const t = await require('../src/server/terrain').lookupTerrain(place, address);
+    notes = [notes, `Address: ${place.label}.`, t.note].filter(Boolean).join(' ');
+    if (t.note) console.log(t.note);
+  } catch (e) { console.log(`Terrain skipped: ${e.message}`); }
+}
+
 (async () => {
+  await addTerrain();
   let client;
   if (fake) client = require('../src/server/fakeClient').makeFakeClient({ delayMs: 50 });
   else {
