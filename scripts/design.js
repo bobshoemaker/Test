@@ -7,6 +7,7 @@
 //                                  and the walls are locked to it (saved as <out>.footprint.json)
 //            --footprint <out>.footprint.json  reuse a saved footprint instead of reading the plan again
 //            --no-footprint  send the plan as a picture only, without locking the walls to it
+//            --resume <draft>.json --from-part 2  continue from a design whose earlier parts are done
 //            --parts-limit 1  stop after the first N parts   --no-render  don't send renders of each draft
 const fs = require('node:fs');
 const path = require('node:path');
@@ -19,6 +20,7 @@ const notes = opt('notes', ''), target = Number(opt('target', 1200)), out = opt(
 const model = opt('model', process.env.BRICKHOUSE_MODEL || 'claude-opus-5-5'), effort = opt('effort', process.env.BRICKHOUSE_EFFORT || null);
 const maxTokens = Number(opt('max-tokens', 64000));
 const partsLimit = Number(opt('parts-limit', 4)), planFile = opt('plan', null), footprintFile = opt('footprint', null);
+const resumeFile = opt('resume', null), fromPart = Number(opt('from-part', resumeFile ? 2 : 1));
 const fake = flag('fake'), parts = flag('parts'), noRender = flag('no-render'), noFootprint = flag('no-footprint');
 const types = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' };
 const readImage = (f) => {
@@ -41,6 +43,7 @@ const photos = args.map(readImage), plan = planFile ? readImage(planFile) : null
   const locked = footprintFile ? JSON.parse(fs.readFileSync(footprintFile, 'utf8')) : null;
   const res = await designHouse({ client, model, effort, maxTokens, photos, plan, notes, target, mode: parts ? 'parts' : 'design', partsLimit,
     render: renderer && renderer.render, planTools: renderer, lockFootprint: !noFootprint, locked,
+    seed: resumeFile ? JSON.parse(fs.readFileSync(resumeFile, 'utf8')) : null, fromPart,
     onEvent: (ev) => {
       if (ev.type === 'footprint') {
         console.log(`${clock()}   footprint ${ev.n}: scale ${ev.locked.scale ? ev.locked.scale.pxPerFt + ' px per ft' : 'unknown'}, street on the ${ev.locked.street || '?'} side of the plan`);

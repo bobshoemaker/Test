@@ -97,7 +97,15 @@ ${locked.stairs.length ? `Stairs on the plan (stud rectangles [x0,z0,x1,z1]; bui
 `;
 }
 
-function partsTask({ photoCount, notes, target, hasPlan = false, locked = null, lockedOps = null }) {
+// Resuming: the design from the parts already done, to continue from.
+function seedNote(seed, fromPart) {
+  return `
+THE DESIGN SO FAR. Parts 1 to ${fromPart - 1} are done and this design compiles. Keep what's there unless the photos or the compiler call for a change, and add the next part to it.
+${JSON.stringify(seed)}
+`;
+}
+
+function partsTask({ photoCount, notes, target, hasPlan = false, locked = null, lockedOps = null, seed = null, fromPart = 1 }) {
   return `TASK
 Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes from the agent: "${notes}"` : ''}. The finished design should have about ${target} pieces (parts plus window glass plus the baseplate) and no more than 10 percent over. Fewer is fine when the house is simple.${planNote(hasPlan)}
 
@@ -110,8 +118,8 @@ WORK IN PARTS. You build the design in ${PARTS.length} parts, one part per turn;
 EXAMPLE of a valid finished design (a two-story house built from three listing photos, 778 pieces, 0 errors):
 ${JSON.stringify(JSON.parse(example()))}
 
-${lockedNote(locked, lockedOps)}
-${locked ? PARTS[0].locked : PARTS[0].task}`;
+${lockedNote(locked, lockedOps)}${seed ? seedNote(seed, fromPart) : ''}
+${seed ? PARTS[fromPart - 1].task : locked ? PARTS[0].locked : PARTS[0].task}`;
 }
 
 // The plan-reading step: Claude reads the footprint off a gridded plan; code lays it out in studs.

@@ -163,12 +163,15 @@ async function callClaude(client, params, onEvent = () => {}) {
  * @param {boolean} [o.lockFootprint] parts mode with a plan: read the footprint first and lock the walls to it (default true)
  * @param {object} [o.locked]   a footprint already laid out (from an earlier run's 'footprintDone'); skips reading the plan
  * @param {object} [o.planTools] {gridPlan, footprintOverlay} from render.js, for the plan-reading step
+ * @param {object} [o.seed]     parts mode: a design from earlier parts to continue from (with fromPart)
+ * @param {number} [o.fromPart] parts mode: the part to start at, 1-based (needs seed when above 1)
  */
 async function designHouse({
   client, model, photos = [], plan = null, notes = '', target = 1200, mode = 'design', design = null,
   effort = null, maxRounds = 7, maxTokens = 64000, onEvent = () => {}, render = null, partsLimit = PARTS.length,
-  lockFootprint = true, locked = null, planTools = null,
+  lockFootprint = true, locked = null, planTools = null, seed = null, fromPart = 1,
 }) {
+  if (mode === 'parts' && fromPart > 1 && !isDesign(seed)) throw new Error('Starting at a later part needs the design from the earlier parts (seed).');
   const usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
   if (mode === 'parts' && plan && lockFootprint && !locked) {
     locked = await planFootprint({ client, model, photos, plan, notes, effort, maxTokens, planTools, onEvent, usage });
@@ -181,10 +184,10 @@ async function designHouse({
     content.push({ type: 'text', text: fixTask({ design, problems: problemList(compile(design)) }) });
   } else {
     if (!photos.length && !notes) throw new Error('Add at least one photo or a description.');
-    content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target, hasPlan: !!plan, locked, lockedOps }) });
+    content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target, hasPlan: !!plan, locked, lockedOps, seed: fromPart > 1 ? seed : null, fromPart }) });
   }
   const messages = [{ role: 'user', content }];
-  const st = { lastDraft: null, compiles: 0, rounds: 0 };
+  const st = { lastDraft: mode === 'parts' && fromPart > 1 ? seed : null, compiles: 0, rounds: 0 };
   // max_tokens includes thinking, which runs long at xhigh and max. Automatic caching moves the
   // breakpoint to the end of each request, so every round reads the photos and earlier drafts from cache.
   // Summarized thinking lets the progress events show what Claude is working on.
@@ -266,10 +269,10 @@ async function designHouse({
 
   let msg = null;
   const count = Math.min(partsLimit, PARTS.length);
-  for (let i = 0; i < count; i++) {
+  for (let i = Math.max(0, fromPart - 1); i < count; i++) {
     const part = PARTS[i];
     // Each later part is a new user turn appended to the same conversation (append-only).
-    if (i > 0) messages.push({ role: 'user', content: [{ type: 'text', text: part.task }] });
+    if (i > fromPart - 1) messages.push({ role: 'user', content: [{ type: 'text', text: part.task }] });
     onEvent({ type: 'part', n: i + 1, of: PARTS.length, name: part.name });
     msg = await turns(i === PARTS.length - 1 ? 5 : 4, part.name);
     const said = msg ? msg.content.filter((b) => b.type === 'text').map((b) => b.text).join(' ').trim() : '';
