@@ -264,3 +264,17 @@ test('a color mix recolors a few whole pieces and leaves the structure as it was
   assert.ok(share('Light Gray') + share('Dark Tan') > 0.03 && share('Light Gray') + share('Dark Tan') < 0.2);
   assert.match(compile({ name: 'x', phases: ['a'], ops: [{ ...d(true).ops[1], mix: [['Plaid', 0.1]] }] }).errors[0].msg, /"mix" must be/);
 });
+
+test('"seat" tiles a wall top with four locating studs, so a lift-off roof one plate up grips four studs', () => {
+  const walls = (seat) => ({ op: 'walls', phase: 'a', color: 'White', courses: [0, 3], base: 0, segments: [[5, 5, 14, 5], [5, 12, 14, 12], [5, 6, 5, 11], [14, 6, 14, 11]], ...(seat ? { seat } : {}) });
+  const roof = [{ op: 'fill', phase: 'b', kind: 'plate', color: 'White', rects: [[5, 5, 14, 12]], y: 13, liftoff: 'Roof' },
+    { op: 'fill', phase: 'b', kind: 'tile', color: 'Light Bluish Gray', rects: [[5, 5, 14, 12]], y: 14, liftoff: 'Roof' }];
+  const r = compile({ name: 's', phases: ['a', 'b'], ops: [walls(true), ...roof, { op: 'floor', phase: 'a', color: 'Tan' }] });
+  assert.deepEqual([r.errors.map((e) => e.msg), r.warnings.map((w) => w.msg)], [[], []]);
+  const studs = r.parts.filter((p) => p.y === 12 && p.kind === 'plate');
+  assert.deepEqual(studs.map((p) => [p.x, p.z]).sort(), [[14, 12], [14, 5], [5, 12], [5, 5]].sort());
+  assert.equal(r.joints.filter(([a, b]) => r.parts[a - 1].liftoff && b !== 'base' && !r.parts[b - 1].liftoff).length, 4);
+  // a flat seat leaves no studs, so the roof has nothing to locate it
+  const flat = compile({ name: 'f', phases: ['a', 'b'], ops: [walls('flat'), ...roof, { op: 'floor', phase: 'a', color: 'Tan' }] });
+  assert.match(flat.errors.map((e) => e.msg).join(' '), /held on by 0 studs/);
+});

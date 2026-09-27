@@ -173,3 +173,21 @@ test('extractJson accepts fenced and surrounded JSON', () => {
 test('design mode needs photos or notes', async () => {
   await assert.rejects(designHouse({ client: makeFakeClient(), model: 'fake' }), /photo or a description/);
 });
+
+test('a run that ends with problems gets repair rounds on just those, and converges', async () => {
+  const { example } = require('../src/server/prompt');
+  const good = JSON.parse(example()), bad = JSON.parse(example());
+  bad.ops.find((o) => o.op === 'sub' && o.name === 'Cactus').copies = [[20, 0, 26]]; // collides with the driveway
+  let n = 0, sentGood = false;
+  const client = { messages: { create: async (params) => {
+    const texts = params.messages.filter((m) => m.role === 'user').flatMap((m) => m.content).filter((b) => b.type === 'text').map((b) => b.text);
+    const repairing = texts.some((t) => /^REPAIR/.test(t));
+    if (sentGood) return { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Fixed.' }] };
+    sentGood = repairing;
+    return { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', id: `t${++n}`, name: 'compile_design', input: { design: repairing ? good : bad } }] };
+  } } };
+  const seen = [];
+  const out = await designHouse({ client, model: 'fake', mode: 'parts', photos: [{ mediaType: 'image/jpeg', data: 'AAAA' }], onEvent: (e) => seen.push(e) });
+  assert.deepEqual(seen.filter((e) => e.type === 'part').map((e) => e.name).slice(5), ['Repair 1']);
+  assert.deepEqual([out.result.errors.length, out.result.warnings.length], [0, 0]);
+});

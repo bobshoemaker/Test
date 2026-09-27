@@ -331,6 +331,17 @@ function compile(design){
           for(const id of ids){ const p=parts[id-1]; p.wall=true;
             for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++) wallCourse.set(K3(p.x+a,p.z+b,y),id); }
         }
+        // "seat": a lift-off roof rests on this wall: tile its top, leaving a 1 x 1 plate on the four
+        // outermost corners as locating studs ("flat": tiles only, for inside walls under the same roof)
+        if(op.seat){ const top=wbase+(op.courses[1]-op.courses[0]+1)*3;
+          const cells=[...cellSet.values()].filter(([x,z])=>{ const id=occ.get(K3(x,z,top-1)); return id&&parts[id-1].wall&&parts[id-1].op===i; });
+          const locate=new Set();
+          if(op.seat!=='flat'&&cells.length){ const xs=cells.map(c=>c[0]), zs=cells.map(c=>c[1]);
+            for(const [cx,cz] of [[Math.min(...xs),Math.min(...zs)],[Math.max(...xs),Math.min(...zs)],[Math.min(...xs),Math.max(...zs)],[Math.max(...xs),Math.max(...zs)]])
+              locate.add(cells.reduce((a,b)=>Math.hypot(b[0]-cx,b[1]-cz)<Math.hypot(a[0]-cx,a[1]-cz)?b:a).join(',')); }
+          for(const k of locate){ const [x,z]=k.split(',').map(Number); place('plate:1x1',x,top,z,0,op.color,meta,true); }
+          const level=new Map(cells.filter(c=>!locate.has(c.join(','))).map(c=>[c.join(','),op.color]));
+          pack(level,'tile',top,meta); }
         break; }
       case 'roof': {
         if(op.rects){ roofUnion(op,meta,i); break; }

@@ -353,7 +353,25 @@ async function designHouse({
       summary: i === PARTS.length - 1 || said.startsWith('{') ? '' : said.slice(0, 300),
       stats: st.lastDraft ? compile(st.lastDraft).stats : null, usage: { ...usage } });
   }
+  // Repair: when the last part ends with problems left, a few more rounds on just those, so a design
+  // converges to 0 errors and 0 warnings instead of stopping short.
+  // the design finish() would return: one in the reply's text, or else the last compiled draft
+  const current = () => { const d = msg ? extractJson(msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n')) : null; return isDesign(d) ? d : st.lastDraft; };
+  if (count === PARTS.length && current()) {
+    for (let k = 0; k < REPAIR_TURNS; k++) {
+      const d = current(), res = compile(d), plan = checkFootprint(d, locked);
+      if (!res.errors.length && !res.warnings.length && !plan.length) break;
+      const sum = summarize(res, plan);
+      const text = `REPAIR ${k + 1} OF ${REPAIR_TURNS}. The design still has ${sum.errors} error${sum.errors === 1 ? '' : 's'} and ${sum.warnings} warning${sum.warnings === 1 ? '' : 's'}:\n${sum.problems.join('\n')}\nFix only these and change nothing else, then compile. When it compiles with 0 errors and 0 warnings, reply with one sentence.`;
+      const last = messages[messages.length - 1];
+      if (last.role === 'user') last.content.push({ type: 'text', text }); else messages.push({ role: 'user', content: [{ type: 'text', text }] });
+      onEvent({ type: 'part', n: PARTS.length, of: PARTS.length, name: `Repair ${k + 1}` });
+      msg = await turns(3, 'the repair');
+    }
+  }
   return finish(msg, msg ? null : 'Stopped at the round limit; this is the last compiled draft.');
 }
+
+const REPAIR_TURNS = 3;
 
 module.exports = { designHouse, surveyHouse, resolveChoices, planFootprint, extractJson, summarize, problemList, COMPILE_TOOL };
