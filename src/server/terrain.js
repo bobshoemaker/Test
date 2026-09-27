@@ -25,6 +25,7 @@ function frame(origin) {
   return { toXY: (p) => [(p.lon - origin.lon) * mLon, (p.lat - origin.lat) * mLat], toLL: ([e, n]) => ({ lat: origin.lat + n / mLat, lon: origin.lon + e / mLon }) };
 }
 const unit = (deg) => [Math.sin(deg * Math.PI / 180), Math.cos(deg * Math.PI / 180)];
+const LANE_KINDS = ['service', 'track', 'unclassified', 'living_street'], LANE_M = 12;
 const compass = (deg) => ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'][Math.round(((deg % 360) + 360) % 360 / 45) % 8];
 
 async function overpass(q, fetchImpl) {
@@ -50,6 +51,12 @@ function nearestOnLine(p, line) {
     if (!best || d < best.d) best = { d, q };
   }
   return best;
+}
+// Direction of the polyline segment nearest to p.
+function nearestSegment(line, p) {
+  let best = null;
+  for (let i = 0; i + 1 < line.length; i++) { const n = nearestOnLine(p, [line[i], line[i + 1]]); if (n && (!best || n.d < best.d)) best = { d: n.d, dir: [line[i + 1][0] - line[i][0], line[i + 1][1] - line[i][1]] }; }
+  return best ? best.dir : [0, 0];
 }
 function lineToLine(a, b) {
   let best = null;
@@ -88,14 +95,28 @@ async function findBuilding(place, address, { fetchImpl = fetch, radiusM = 150 }
 
 // Named streets near the house, nearest first, measured from the building outline when there is
 // one: {name, distanceM, nearest [e, n] on the street, from [e, n] on the house, line}.
-async function nearbyStreets(center, { fetchImpl = fetch, radiusM = 80, outline = null } = {}) {
-  const data = await overpass(`[out:json][timeout:20];way(around:${radiusM},${center.lat},${center.lon})[highway][name];out geom;`, fetchImpl);
+async function nearbyStreets(center, opts = {}) { return (await nearbyWays(center, opts)).streets; }
+
+// Streets as above, plus lanes: unnamed or service roads (alleys, shared driveways) within LANE_M of
+// the house or an outbuilding, {kind, distanceM, nearest, building (name), line}. A garage by a lane
+// often opens onto it.
+async function nearbyWays(center, { fetchImpl = fetch, radiusM = 80, outline = null, outbuildings = [] } = {}) {
+  const data = await overpass(`[out:json][timeout:20];way(around:${radiusM},${center.lat},${center.lon})[highway];out geom tags;`, fetchImpl);
   const { toXY } = frame(center);
-  const house = outline && outline.length >= 3 ? [...outline, outline[0]].map(toXY) : [[0, 0]];
-  const out = [];
+  const ring = (o) => [...o, o[0]].map(toXY);
+  const house = outline && outline.length >= 3 ? ring(outline) : [[0, 0]];
+  const buildings = [{ name: 'house', pts: house }, ...outbuildings.filter((o) => o.outline && o.outline.length >= 3).map((o, i) => ({ name: outbuildings.length > 1 ? `outbuilding ${i + 1}` : 'outbuilding', pts: ring(o.outline) }))];
+  const out = [], lanes = [];
   for (const w of data.elements || []) {
-    const line = (w.geometry || []).map(toXY);
+    const line = (w.geometry || []).map(toXY), tags = w.tags || {};
     if (line.length < 2) continue;
+    if (LANE_KINDS.includes(tags.highway) && (!tags.name || tags.highway === 'service')) {
+      let best = null;
+      for (const b of buildings) { const m = lineToLine(b.pts, line); if (m && (!best || m.d < best.m.d)) best = { b, m }; }
+      if (best && best.m.d <= LANE_M) lanes.push({ kind: tags.service || tags.highway, name: tags.name, distanceM: best.m.d, nearest: best.m.to, building: best.b.name, line });
+      continue;
+    }
+    if (!tags.name) continue;
     const m = lineToLine(house, line);
     if (m) out.push({ name: w.tags.name, distanceM: m.d, nearest: m.to, from: m.from, line, bearingTo: (Math.atan2(m.to[0], m.to[1]) * 180 / Math.PI + 360) % 360 });
   }
@@ -104,7 +125,8 @@ async function nearbyStreets(center, { fetchImpl = fetch, radiusM = 80, outline 
     const prev = seen.get(s.name);
     if (!prev) seen.set(s.name, s); else prev.line = prev.line.concat([[NaN, NaN]], s.line); // keep every piece of a street
   }
-  return [...seen.values()].map((s) => ({ ...s, line: s.line.filter((p) => Number.isFinite(p[0])) }));
+  return { streets: [...seen.values()].map((s) => ({ ...s, line: s.line.filter((p) => Number.isFinite(p[0])) })),
+    lanes: lanes.sort((a, b) => a.distanceM - b.distanceM).slice(0, 2) };
 }
 
 // The streets the lot fronts: every named street within FRONTAGE_M of the house, the address's own
@@ -211,6 +233,25 @@ function terrainNote(t) {
       ? `${s.name} is close to level across the model.`
       : `${s.name} slopes about ${st.gradePct}%: across the model's ${sc.widthFt} ft it is ${Math.abs(st.riseRightFt)} ft (${courses(st.riseRightFt)}) higher on the ${side(st.riseRightFt)} as seen from ${s.name} facing the house, so its street, sidewalk and driveway should step up that way.`);
   }
+  // where things sit, as seen from the first street facing the house
+  const where = (xy) => { const { back, right } = streetFrame(s0), [dx, dy] = [xy[0] - s0.from[0], xy[1] - s0.from[1]];
+    const r = dx * right[0] + dy * right[1], k = dx * back[0] + dy * back[1];
+    return Math.abs(r) > Math.abs(k) ? (r > 0 ? 'right' : 'left') : (k > 0 ? 'back' : 'front'); };
+  const edge = { left: 'x = 0', right: `x = ${L}`, back: 'z = 0', front: `z = ${L}` };
+  if (b) for (const [i, o] of b.outbuildings.entries()) {
+    const fb = (() => { const { back, right } = streetFrame(s0), d = [o.xy[0] - s0.from[0], o.xy[1] - s0.from[1]];
+      const k = d[0] * back[0] + d[1] * back[1], r = d[0] * right[0] + d[1] * right[1]; return `${k > 0 ? 'behind' : 'in front of'} the house${Math.abs(r) > 3 ? ` and to the ${r > 0 ? 'right' : 'left'}` : ''}`; })();
+    const g = t.groundFt && t.groundFt[`outbuilding ${i}`], h = t.groundFt && t.groundFt.house;
+    const dz = Number.isFinite(g) && Number.isFinite(h) ? Math.round((g - h) * 2) / 2 : null;
+    parts.push(`The ${b.outbuildings.length > 1 ? `outbuilding ${i + 1}` : 'outbuilding'} (${o.areaSqFt} sq ft) is ${fb} as seen from ${s0.name}${dz !== null && Math.abs(dz) >= 1.5 ? `; the ground there is about ${Math.abs(dz)} ft (${courses(dz)}) ${dz < 0 ? 'lower' : 'higher'} than at the house` : ''}.`);
+  }
+  for (const ln of t.lanes || []) {
+    // a lane running front to back is on the left or right; one running across is at the back or front
+    const { back, right } = streetFrame(s0), seg = nearestSegment(ln.line, ln.nearest);
+    const along = Math.abs(seg[0] * back[0] + seg[1] * back[1]) > Math.abs(seg[0] * right[0] + seg[1] * right[1]);
+    const side = along ? (ln.nearest[0] * right[0] + ln.nearest[1] * right[1] > 0 ? 'right' : 'left') : (ln.nearest[0] * back[0] + ln.nearest[1] * back[1] > 0 ? 'back' : 'front');
+    parts.push(`${ln.name ? ln.name : 'An unnamed lane'} (OpenStreetMap: ${ln.kind}) runs about ${Math.round(ln.distanceM)} m from the ${ln.building}, on the ${side} of the lot as seen from ${s0.name} (${edge[side]} with ${s0.name} at z = ${L}). A garage beside it likely opens onto it: build the lane along that edge at its own level, with a drive from the garage door.`);
+  }
   parts.push(`Going back from ${s0.name}, the ground data shows the lot rising about ${a.lotRiseBackFt} ft across the model; it is smoothed and interpolated under the house, so a graded pad or retaining walls can make the real rise at the house larger. Where the photos show more (steps up to the door, a garage below the main floor), go by the photos.`);
   return parts.join(' ');
 }
@@ -220,11 +261,15 @@ async function lookupTerrain(place, address, { fetchImpl = fetch, plate = 32 } =
   let building = null;
   try { building = await findBuilding(place, address, { fetchImpl }); } catch { /* fall back to the geocoded point */ }
   const center = building ? building.center : place;
-  const streets = await nearbyStreets(center, { fetchImpl, outline: building && building.outline });
+  const { streets, lanes } = await nearbyWays(center, { fetchImpl, outline: building && building.outline, outbuildings: building ? building.outbuildings : [] });
   const frontage = frontageStreets(streets, address);
-  if (!frontage.length) return { building, frontage, streets, samples: [], analysis: null, note: '' };
-  const samples = await elevations(center, samplePlan(frontage), { fetchImpl });
-  const t = { building, frontage, streets, street: frontage[0], samples, plate, analysis: analyzeTerrain(samples, { plate }) };
+  if (!frontage.length) return { building, frontage, streets, lanes, samples: [], analysis: null, note: '' };
+  // ground at the house and at each outbuilding, to tell whether a garage sits lower or higher
+  const { toXY } = frame(center), spots = [{ kind: 'bldg', id: 'house', xy: [0, 0] }];
+  if (building) building.outbuildings.forEach((o, i) => { o.xy = toXY(o.center); spots.push({ kind: 'bldg', id: `outbuilding ${i}`, xy: o.xy }); });
+  const samples = await elevations(center, [...samplePlan(frontage), ...spots], { fetchImpl });
+  const groundFt = Object.fromEntries(samples.filter((p) => p.kind === 'bldg').map((p) => [p.id, p.ft]));
+  const t = { building, frontage, streets, lanes, groundFt, street: frontage[0], samples, plate, analysis: analyzeTerrain(samples, { plate }) };
   t.note = terrainNote(t);
   return t;
 }
@@ -249,4 +294,4 @@ function outlineInput(t, { frontStreet = null } = {}) {
   };
 }
 
-module.exports = { outlineInput, lookupTerrain, findBuilding, nearbyStreets, frontageStreets, pickStreet, samplePlan, analyzeTerrain, terrainNote, streetOf, numberOf, compass };
+module.exports = { outlineInput, lookupTerrain, findBuilding, nearbyStreets, nearbyWays, frontageStreets, pickStreet, samplePlan, analyzeTerrain, terrainNote, streetOf, numberOf, compass };

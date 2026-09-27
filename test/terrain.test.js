@@ -10,11 +10,11 @@ const way = (tags, pts) => ({ type: 'way', tags, geometry: pts.map(([e, n]) => l
 
 // Ground (ft) = 100 - 0.05 * east + 0.1 * north, in metres: rising to the north and to the west.
 // streets: [name, points]; buildings: overpass ways for the building query.
-function fakeFetch({ streets, buildings = [] }) {
+function fakeFetch({ streets, buildings = [], lanes = [] }) {
   return async (url) => {
     if (url.includes('/api/interpreter')) {
       const q = decodeURIComponent(new URL(url).searchParams.get('data'));
-      const elements = q.includes('[building]') ? buildings : streets.map(([name, pts]) => way({ name, highway: 'residential' }, pts));
+      const elements = q.includes('[building]') ? buildings : [...streets.map(([name, pts]) => way({ name, highway: 'residential' }, pts)), ...lanes];
       return { ok: true, json: async () => ({ elements }) };
     }
     const u = new URL(url), lon = Number(u.searchParams.get('x')), lat = Number(u.searchParams.get('y'));
@@ -61,4 +61,19 @@ test('a corner lot: found by its building outline, with both streets and the sid
   // Facing the house from Elm Street (looking west), Oak Lane to the north is on the right.
   assert.match(t.note, /corner lot on Elm Street and Oak Lane\. Seen from Elm Street facing the house, Oak Lane is on the right; seen from Oak Lane, Elm Street is on the left\./);
   assert.match(t.note, /with Elm Street at z = 31, Oak Lane runs along x = 31; with Oak Lane at z = 31, Elm Street runs along x = 0\./);
+});
+
+test('a lane beside the garage and the ground under the garage are both in the note', async () => {
+  const buildings = [
+    way({ building: 'house', 'addr:housenumber': '5', 'addr:street': 'Elm Street', 'lacounty:ain': '77' }, [[-5, -5], [5, -5], [5, 5], [-5, 5], [-5, -5]]),
+    way({ building: 'garage', 'lacounty:ain': '77' }, [[-5, 20], [1, 20], [1, 23], [-5, 23], [-5, 20]]),
+  ];
+  // Elm Street is 10 m east; the garage is 22 m north, where the ground is 2.5 ft higher, beside an unnamed service lane.
+  const t = await lookupTerrain(place, '5 Elm St', { fetchImpl: fakeFetch({ buildings, streets: [elm],
+    lanes: [way({ highway: 'service', service: 'alley' }, [[-40, 26], [40, 26]]), way({ highway: 'footway' }, [[-40, 0], [40, 0]])] }) });
+  assert.equal(t.lanes.length, 1);
+  assert.equal(t.lanes[0].building, 'outbuilding');
+  // Facing the house from Elm Street (looking west), north is on the right.
+  assert.match(t.note, /The outbuilding \(\d+ sq ft\) is behind the house and to the right as seen from Elm Street; the ground there is about 2.5 ft \(about 1 course\) higher than at the house\./);
+  assert.match(t.note, /An unnamed lane \(OpenStreetMap: alley\) runs about 3 m from the outbuilding, on the right of the lot as seen from Elm Street \(x = 31 with Elm Street at z = 31\)/);
 });

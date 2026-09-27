@@ -7,7 +7,8 @@ const { execSync } = require('node:child_process');
 const { bundleHtml } = require('./bundle');
 
 const THREE_URL = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
-const VIEWS = [{ id: 'f', label: 'front, as seen from the street' }, { id: 'q', label: 'three-quarter view from the front' }];
+const VIEWS = [{ id: 'f', label: 'front, as seen from the street' }, { id: 'q', label: 'three-quarter view from the front' },
+  { id: 'bl', label: 'three-quarter view from the back, on the opposite corner' }, { id: 'br', label: 'three-quarter view from the other back corner' }];
 
 function loadPlaywright() {
   try { return require('playwright'); } catch { /* try the global install */ }
@@ -33,7 +34,7 @@ async function makeRenderer({ width = 800, height = 600 } = {}) {
       await page.addStyleTag({ content: '.tools,.showcase,.modebadge{visibility:hidden!important}' });
       const out = [];
       for (const v of VIEWS) {
-        await page.evaluate((id) => document.querySelector(`button[data-view="${id}"]`).click(), v.id);
+        await page.evaluate((id) => setView(id), v.id); // eslint-disable-line no-undef
         await page.waitForTimeout(400);
         const png = await page.locator('#cv').screenshot({ type: 'png' });
         out.push({ label: v.label, data: png.toString('base64') });

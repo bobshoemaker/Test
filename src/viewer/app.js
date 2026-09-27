@@ -151,6 +151,8 @@ function frame(){
 }
 function setView(v){ document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===v));
   if(v==='q'){goal.theta=0.62;goal.phi=0.98;} if(v==='f'){goal.theta=0;goal.phi=1.28;} if(v==='t'){goal.theta=0;goal.phi=0.06;}
+  // back corners (no buttons; the design loop renders them so Claude sees the back and sides)
+  if(v==='bl'){goal.theta=Math.PI+0.62;goal.phi=0.98;} if(v==='br'){goal.theta=Math.PI-0.62;goal.phi=0.98;}
   userZoom=false; goal.radius=mode==='sub'?goal.radius:fitRadius(); dirty=true; }
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.dataset.view));
 $('spin').onclick=()=>{ autoSpin=!autoSpin; $('spin').setAttribute('aria-pressed',autoSpin); dirty=true; };

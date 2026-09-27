@@ -45,6 +45,14 @@ function summarize(result, planProblems = []) {
   };
 }
 
+const IMAGE_LIMIT = 90;
+function countImages(messages) {
+  let n = 0;
+  const walk = (c) => { if (!Array.isArray(c)) return; for (const b of c) { if (b.type === 'image') n++; else if (b.type === 'tool_result') walk(b.content); } };
+  for (const m of messages) walk(m.content);
+  return n;
+}
+
 function addUsage(usage, msg) {
   const u = msg.usage || {};
   usage.input += u.input_tokens || 0; usage.cacheRead += u.cache_read_input_tokens || 0;
@@ -297,6 +305,9 @@ async function designHouse({
         if (render) {
           try { renders = await render(d); } catch (e) { onEvent({ type: 'status', message: `Rendering failed: ${e.message}` }); }
         }
+        // The API takes a limited number of images per request; drop the back views, then all views, near it.
+        const room = IMAGE_LIMIT - countImages(messages) - countImages([{ content: results }]);
+        if (renders.length > room) renders = renders.slice(0, Math.max(0, room));
         const sum = summarize(res, planProblems);
         onEvent({ type: 'draft', n: st.compiles, part, design: d, stats: res.stats, errors: sum.errors, warnings: sum.warnings, problems: sum.problems.slice(0, 8), renders });
         const body = [{ type: 'text', text: JSON.stringify(sum) }];

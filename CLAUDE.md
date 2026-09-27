@@ -13,7 +13,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
 - `src/engine/engine.js`: the core. Part catalog (BrickLink numbers and colors), the compiler
   that turns design ops into parts, the brick packer (staggers seams, repairs stacked seams),
   the checker (collisions, build-order support, sub-build attachment, connectivity to the
-  baseplate, single-stud and seam warnings), manual step grouping, and the inventory.
+  baseplate, single-stud and seam warnings, doors that miss the ground in front of them and
+  garage doors with no drive to the edge of the plate), manual step grouping, and the inventory.
   Dependency-free; runs in the browser (globals) and in Node (require).
 - `src/server/prompt.js`: `SPEC`, the design language written for Claude. It is the source of
   truth for what a design may contain. When you add an op, part or field to the engine,
@@ -22,7 +23,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   `compile_design` tool that runs the engine in-process, feeds errors back, returns the final
   design. Keeps whole assistant turns (thinking blocks included) as the API requires. Parts
   mode builds walls, roofs, lot and planting in separate appended turns; each compile result
-  carries renders of the draft (front and three-quarter) for Claude to compare with the photos.
+  carries renders of the draft (front, front three-quarter and both back corners, capped so a
+  request stays under the API's image limit) for Claude to compare with the photos.
 - Survey (`surveyHouse` in designer.js, `POST /api/survey`, `scripts/survey.js`): a cheap first
   look (low effort by default; `BRICKHOUSE_SURVEY_MODEL` / `BRICKHOUSE_SURVEY_EFFORT`) that lists
   what the photos show and asks up to five questions about what they leave open (a roof hidden
@@ -32,7 +34,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   county outlines with height, year built and parcel, so outbuildings on the same parcel show up),
   the streets its lot fronts (two on a corner lot), and USGS 3DEP elevations (public domain, no
   key). The note says, relative to each street, how it rises across the baseplate, which side a
-  corner's second street is on, and roughly how the lot rises toward the back (`/api/lookup` adds
+  corner's second street is on, where each outbuilding sits and how the ground there compares with
+  the house, any alley or service lane beside the house or an outbuilding (a garage there likely
+  opens onto it), and roughly how the lot rises toward the back (`/api/lookup` adds
   it; `--address` on the scripts). Geocoders can land on a neighbour, so it measures from the
   outline when it finds one. The lot's rise is smoothed and interpolated under the house, so the
   note defers to the photos there. Not Street View: Google's terms bar it.

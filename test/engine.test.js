@@ -126,3 +126,24 @@ test('wall details hang on side-stud bricks set in the wall, and need them', () 
   assert.match(compile(d([{ kind: 'lantern', at: [[8, 6, 16]] }])).errors[0].msg, /No side-stud brick at \(8, 6, 16\)/);
   assert.match(compile(d([{ kind: 'house number', at: [[6, 6, 16]] }])).errors[0].msg, /two side-stud bricks side by side/);
 });
+
+test('a door must meet the ground in front of it, and a garage door needs a drive to the edge of the plate', () => {
+  // A 6 x 5 garage on the baseplate, its door on the south wall, and a raised terrace (9 plates) in some variants.
+  const garage = (door, extra = []) => ({ name: 'g', phases: ['a'], ops: [
+    { op: 'walls', phase: 'a', color: 'White', courses: [0, 5], base: 0, segments: [[10, 10, 15, 10], [10, 14, 15, 14], [10, 10, 10, 14], [15, 10, 15, 14]],
+      openings: [{ cells: [11, 14, 14, 14], courses: door, fill: { color: 'Black' }, kind: 'garage door' }] }, ...extra] });
+  const msgs = (d) => compile(d).warnings.map((w) => w.msg).filter((m) => /door/.test(m)).join(' ');
+  assert.equal(msgs(garage([0, 2])), '', 'at ground level with open ground to the street');
+  const terrace = (y) => ({ op: 'fill', phase: 'a', kind: 'brick', color: 'Tan', rects: [[5, 15, 25, 18]], y });
+  const walled = [terrace(0), terrace(3), terrace(6)];
+  assert.match(msgs(garage([0, 2], walled)), /garage door at \(11, 14\) starts at height 0, but the ground in front of it is at 9/);
+  assert.match(msgs(garage([3, 5], walled)), /garage door at \(11, 14\) has no drive to a street/, 'level with a terrace that ends in a drop');
+  assert.match(msgs(garage([2, 4])), /garage door at \(11, 14\) starts at height 6, 6 plates above the ground/);
+  const fence = (line) => ({ op: 'fence', phase: 'a', color: 'Black', line, y: 0 });
+  const ring = [fence([4, 4, 19, 4]), fence([4, 21, 19, 21]), fence([4, 5, 4, 20]), fence([19, 5, 19, 20])];
+  assert.match(msgs(garage([0, 2], ring)), /no drive/, 'fenced in all round');
+  const door = garage([1, 3]); door.ops[0].openings[0].kind = 'door';
+  assert.equal(msgs(door), '', 'a person door one step up is fine');
+  door.ops[0].openings[0].kind = 'window';
+  assert.match(compile(door).errors.map((e) => e.msg).join(' '), /Opening kind "window"/);
+});

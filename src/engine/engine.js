@@ -68,6 +68,7 @@ const PLANTS = {
 };
 
 const N4 = [[1,0],[-1,0],[0,1],[0,-1]];
+const DOOR_KINDS = ['door','garage door'];
 const K3 = (x,z,p)=>x+','+z+','+p;
 
 function resolvePart(key){
@@ -112,7 +113,7 @@ function compile(design){
   if(!BASEPLATES[BASE]) errors.push({msg:`plate must be 32 or 48 (got ${design.plate})`, op:null});
   const phases=design.phases||[]; const phaseIdx=new Map(phases.map((p,i)=>[p,i]));
   const wallCourse=new Map(); const wallPairs=new Set(); const wallCourses=new Map();
-  const abutEdges=[];
+  const abutEdges=[], doors=[];
 
   const commit=p=>{ p.id=parts.length+1; parts.push(p); for(const v of p.occ) occ.set(K3(v[0],v[1],v[2]),p.id); return p; };
   const blocked=p=>{ for(const v of p.occ){ if(v[0]<0||v[1]<0||v[0]>=BASE||v[1]>=BASE) return -1; const o=occ.get(K3(v[0],v[1],v[2])); if(o) return o; } return 0; };
@@ -258,6 +259,9 @@ function compile(design){
         const opens=(op.openings||[]).map(o=>{ const line=lineCells(o.cells); return Object.assign({},o,{line,set:new Set(line.map(c=>c[0]+','+c[1]))}); });
         for(const o of opens) for(const k of o.set) if(!cellSet.has(k)) errors.push({msg:`Opening cell (${k}) isn't on a wall`, op:i});
         const wbase=op.base!==undefined?op.base:op.courses[0]*3;
+        for(const o of opens) if(o.kind!==undefined){
+          if(!DOOR_KINDS.includes(o.kind)) errors.push({msg:`Opening kind "${o.kind}" isn't one of ${DOOR_KINDS.join(', ')}`, op:i});
+          else doors.push({op:i, kind:o.kind, line:o.line, along:o.cells[1]===o.cells[3], sill:wbase+(o.courses[0]-op.courses[0])*3, walls:cellSet}); }
         const trim=new Map();
         if(op.trim) for(const o of opens){ if(!o.fill.part) continue;
           const along=o.cells[1]===o.cells[3], L=o.line, first=L[0], last=L[L.length-1];
@@ -447,6 +451,38 @@ function compile(design){
       const mine=new Map(); for(const id of e.ids){ const p=parts[id-1]; for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++){ const k=(p.x+a)+','+(p.z+b); mine.set(k,Math.max(mine.get(k)||0,p.y+p.h)); } }
       const bad=e.cells.filter(([x,z,dx,dz])=>{ const t=mine.get(x+','+z)||0; return t>0&&(colTop.get((x+dx)+','+(z+dz))||0)<t-1; });
       if(bad.length) warnings.push({msg:`Roof ${e.side==='leaning'?'leans on another building':`abuts on its ${e.side} side`}, but the roof's stepped edge shows above what's beside it at ${bad.length} stud${bad.length===1?'':'s'}, from (${bad[0][0]}, ${bad[0][1]}). Give wings that meet one roof with "rects", or abut only against a wall that rises above the roof`, op:e.op});
+    }
+  }
+  // doors: the ground outside a door meets its bottom, and a garage door has a drive to the edge of the plate
+  if(doors.length){
+    // ground is built of fills and walls; cars, plants and furniture stand on it, and fences block a drive
+    const kindOf=p=>(design.ops[p.op]||{}).op, cols=new Map(), fenced=new Set();
+    for(const p of parts) for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++){ const k=(p.x+a)+','+(p.z+b), t=kindOf(p);
+      if(t==='fence') fenced.add(k); if(t!=='fill'&&t!=='walls') continue; if(!cols.has(k)) cols.set(k,[]); cols.get(k).push(p); }
+    // ground height: the stack that rises unbroken from the baseplate (eaves and wall lights overhead don't count)
+    const ground=new Map(), groundAt=(x,z)=>{ const k=x+','+z; if(ground.has(k)) return ground.get(k);
+      let g=0; for(const p of (cols.get(k)||[]).slice().sort((a,b)=>a.y-b.y)){ if(p.y>g) break; g=Math.max(g,p.y+p.h); }
+      ground.set(k,g); return g; };
+    const inPlate=(x,z)=>x>=0&&z>=0&&x<BASE&&z<BASE, outsides=new Map();
+    const outsideOf=d=>{ if(outsides.has(d.walls)) return outsides.get(d.walls);
+      const seen=new Set(), q=[];
+      for(let t=0;t<BASE;t++) for(const [x,z] of [[t,0],[t,BASE-1],[0,t],[BASE-1,t]]){ const k=x+','+z; if(!d.walls.has(k)&&!seen.has(k)){ seen.add(k); q.push([x,z]); } }
+      while(q.length){ const [x,z]=q.pop(); for(const [dx,dz] of N4){ const nx=x+dx, nz=z+dz, k=nx+','+nz; if(inPlate(nx,nz)&&!d.walls.has(k)&&!seen.has(k)){ seen.add(k); q.push([nx,nz]); } } }
+      outsides.set(d.walls,seen); return seen; };
+    for(const d of doors){
+      const out=outsideOf(d), front=[];
+      for(const [x,z] of d.line) for(const [dx,dz] of (d.along?[[0,1],[0,-1]]:[[1,0],[-1,0]])){ const nx=x+dx, nz=z+dz; if(out.has(nx+','+nz)) front.push([nx,nz]); }
+      if(!front.length||front.length>d.line.length) continue; // a free-standing wall has no outside to check
+      const g=Math.max(...front.map(([x,z])=>groundAt(x,z))), at=`(${d.line[0][0]}, ${d.line[0][1]})`, drop=d.kind==='door'?3:1;
+      if(g>d.sill+1) warnings.push({msg:`The ${d.kind} at ${at} starts at height ${d.sill}, but the ground in front of it is at ${g}: it opens into the ground. Raise the door (its courses, or the walls' base) or lower what's in front of it`, op:d.op});
+      else if(d.sill-g>drop) warnings.push({msg:`The ${d.kind} at ${at} starts at height ${d.sill}, ${d.sill-g} plates above the ground in front of it (${g}). ${d.kind==='door'?'Add a step or landing up to it':'A garage door opens at the level of its drive: raise the drive or lower the door'}`, op:d.op});
+      else if(d.kind==='garage door'){
+        const seen=new Set(front.map(c=>c.join(','))), q=front.slice(); let reached=false;
+        while(q.length&&!reached){ const [x,z]=q.pop(), h=groundAt(x,z);
+          if(x===0||z===0||x===BASE-1||z===BASE-1){ reached=true; break; }
+          for(const [dx,dz] of N4){ const nx=x+dx, nz=z+dz, k=nx+','+nz; if(!inPlate(nx,nz)||seen.has(k)||d.walls.has(k)||fenced.has(k)||Math.abs(groundAt(nx,nz)-h)>1) continue; seen.add(k); q.push([nx,nz]); } }
+        if(!reached) warnings.push({msg:`The garage door at ${at} has no drive to a street: from the ground in front of it no path reaches the edge of the plate without a step of more than one plate (fences, walls and terraces block it). Give it a driveway to the street or lane it opens onto`, op:d.op});
+      }
     }
   }
   // stacked seams

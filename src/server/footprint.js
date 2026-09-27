@@ -283,7 +283,7 @@ function skeletonOps(locked) {
   return locked.blocks.filter((b) => b.cells.length).map((b) => ({
     op: 'walls', phase: b.name, block: b.name, color: 'White', courses: [0, 4 * b.levels - 1], base: 0,
     segments: segmentsFromCells(b.cells),
-    openings: b.openings.map((o) => ({ cells: o.cells, ...(DEFAULT_FILL[o.kind] || DEFAULT_FILL.door), note: `${o.kind} from the floor plan${o.note ? ': ' + o.note : ''}` })),
+    openings: b.openings.map((o) => ({ cells: o.cells, ...(DEFAULT_FILL[o.kind] || DEFAULT_FILL.door), kind: o.kind === 'garage door' ? 'garage door' : 'door', note: `${o.kind} from the floor plan${o.note ? ': ' + o.note : ''}` })),
   }));
 }
 
