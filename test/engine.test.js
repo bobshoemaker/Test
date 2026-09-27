@@ -113,3 +113,16 @@ test('every plant in the library stands on its own, and an unknown kind is named
   const bad = compile({ name: 'x', phases: ['p'], ops: [{ op: 'plant', phase: 'p', kind: 'baobab', at: [[5, 0, 5]] }] });
   assert.match(bad.errors[0].msg, /Unknown plant "baobab"; the library has olive tree, yucca/);
 });
+
+test('wall details hang on side-stud bricks set in the wall, and need them', () => {
+  const walls = { op: 'walls', phase: 'W', color: 'White', courses: [0, 3], base: 0, segments: [[4, 10, 14, 10], [4, 11, 4, 16], [14, 11, 14, 16], [5, 16, 13, 16]],
+    openings: [{ cells: [6, 16, 6, 16], courses: [2, 2], fill: { part: 'snot', face: 'S' } }, { cells: [10, 16, 11, 16], courses: [3, 3], fill: { part: 'snot', face: 'S' } }] };
+  const d = (details) => ({ name: 'd', phases: ['W', 'D'], ops: [walls, ...details.map((x) => ({ op: 'detail', phase: 'D', ...x }))] });
+  const ok = compile(d([{ kind: 'lantern', at: [[6, 6, 16]] }, { kind: 'house number', at: [[10, 9, 16]] }]));
+  assert.deepEqual([ok.errors, ok.warnings], [[], []]);
+  const mounted = ok.parts.filter((p) => p.mount);
+  assert.deepEqual(mounted.map((p) => [p.name, p.z]), [['Plate round 1 x 1', 17], ['Cone 1 x 1', 17], ['Tile 1 x 2 (on side studs)', 17]]);
+  assert.equal(ok.inventory.filter((l) => l.no === '87087').reduce((a, l) => a + l.q, 0), 3);
+  assert.match(compile(d([{ kind: 'lantern', at: [[8, 6, 16]] }])).errors[0].msg, /No side-stud brick at \(8, 6, 16\)/);
+  assert.match(compile(d([{ kind: 'house number', at: [[6, 6, 16]] }])).errors[0].msg, /two side-stud bricks side by side/);
+});

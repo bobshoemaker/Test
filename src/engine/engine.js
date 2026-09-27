@@ -8,7 +8,7 @@ const COLORS = {
   'Reddish Brown':{hex:'#582A12',bl:88}, 'Dark Orange':{hex:'#A95500',bl:68}, 'Green':{hex:'#237841',bl:6},
   'Dark Green':{hex:'#184632',bl:80}, 'Bright Green':{hex:'#4B9F4A',bl:36}, 'Trans-Clear':{hex:'#CFE6F2',bl:12},
   'Red':{hex:'#C91A09',bl:5}, 'Yellow':{hex:'#F2CD37',bl:3}, 'Bright Pink':{hex:'#E4ADC8',bl:104}, 'Sand Green':{hex:'#A0BCAC',bl:48},
-  'Blue':{hex:'#0055BF',bl:7}, 'Medium Nougat':{hex:'#AA7D55',bl:150}, 'Light Gray':{hex:'#C8C8C8',bl:9}, 'Dark Red':{hex:'#720E0F',bl:59}, 'Sand Blue':{hex:'#6074A1',bl:55}, 'Olive Green':{hex:'#9B9A5A',bl:155}, 'Dark Brown':{hex:'#352100',bl:120}, 'Trans-Black':{hex:'#3B3F46',bl:13}
+  'Blue':{hex:'#0055BF',bl:7}, 'Medium Nougat':{hex:'#AA7D55',bl:150}, 'Light Gray':{hex:'#C8C8C8',bl:9}, 'Dark Red':{hex:'#720E0F',bl:59}, 'Sand Blue':{hex:'#6074A1',bl:55}, 'Olive Green':{hex:'#9B9A5A',bl:155}, 'Dark Brown':{hex:'#352100',bl:120}, 'Trans-Yellow':{hex:'#F5CD2F',bl:19}, 'Trans-Black':{hex:'#3B3F46',bl:13}
 };
 const SIZE_PARTS = {
   brick:{'1x1':'3005','1x2':'3004','1x3':'3622','1x4':'3010','1x6':'3009','1x8':'3008','2x2':'3003','2x3':'3002','2x4':'3001','2x6':'2456','2x8':'3007'},
@@ -35,7 +35,13 @@ const SPECIAL = {
   arch41:{no:'3659', name:'Arch 1 x 4', w:4,d:1,h:3, shape:'arch', archTop:1, cost:0.10},
   win23:{no:'60593', name:'Window 1 x 2 x 3', w:2,d:1,h:9, shape:'window', glass:'60602', glassName:'Glass for window 1 x 2 x 3', cost:0.20},
   fence4:{no:'3633', name:'Fence 1 x 4 x 1', w:4,d:1,h:3, shape:'fence', cost:0.10},
-  palmtop:{no:'2566', name:'Palm tree top', w:1,d:1,h:1, studs:false, shape:'palm', cost:0.30}
+  palmtop:{no:'2566', name:'Palm tree top', w:1,d:1,h:1, studs:false, shape:'palm', cost:0.30},
+  // Sideways building (SNOT): a brick with a stud on one side sits in a wall opening, facing out,
+  // and wall details hang on that stud (the "detail" op). Mounted parts are drawn as small blocks.
+  snot:{no:'87087', name:'Brick 1 x 1 with stud on 1 side', w:1,d:1,h:3, shape:'box', cost:0.08},
+  cone1:{no:'4589', name:'Cone 1 x 1', w:1,d:1,h:3, shape:'cyl', diam:0.9, cost:0.05},
+  sidetile1:{no:'3070b', name:'Tile 1 x 1 (on a side stud)', w:1,d:1,h:3, studs:false, shape:'box', cost:0.05},
+  sidetile2:{no:'3069b', name:'Tile 1 x 2 (on side studs)', w:2,d:1,h:3, studs:false, shape:'box', cost:0.06}
 };
 // Baseplates by size: a design sets "plate": 48 for the larger one (default 32).
 const GLASS_COST = 0.10, BASEPLATES = {32:{no:'3811', name:'Baseplate 32 x 32', color:'Green', cost:12}, 48:{no:'4186', name:'Baseplate 48 x 48', color:'Green', cost:25}};
@@ -265,7 +271,12 @@ function compile(design){
         }
         for(let c=op.courses[0];c<=op.courses[1];c++){
           const y=wbase+(c-op.courses[0])*3; wallCourses.set(c,y);
-          for(const o of opens) if(o.fill.part && o.courses[0]===c){
+          // side-stud bricks fill every cell of their opening, one course tall
+          for(const o of opens) if(o.fill.part==='snot' && o.courses[0]===c){
+            if(!'NSEW'.includes(o.fill.face||'-')||!o.fill.face) errors.push({msg:`A side-stud brick needs "face": "N", "S", "E" or "W" (the way its stud points)`, op:i});
+            if(o.courses[1]!==o.courses[0]) errors.push({msg:`Side-stud bricks fill one course; the opening at (${o.line[0]}) spans ${o.courses[1]-o.courses[0]+1}`, op:i});
+            for(const [cx,cz] of o.line){ const q=place('snot',cx,y,cz,0,o.fill.color||op.color,meta,true); if(q) q.face=o.fill.face; } }
+          for(const o of opens) if(o.fill.part && o.fill.part!=='snot' && o.courses[0]===c){
             const along=o.cells[1]===o.cells[3], def=resolvePart(o.fill.part), span=o.line.length;
             if(def.w!==span||def.h!==(o.courses[1]-o.courses[0]+1)*3) errors.push({msg:`${def.name} doesn't fit the ${span}-stud, ${o.courses[1]-o.courses[0]+1}-course opening at (${o.line[0]})`, op:i});
             else place(o.fill.part,o.line[0][0],y,o.line[0][1],along?0:1,o.fill.color||'White',meta,true);
@@ -339,6 +350,22 @@ function compile(design){
           const q=place(pp.part,c[0]+pp.at[0],c[1]+pp.at[1],c[2]+pp.at[2],pp.rot||0,pp.color,Object.assign({},meta,{sub:si,copy:ci,tpl:pi}),true);
           if(q){ if(pp.dir) q.dir=pp.dir; subs[si].partIds.push(q.id); } }));
         break; }
+      case 'detail': {
+        const kind=String(op.kind||'').toLowerCase(), FACE={N:[0,-1],S:[0,1],E:[1,0],W:[-1,0]};
+        const hostAt=(x,y,z)=>{ const id=occ.get(K3(x,z,y)); const h=id&&parts[id-1]; return h&&h.key==='snot'&&h.y===y?h:null; };
+        for(const at of op.at||[]){ const [x,y,z]=at, h=hostAt(x,y,z);
+          if(!h){ errors.push({msg:`No side-stud brick at (${x}, ${y}, ${z}) for the ${kind}; put one in a wall opening with fill {"part":"snot","face":...}`, op:i}); continue; }
+          const [dx,dz]=FACE[h.face]||[0,0], ox=x+dx, oz=z+dz, hosts=[h.id];
+          const mount=(q)=>{ if(q) q.mount=hosts.slice(); return q; };
+          if(kind==='lantern'){ mount(place('roundplate1',ox,y,oz,0,op.color||'Black',meta,true)); mount(place('cone1',ox,y+1,oz,0,op.glow||'Trans-Yellow',meta,true)); }
+          else if(kind==='house number'){
+            const along=dx===0, h2=along?hostAt(x+1,y,z):hostAt(x,y,z+1);
+            if(!h2||h2.face!==h.face){ errors.push({msg:`A house number needs two side-stud bricks side by side facing the same way, at (${x}, ${y}, ${z}) and the next stud ${along?'in x':'in z'}`, op:i}); continue; }
+            hosts.push(h2.id); mount(place('sidetile2',ox,y,oz,along?0:1,op.color||'Black',meta,true)); }
+          else if(kind==='plaque'||kind==='vent'){ mount(place('sidetile1',ox,y,oz,0,op.color||(kind==='vent'?'Dark Bluish Gray':'Tan'),meta,true)); }
+          else errors.push({msg:`Unknown detail "${op.kind}"; details are lantern, house number, plaque, vent`, op:i});
+        }
+        break; }
       case 'plant': {
         const def=PLANTS[String(op.kind||'').toLowerCase()];
         if(!def){ errors.push({msg:`Unknown plant "${op.kind}"; the library has ${Object.keys(PLANTS).join(', ')}`, op:i}); break; }
@@ -385,6 +412,7 @@ function compile(design){
   const joints=[], jn=new Map(); parts.forEach(p=>jn.set(p.id,0)); let baseJoints=0;
   for(const p of parts) for(const [x,z] of p.sockets){ const s=supportAt(x,z,p.y); if(s===undefined) continue;
     joints.push([p.id,s]); jn.set(p.id,jn.get(p.id)+1); if(s==='base') baseJoints++; else jn.set(s,jn.get(s)+1); }
+  for(const p of parts) if(p.mount) for(const h of p.mount){ joints.push([p.id,h]); jn.set(p.id,jn.get(p.id)+1); jn.set(h,jn.get(h)+1); }
   const below=new Map(); parts.forEach(p=>below.set(p.id,[])); joints.forEach(([a,b])=>below.get(a).push(b));
   const flagged=new Set();
   for(const p of parts){

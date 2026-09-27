@@ -111,8 +111,9 @@ before changing API parameters.
 
 - BrickLink part numbers and color availability are unverified; costs are placeholder
   per-piece prices. Check before any real order.
-- Part geometry is simplified in the renderer. No SNOT, so wall-mounted details (lanterns,
-  vents, house numbers) can't be built yet.
+- Part geometry is simplified in the renderer. Sideways building is limited to side-stud bricks
+  in wall openings with a few details hung on them (lantern, house number, plaque, vent); mounted
+  parts are drawn as small blocks.
 - The manual exists in the viewer only; there's no PDF export yet.
 - The photo-to-design loop has only run against the scripted client in tests. The first
   real runs need prompt tuning; compare results with `designs/634-unit-a.json` using the
@@ -137,5 +138,5 @@ its license terms checked for a physical derived product.
    and oblique aerial imagery as photo sources, property facts (stories, size, year), and
    cropping Mapillary panoramas, which are skipped today and are much of recent coverage.
 5. Mobile client (Flutter) on top of the server API.
-6. Scale option: done as the 48 x 48 plate at 1.5 ft per stud. Still to do: a detail pass and plant
-   library to use the room, and sideways (SNOT) parts for wall details.
+6. Scale option: done as the 48 x 48 plate at 1.5 ft per stud, with a plant library, a details
+   part, and side-stud wall details. More detail kinds (shutters, window boxes) could follow.

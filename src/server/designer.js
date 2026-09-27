@@ -133,6 +133,14 @@ async function planFootprint({ client, model, photos = [], plan, notes = '', eff
         continue;
       }
       locked.input = tu.input;
+      // Coordinates beyond the plan's size were read off the enlarged grid copy, not its labels.
+      if (grid && grid.width) {
+        const xs = [], ys = [];
+        for (const r of [...(tu.input.rooms || []).map((q) => q.rectPx), ...(tu.input.blocks || []).flatMap((b) => b.rectsPx || [])]) if (Array.isArray(r)) { xs.push(r[0], r[2]); ys.push(r[1], r[3]); }
+        if (Math.max(...xs) > grid.width * 1.05 || Math.max(...ys) > grid.height * 1.05) {
+          locked.problems.push(`Some coordinates are beyond the plan's ${grid.width} x ${grid.height} pixels: read positions from the grid labels, which are in original plan pixels (the gridded copy is drawn twice as large).`);
+        }
+      }
       let overlay = null;
       if (planTools && planTools.footprintOverlay && locked.map) {
         try { overlay = await planTools.footprintOverlay(plan, locked, { size: sc.size, px: sc.size > 32 ? 14 : 20 }); } catch (e) { onEvent({ type: 'status', message: `Overlay failed: ${e.message}` }); }
