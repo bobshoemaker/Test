@@ -62,3 +62,13 @@ test('every part joins the baseplate through stud joints', () => {
   assert.ok(r.stats.joints > r.parts.length);
   assert.ok(r.parts.every((p) => p.mainStep !== undefined));
 });
+
+test('seam repair never merges tiles into a length tiles do not come in', () => {
+  // Three 1x1 plates in two courses leave seams at both joints, so any split of the tile course above
+  // lines up with them; the repair used to merge 1x2 + 1x1 into a 1x3 tile, which doesn't exist.
+  const fill = (kind, color, x, y) => ({ op: 'fill', phase: 'p', kind, color, rects: [[x, 0, x, 0]], y });
+  const ops = [...[0, 1].flatMap((y) => ['Red', 'Blue', 'Yellow'].map((c, x) => fill('plate', c, x, y))),
+    { op: 'fill', phase: 'p', kind: 'tile', color: 'White', rects: [[0, 0, 2, 0]], y: 2 }];
+  const r = compile({ name: 't', phases: ['p'], ops });
+  assert.deepEqual(r.errors.map((e) => e.msg), []);
+});

@@ -96,9 +96,11 @@ function compile(design){
     return commit(p);
   }
 
-  const LEN_OK=new Set([1,2,3,4,6,8]);
+  // Lengths the seam repair may merge or shift a 1-wide run to: only sizes this kind comes in
+  // (tiles have no 1x3 or 1x6).
+  const LEN_OK={}; for(const kind in SIZE_PARTS) LEN_OK[kind]=new Set(Object.keys(SIZE_PARTS[kind]).filter(s=>s.startsWith('1x')).map(s=>+s.slice(2)));
   function pack(level,kind,y,meta,sizesFor){
-    const h=H[kind], cells=[];
+    const h=H[kind], cells=[], lenOk=LEN_OK[kind];
     for(const [k,color] of level){ const [x,z]=k.split(',').map(Number);
       let ok=x>=0&&z>=0&&x<BASE&&z<BASE; for(let q=0;q<h&&ok;q++) if(occ.has(K3(x,z,y+q))) ok=false;
       if(ok) cells.push({x,z,color,k}); }
@@ -146,14 +148,14 @@ function compile(design){
         const aOK=(axisX?A.d:A.w)===1||lenA===1, bOK=(axisX?B.d:B.w)===1||lenB===1;
         if(!lineOK&&!(aOK&&bOK&&((axisX?A.d:A.w)===1)&&((axisX?B.d:B.w)===1))) continue;
         // try merge
-        if(LEN_OK.has(lenA+lenB)&&lenA+lenB<=8){
+        if(lenOk.has(lenA+lenB)&&lenA+lenB<=8){
           const M={x0:Math.min(A.x0,B.x0),z0:Math.min(A.z0,B.z0),w:axisX?lenA+lenB:1,d:axisX?1:lenA+lenB,color:A.color};
           plan[ia]=M; plan[ib]=null;
           for(let i=0;i<M.w;i++) for(let j=0;j<M.d;j++) owner.set((M.x0+i)+','+(M.z0+j),ia);
           changed=true; continue; }
         // try shifting the seam by one stud either way
         for(const dir of [-1,1]){
-          const nA=lenA+dir, nB=lenB-dir; if(nA<1||nB<1||!LEN_OK.has(nA)||!LEN_OK.has(nB)) continue;
+          const nA=lenA+dir, nB=lenB-dir; if(nA<1||nB<1||!lenOk.has(nA)||!lenOk.has(nB)) continue;
           const A2=axisX?{x0:A.x0,z0:A.z0,w:nA,d:1,color:A.color}:{x0:A.x0,z0:A.z0,w:1,d:nA,color:A.color};
           const B2=axisX?{x0:B.x0+dir,z0:B.z0,w:nB,d:1,color:B.color}:{x0:B.x0,z0:B.z0+dir,w:1,d:nB,color:B.color};
           const ex=axisX?A2.x0+A2.w-1:A2.x0, ez=axisX?A2.z0:A2.z0+A2.d-1;
