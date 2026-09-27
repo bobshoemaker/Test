@@ -41,8 +41,10 @@ closing gift that realtors give clients: a brick model of the house they just bo
   blocks as rectangles, doors, stairs, street side). This module scales it to studs from the
   room labels, fits it on the baseplate with the street at z = 31 (pulling a detached back
   building forward if needed), and turns it into walls ops tagged with `block`.
-  `checkFootprint` holds every draft to those walls and doors; changes count as errors. Pure
-  and tested.
+  `checkFootprint` holds every draft to those walls and doors; changes count as errors. Without a
+  plan, `footprintFromOutline` locks the walls to the house's building outline from the terrain
+  lookup instead (squared to the grid, outbuildings as their own blocks, no doors). For 3221
+  Griffith Park Blvd the county outline matched the plan's walls to about a stud. Pure and tested.
 - `src/server/render.js`: optional (needs Playwright). Renders draft views with the viewer in
   headless Chromium, the gridded plan, and the footprint overlaid on the plan.
 - `src/server/lookup.js`: address to candidate photos. Geocodes with OpenStreetMap Nominatim

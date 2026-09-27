@@ -161,8 +161,9 @@ function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap 
     if (side === 'back') problems.push('The side street faces the back of the lot; only a street on the left or right can be laid out. Left out.');
   }
   const width = bx1 - bx0 + 1;
-  if (side === 'left' || side === 'right') {
-    if (width + streetRows > size) problems.push(`There is no room for ${fp.sideStreet} side street's ${streetRows} rows beside the house at ${ftPerStud} ft per stud.`);
+  if ((side === 'left' || side === 'right') && width + streetRows > size) {
+    problems.push(`There is no room for the side street's ${streetRows} rows beside the house at ${ftPerStud} ft per stud; the house is centered and the side street is left out.`);
+    side = null;
   }
   const offX = (side === 'left' ? streetRows : side === 'right' ? size - streetRows - width : Math.floor((size - width) / 2)) - bx0, offZ = avail - 1 - bz1;
   for (const b of blocks) b.cellRects = b.cellRects.map((r) => [r[0] + offX, r[1] + offZ, r[2] + offX, r[3] + offZ]);
@@ -219,9 +220,60 @@ function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap 
     scale: { pxPerFt: Number(cal.pxPerFt.toFixed(3)), ftPerStud, rooms: cal.rooms.map((r) => ({ name: r.name, pxPerFt: Number(r.pxPerFt.toFixed(2)) })) },
     street,
     blocks: blocks.map((b) => ({ name: b.name, levels: b.levels, cellRects: b.cellRects, cells: b.cells, openings: b.openings, pulledForward: b.dz })),
-    stairs, map, problems,
+    stairs, map, problems, source: 'plan',
     sideStreet: side === 'left' || side === 'right' ? { planSide: fp.sideStreet, side, columns: side === 'left' ? [0, streetRows - 1] : [size - streetRows, size - 1] } : null,
   };
+}
+
+// Footprint from building outlines (open data), for houses without a floor plan. Polygons are in
+// local metres (east, north); toStreet points from the house toward the street that goes at z = 31,
+// sideStreet (optional) toward a corner lot's second street. The outline's walls are squared to the
+// stud grid (turned by its dominant edge direction), rasterized with walls on the outline's edges,
+// and laid out like a plan: same blocks, fitting and locking, but no doors (those come from photos).
+function footprintFromOutline({ buildings, toStreet, sideStreet = null, ftPerStud = 2, size = 32, streetRows = 2 }) {
+  const main = buildings[0];
+  // dominant wall direction, from edge lengths (angles folded to a quarter turn)
+  let sx = 0, sy = 0;
+  main.polygon.forEach((p, i) => { const q = main.polygon[(i + 1) % main.polygon.length], dx = q[0] - p[0], dy = q[1] - p[1];
+    const len = Math.hypot(dx, dy), a = Math.atan2(dy, dx) * 4; sx += len * Math.cos(a); sy += len * Math.sin(a); });
+  const theta = Math.atan2(sy, sx) / 4;
+  const axes = [0, 1, 2, 3].map((k) => [Math.cos(theta + k * Math.PI / 2), Math.sin(theta + k * Math.PI / 2)]);
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1];
+  const zAxis = axes.reduce((best, a) => (dot(a, toStreet) > dot(best, toStreet) ? a : best)); // toward the street
+  const xAxis = [-zAxis[1], zAxis[0]]; // right as seen from the street, facing the house
+  const m = ftPerStud * 0.3048;
+  const toCells = (poly) => poly.map((p) => [dot(p, xAxis) / m, dot(p, zAxis) / m]);
+  const inside = (pt, poly) => { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j]; if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi) c = !c; } return c; };
+  const nearEdge = (pt, poly) => poly.some((a, i) => { const b = poly[(i + 1) % poly.length], dx = b[0] - a[0], dy = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * dx + (pt[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+    return Math.hypot(a[0] + t * dx - pt[0], a[1] + t * dy - pt[1]) <= 0.5; });
+  // cells whose centre is inside the outline or within half a stud of it; then rectangles covering them
+  const rectsFor = (poly) => {
+    const xs = poly.map((p) => p[0]), zs = poly.map((p) => p[1]), cells = new Set();
+    for (let x = Math.floor(Math.min(...xs)) - 1; x <= Math.ceil(Math.max(...xs)) + 1; x++) for (let z = Math.floor(Math.min(...zs)) - 1; z <= Math.ceil(Math.max(...zs)) + 1; z++) {
+      const c = [x, z]; if (inside(c, poly) || nearEdge(c, poly)) cells.add(x + ',' + z); }
+    const rects = [], used = new Set();
+    const sorted = [...cells].map((k) => k.split(',').map(Number)).sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    for (const [x, z] of sorted) {
+      if (used.has(x + ',' + z)) continue;
+      let x1 = x; while (cells.has((x1 + 1) + ',' + z) && !used.has((x1 + 1) + ',' + z)) x1++;
+      let z1 = z; for (;;) { let ok = true; for (let i = x; i <= x1 && ok; i++) if (!cells.has(i + ',' + (z1 + 1)) || used.has(i + ',' + (z1 + 1))) ok = false; if (!ok) break; z1++; }
+      for (let i = x; i <= x1; i++) for (let j = z; j <= z1; j++) used.add(i + ',' + j);
+      rects.push([x, z, x1, z1]);
+    }
+    return rects;
+  };
+  // feed the layout as a plan in feet with the street at the bottom: 1 unit = 1 ft
+  const blocks = buildings.map((b) => ({ name: b.name, levels: b.levels || 1,
+    rectsPx: rectsFor(toCells(b.polygon)).map((r) => r.map((v) => v * ftPerStud)) }));
+  let side = null;
+  if (sideStreet) { const sxv = dot(sideStreet, xAxis), szv = dot(sideStreet, zAxis); if (Math.abs(sxv) > Math.abs(szv)) side = sxv < 0 ? 'W' : 'E'; }
+  const L = layoutFootprint({ street: 'S', sideStreet: side, rooms: [{ name: 'scale', label: '10 x 10', rectPx: [0, 0, 10, 10] }, { name: 'scale', label: '10 x 10', rectPx: [0, 0, 10, 10] }],
+    blocks, openings: [], stairs: [] }, { ftPerStud, size, streetRows });
+  L.source = 'outline';
+  delete L.map; // no plan image to lay it over
+  return L;
 }
 
 // Walls ops for the locked footprint: one per block, heights and fills as defaults for Claude to set.
@@ -273,4 +325,4 @@ function describeLayout(locked) {
   });
 }
 
-module.exports = { layoutFootprint, skeletonOps, checkFootprint, describeLayout, calibrate, segmentsFromCells, outline };
+module.exports = { layoutFootprint, footprintFromOutline, skeletonOps, checkFootprint, describeLayout, calibrate, segmentsFromCells, outline };

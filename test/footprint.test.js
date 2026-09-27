@@ -1,7 +1,7 @@
 // Floor plan footprint to locked walls: scale, layout on the baseplate, doors, and the conformance check.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { layoutFootprint, skeletonOps, checkFootprint, calibrate, segmentsFromCells } = require('../src/server/footprint');
+const { layoutFootprint, footprintFromOutline, skeletonOps, checkFootprint, calibrate, segmentsFromCells } = require('../src/server/footprint');
 const { compile } = require('../src/engine/engine.js');
 
 // 10 px per ft: a 20 x 30 ft house (two blocks sharing a wall) with a detached 20 x 10 ft garage behind it.
@@ -90,4 +90,21 @@ test('a corner lot keeps room for the second street on its side instead of cente
   const R = layoutFootprint({ ...PLAN, street: 'E', sideStreet: 'N', blocks: [{ name: 'House', levels: 1, rectsPx: [[0, 0, 200, 100]] }], openings: [], stairs: [] });
   assert.equal(R.sideStreet.side, 'right', 'with the street on the east, north is on the right as seen from it');
   assert.equal(Math.max(...R.blocks.flatMap((b) => b.cellRects.map((r) => r[2]))), 29);
+});
+
+test('a building outline turned 20 degrees becomes square locked walls with the street in front', () => {
+  // An L-shaped house (metres): 16 x 8 with a 6 x 5 wing and a shed behind, turned 20 degrees.
+  const rot = (deg) => ([x, y]) => { const a = deg * Math.PI / 180; return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)]; };
+  const house = [[-8, -5], [8, -5], [8, 3], [2, 3], [2, 8], [-4, 8], [-4, 3], [-8, 3]].map(rot(20));
+  const shed = [[-8, 10], [-4, 10], [-4, 12], [-8, 12]].map(rot(20));
+  const toStreet = rot(20)([0, -1]); // the street is off the 16 m side
+  const L = footprintFromOutline({ buildings: [{ name: 'House', levels: 1, polygon: house }, { name: 'Shed', levels: 1, polygon: shed }], toStreet });
+  assert.equal(L.source, 'outline');
+  assert.deepEqual(L.problems, []);
+  const h = L.blocks.find((b) => b.name === 'House');
+  const xs = h.cellRects.flatMap((r) => [r[0], r[2]]), zs = h.cellRects.flatMap((r) => [r[1], r[3]]);
+  assert.equal(Math.max(...xs) - Math.min(...xs), Math.round(16 / 0.6096), '16 m across the street side');
+  assert.equal(Math.max(...zs), 29, 'the street side sits at row 29');
+  const ops = skeletonOps(L);
+  assert.deepEqual(compile({ name: 'o', phases: ops.map((o) => o.phase), ops }).errors, []);
 });

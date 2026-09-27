@@ -83,7 +83,7 @@ async function findBuilding(place, address, { fetchImpl = fetch, radiusM = 150 }
   const h = hits[0], parcel = h.w.tags['lacounty:ain'];
   const toLL = frame(place).toLL, center = toLL(h.c);
   const outbuildings = parcel ? all.filter((b) => b !== h && b.w.tags['lacounty:ain'] === parcel && !b.w.tags['addr:housenumber'])
-    .map((b) => ({ areaSqFt: Math.round(b.area * 10.764), tags: b.w.tags, center: toLL(b.c) })) : [];
+    .map((b) => ({ areaSqFt: Math.round(b.area * 10.764), tags: b.w.tags, center: toLL(b.c), outline: b.pts.map((p) => ({ lat: p.lat, lon: p.lon })) })) : [];
   return { center, outline: h.pts.map((p) => ({ lat: p.lat, lon: p.lon })), areaSqFt: Math.round(h.area * 10.764), tags: h.w.tags, outbuildings };
 }
 
@@ -228,4 +228,24 @@ async function lookupTerrain(place, address, { fetchImpl = fetch } = {}) {
   return t;
 }
 
-module.exports = { lookupTerrain, findBuilding, nearbyStreets, frontageStreets, pickStreet, samplePlan, analyzeTerrain, terrainNote, streetOf, numberOf, compass };
+// Input for footprintFromOutline: the house and its outbuildings as polygons in metres around the
+// house, the direction to the street that goes at z = 31 (the address street unless frontStreet
+// names another frontage street) and, on a corner lot, to the other one. Null without an outline.
+function outlineInput(t, { frontStreet = null } = {}) {
+  const b = t && t.building;
+  if (!b || !t.frontage.length) return null;
+  const { toXY } = frame(b.center);
+  const want = frontStreet && norm(frontStreet);
+  const front = (want && t.frontage.find((s) => norm(s.name) === want)) || t.frontage[0];
+  const other = t.frontage.find((s) => s !== front) || null;
+  const dir = (s) => { const v = [s.nearest[0] - s.from[0], s.nearest[1] - s.from[1]], n = Math.hypot(...v) || 1; return [v[0] / n, v[1] / n]; };
+  const levels = (tags) => Math.max(1, Math.min(3, Math.round((Number(tags.height) || 3.5) / 3.3)));
+  return {
+    front: front.name, side: other && other.name,
+    buildings: [{ name: 'House', levels: levels(b.tags), polygon: b.outline.map(toXY) },
+      ...b.outbuildings.filter((o) => o.outline).map((o, i) => ({ name: b.outbuildings.length > 1 ? `Outbuilding ${i + 1}` : 'Outbuilding', levels: 1, polygon: o.outline.map(toXY) }))],
+    toStreet: dir(front), sideStreet: other ? dir(other) : null,
+  };
+}
+
+module.exports = { outlineInput, lookupTerrain, findBuilding, nearbyStreets, frontageStreets, pickStreet, samplePlan, analyzeTerrain, terrainNote, streetOf, numberOf, compass };

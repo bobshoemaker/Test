@@ -8,7 +8,9 @@
 //            --footprint <out>.footprint.json  reuse a saved footprint instead of reading the plan again
 //            --no-footprint  send the plan as a picture only, without locking the walls to it
 //            --resume <draft>.json --from-part 2  continue from a design whose earlier parts are done
-//            --address "..."  add the street and slope from USGS elevations and OpenStreetMap to the notes
+//            --address "..."  add the street and slope from USGS elevations and OpenStreetMap to the notes; with
+//                             --parts and no --plan, the walls are locked to the house's building outline
+//            --front-street "Wood Terrace"  on a corner lot, the street that goes at the front (z = 31)
 //            --choices survey.json [--answer id=option ...]  the owner's answers from scripts/survey.js
 //            --parts-limit 1  stop after the first N parts   --no-render  don't send renders of each draft
 const fs = require('node:fs');
@@ -18,7 +20,8 @@ const { designHouse, resolveChoices } = require('../src/server/designer');
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 ? args.splice(i, 2)[1] : def; };
 const flag = (name) => { const i = args.indexOf('--' + name); if (i >= 0) { args.splice(i, 1); return true; } return false; };
-const address = opt('address', null);
+const address = opt('address', null), frontStreet = opt('front-street', null);
+let terrain = null;
 let notes = opt('notes', '');
 const target = Number(opt('target', 1200)), out = opt('out', null);
 const model = opt('model', process.env.BRICKHOUSE_MODEL || 'claude-opus-5-5'), effort = opt('effort', process.env.BRICKHOUSE_EFFORT || null);
@@ -42,6 +45,7 @@ async function addTerrain() {
   if (!place) { console.log(`Terrain skipped: ${address} not found.`); return; }
   try {
     const t = await require('../src/server/terrain').lookupTerrain(place, address);
+    terrain = t;
     notes = [notes, `Address: ${place.label}.`, t.note].filter(Boolean).join(' ');
     if (t.note) console.log(t.note);
   } catch (e) { console.log(`Terrain skipped: ${e.message}`); }
@@ -59,7 +63,18 @@ async function addTerrain() {
   const base = (out || 'designs/generated/house.json').replace(/\.json$/, '');
   const renderer = noRender ? null : await require('../src/server/render').makeRenderer().catch((e) => { console.log(`Renders off: ${e.message}`); return null; });
   if (!noRender && !renderer) console.log('Renders off: Playwright is not installed.');
-  const locked = footprintFile ? JSON.parse(fs.readFileSync(footprintFile, 'utf8')) : null;
+  let locked = footprintFile ? JSON.parse(fs.readFileSync(footprintFile, 'utf8')) : null;
+  // No plan: lock the walls to the house's building outline, when the address lookup found one.
+  if (!locked && parts && !plan && !noFootprint && terrain) {
+    const input = require('../src/server/terrain').outlineInput(terrain, { frontStreet });
+    if (input) {
+      locked = require('../src/server/footprint').footprintFromOutline(input);
+      console.log(`Walls locked to the building outline, ${input.front} at the front${input.side ? `, ${input.side} on the ${locked.sideStreet ? locked.sideStreet.side : '?'}` : ''}:`);
+      locked.blocks.forEach((b) => console.log(`  ${b.name} (${b.levels} level${b.levels > 1 ? 's' : ''}): studs ${JSON.stringify(b.cellRects)}`));
+      locked.problems.forEach((p) => console.log(`  problem: ${p}`));
+      fs.writeFileSync(`${base}.footprint.json`, JSON.stringify(locked, null, 2));
+    } else console.log('No building outline found; the walls are not locked.');
+  }
   let choices = null;
   if (choicesFile) {
     const sv = JSON.parse(fs.readFileSync(choicesFile, 'utf8'));
