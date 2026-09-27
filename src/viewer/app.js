@@ -98,6 +98,10 @@ function makeSpecial(p){
   } else if(p.shape==='fence'){
     const w=4; add(new THREE.BoxGeometry(w-0.04,0.34,0.8),main,0,0.17,0); add(new THREE.BoxGeometry(w-0.04,0.2,0.34),main,0,1.08,0);
     const sg=new THREE.BoxGeometry(0.22,0.8,0.16); for(let i=0;i<7;i++) add(sg,main,-w/2+0.3+i*(w-0.6)/6,0.7,0);
+  } else if(p.shape==='bracket'){ // plate out from the wall, and an upright flange against the wall's side stud
+    const [fx,fz]={N:[0,-1],S:[0,1],E:[1,0],W:[-1,0]}[p.face]||[0,1], t=PH*0.9;
+    add(new THREE.BoxGeometry(0.96,t,0.96),main,0,t/2,0);
+    add(new THREE.BoxGeometry(fx?t:0.96,1,fz?t:0.96),main,-fx*(0.48-t/2),0.5,-fz*(0.48-t/2));
   } else if(p.shape==='palm'){
     add(new THREE.CylinderGeometry(0.28,0.36,0.3,10),main,0,0.15,0);
     for(let i=0;i<7;i++){ const f=new THREE.Mesh(frondGeo,main); f.castShadow=true; f.position.y=0.28; f.rotation.set(0,i*Math.PI*2/7+0.3,-0.42-(i%2)*0.18); g.add(f); }

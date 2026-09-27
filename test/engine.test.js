@@ -121,7 +121,11 @@ test('wall details hang on side-stud bricks set in the wall, and need them', () 
   const ok = compile(d([{ kind: 'lantern', at: [[6, 6, 16]] }, { kind: 'house number', at: [[10, 9, 16]] }]));
   assert.deepEqual([ok.errors, ok.warnings], [[], []]);
   const mounted = ok.parts.filter((p) => p.mount);
-  assert.deepEqual(mounted.map((p) => [p.name, p.z]), [['Plate round 1 x 1', 17], ['Cone 1 x 1', 17], ['Tile 1 x 2 (on side studs)', 17]]);
+  assert.deepEqual(mounted.map((p) => [p.name, p.z]), [['Bracket 1 x 1 - 1 x 1', 17], ['Tile 1 x 2 (on side studs)', 17]]);
+  // only the bracket hangs on the side stud; the lamp stands on the bracket's stud, and its cap on the cone
+  const lamp = ok.parts.filter((p) => p.x === 6 && p.z === 17).sort((a, b) => a.y - b.y);
+  assert.deepEqual(lamp.map((p) => [p.name, p.y]), [['Bracket 1 x 1 - 1 x 1', 6], ['Cone 1 x 1', 7], ['Plate round 1 x 1', 10]]);
+  assert.ok(ok.joints.some(([a, b]) => a === lamp[1].id && b === lamp[0].id), 'the cone is held by the bracket stud');
   assert.equal(ok.inventory.filter((l) => l.no === '87087').reduce((a, l) => a + l.q, 0), 3);
   assert.match(compile(d([{ kind: 'lantern', at: [[8, 6, 16]] }])).errors[0].msg, /No side-stud brick at \(8, 6, 16\)/);
   assert.match(compile(d([{ kind: 'house number', at: [[6, 6, 16]] }])).errors[0].msg, /two side-stud bricks side by side/);

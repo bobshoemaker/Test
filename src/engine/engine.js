@@ -39,6 +39,7 @@ const SPECIAL = {
   // Sideways building (SNOT): a brick with a stud on one side sits in a wall opening, facing out,
   // and wall details hang on that stud (the "detail" op). Mounted parts are drawn as small blocks.
   snot:{no:'87087', name:'Brick 1 x 1 with stud on 1 side', w:1,d:1,h:3, shape:'box', cost:0.08},
+  bracket11:{no:'36840', name:'Bracket 1 x 1 - 1 x 1', w:1,d:1,h:1, shape:'bracket', cost:0.06},
   cone1:{no:'4589', name:'Cone 1 x 1', w:1,d:1,h:3, shape:'cyl', diam:0.9, cost:0.05},
   sidetile1:{no:'3070b', name:'Tile 1 x 1 (on a side stud)', w:1,d:1,h:3, studs:false, shape:'box', cost:0.05},
   sidetile2:{no:'3069b', name:'Tile 1 x 2 (on side studs)', w:2,d:1,h:3, studs:false, shape:'box', cost:0.06}
@@ -361,7 +362,10 @@ function compile(design){
           if(!h){ errors.push({msg:`No side-stud brick at (${x}, ${y}, ${z}) for the ${kind}; put one in a wall opening with fill {"part":"snot","face":...}`, op:i}); continue; }
           const [dx,dz]=FACE[h.face]||[0,0], ox=x+dx, oz=z+dz, hosts=[h.id];
           const mount=(q)=>{ if(q) q.mount=hosts.slice(); return q; };
-          if(kind==='lantern'){ mount(place('roundplate1',ox,y,oz,0,op.color||'Black',meta,true)); mount(place('cone1',ox,y+1,oz,0,op.glow||'Trans-Yellow',meta,true)); }
+          // lantern: a bracket clips its upright flange onto the side stud; its plate sticks out from the wall
+          // with a stud on top, and the lamp stands on that stud (a trans cone capped with a round plate)
+          if(kind==='lantern'){ const b=mount(place('bracket11',ox,y,oz,0,op.color||'Black',meta,true)); if(b) b.face=h.face;
+            place('cone1',ox,y+1,oz,0,op.glow||'Trans-Yellow',meta,true); place('roundplate1',ox,y+4,oz,0,op.color||'Black',meta,true); }
           else if(kind==='house number'){
             const along=dx===0, h2=along?hostAt(x+1,y,z):hostAt(x,y,z+1);
             if(!h2||h2.face!==h.face){ errors.push({msg:`A house number needs two side-stud bricks side by side facing the same way, at (${x}, ${y}, ${z}) and the next stud ${along?'in x':'in z'}`, op:i}); continue; }
