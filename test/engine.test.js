@@ -252,3 +252,15 @@ test('fixtures stand on their own, ride on a lift-off roof, and a big bare roof 
   const pinned = compile({ name: 'p', phases: ['a', 'b'], ops: [...base, { op: 'fixture', phase: 'b', kind: 'vent pipe', at: [[8, 14, 8]] }, tiles, floor] });
   assert.match(pinned.errors.map((e) => e.msg).join(' '), /sits on lift-off roof "Roof" but isn't part of it/);
 });
+
+test('a color mix recolors a few whole pieces and leaves the structure as it was', () => {
+  const d = (mix) => ({ name: 'm', phases: ['a'], ops: [
+    { op: 'walls', phase: 'a', color: 'White', courses: [0, 5], base: 0, segments: [[2, 2, 29, 2], [2, 29, 29, 29], [2, 3, 2, 28], [29, 3, 29, 28]], ...(mix ? { mix: [['Light Gray', 0.1]] } : {}) },
+    { op: 'fill', phase: 'a', kind: 'tile', color: 'Tan', rects: [[4, 4, 27, 27]], ...(mix ? { mix: [['Dark Tan', 0.1]] } : {}) }] });
+  const plain = compile(d(false)), mixed = compile(d(true));
+  const shape = (r) => r.parts.map((p) => [p.name, p.x, p.y, p.z].join()).join('|');
+  assert.equal(shape(mixed), shape(plain), 'same pieces in the same places');
+  const share = (color) => mixed.parts.filter((p) => p.color === color).length / mixed.parts.length;
+  assert.ok(share('Light Gray') + share('Dark Tan') > 0.03 && share('Light Gray') + share('Dark Tan') < 0.2);
+  assert.match(compile({ name: 'x', phases: ['a'], ops: [{ ...d(true).ops[1], mix: [['Plaid', 0.1]] }] }).errors[0].msg, /"mix" must be/);
+});

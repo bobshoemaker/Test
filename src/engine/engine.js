@@ -222,6 +222,16 @@ function compile(design){
     return out;
   }
 
+  // "mix" on a fill or walls op: after packing, recolor a scattered few whole pieces of the op's main
+  // color (a weathered roof, varied pavers or stucco). Whole pieces, so the structure doesn't change.
+  function mixColors(ids,op,main,i){
+    if(!op.mix) return;
+    if(!Array.isArray(op.mix)||op.mix.some(m=>!Array.isArray(m)||!COLORS[m[0]]||!(m[1]>=0))){ errors.push({msg:'"mix" must be [[color, fraction], ...] with known colors', op:i}); return; }
+    for(const id of ids){ const p=parts[id-1]; if(p.color!==main) continue;
+      let u=((((p.x*73856093)^(p.z*19349663)^(p.y*83492791)^(i*2654435761))>>>0)%1000)/1000;
+      for(const [mc,fr] of op.mix){ if(u<fr){ p.color=mc; break; } u-=fr; } }
+  }
+
   // A hip roof over the union of several rectangles (an L or T): each plate course steps in one stud
   // from the outline of the whole shape (8-neighbour distance), so valleys form at inside corners
   // and wings meet without gaps. "against" lists rectangles of a taller building the roof leans on:
@@ -317,7 +327,8 @@ function compile(design){
             if(!o) level.set(k,trim.get(k+'|'+c)||op.color); else if(o.fill.color&&!o.fill.part) level.set(k,o.fill.color);
           }
           const smallC=new Set(opens.filter(o=>o.fill.small&&o.fill.color).map(o=>o.fill.color));
-          for(const id of pack(level,'brick',y,meta,col=>smallC.has(col)?[[1,3],[1,2],[1,1]]:null)){ const p=parts[id-1]; p.wall=true;
+          const ids=pack(level,'brick',y,meta,col=>smallC.has(col)?[[1,3],[1,2],[1,1]]:null); mixColors(ids,op,op.color,i);
+          for(const id of ids){ const p=parts[id-1]; p.wall=true;
             for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++) wallCourse.set(K3(p.x+a,p.z+b,y),id); }
         }
         break; }
@@ -365,11 +376,8 @@ function compile(design){
         if(op.cap!=='none') pack(outer,'tile',op.y+1,meta);
         break; }
       case 'fill': {
-        // "mix" scatters other colors through the fill (weathered roofs, varied paving), like a roof's mix
-        const pick=(x,z)=>{ if(!op.mix) return op.color; let u=((((x*73856093)^(z*19349663)^((op.y||0)*83492791))>>>0)%1000)/1000;
-          for(const [mc,fr] of op.mix){ if(u<fr) return mc; u-=fr; } return op.color; };
-        const level=new Map(); for(const r of op.rects) for(const [x,z] of rectCells(r)) level.set(x+','+z,pick(x,z));
-        pack(level,op.kind||'tile',op.y||0,meta); break; }
+        const level=new Map(); for(const r of op.rects) for(const [x,z] of rectCells(r)) level.set(x+','+z,op.color);
+        mixColors(pack(level,op.kind||'tile',op.y||0,meta),op,op.color,i); break; }
       case 'floor': { // every stud inside the buildings (within rects, if given) at height y
         const lim=op.rects?new Set(op.rects.flatMap(r=>rectCells(r)).map(([x,z])=>x+','+z)):null, level=new Map();
         for(const k of INSIDE) if(!lim||lim.has(k)) level.set(k,op.color);
