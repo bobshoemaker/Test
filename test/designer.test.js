@@ -71,11 +71,40 @@ test('a floor plan goes after the photos and the task explains it', async () => 
   const sent = [];
   const create = client.messages.create.bind(client.messages);
   client.messages.create = async (params) => { sent.push(JSON.parse(JSON.stringify(params.messages))); return create(params); };
-  await designHouse({ client, model: 'fake', mode: 'parts', partsLimit: 1, photos: [{ mediaType: 'image/jpeg', data: 'PHOTO' }], plan: { mediaType: 'image/png', data: 'PLAN' } });
+  await designHouse({ client, model: 'fake', mode: 'parts', partsLimit: 1, lockFootprint: false, photos: [{ mediaType: 'image/jpeg', data: 'PHOTO' }], plan: { mediaType: 'image/png', data: 'PLAN' } });
   const first = sent[0][0].content;
   assert.deepEqual(first.filter((b) => b.type === 'image').map((b) => b.source.data), ['PHOTO', 'PLAN']);
   assert.match(first.at(-1).text, /1 attached photo using|1 attached photo\./);
   assert.match(first.at(-1).text, /FLOOR PLAN\. The last image/);
+});
+
+test('with a plan, parts mode reads the footprint first and holds every draft to it', async () => {
+  const { layoutFootprint, skeletonOps } = require('../src/server/footprint');
+  const footprint = {
+    street: 'S',
+    rooms: [{ name: 'Living', label: '14 X 20', rectPx: [100, 200, 240, 400] }, { name: 'Bed', label: '10 x 10', rectPx: [0, 100, 100, 200] }],
+    blocks: [{ name: 'Wing', levels: 2, rectsPx: [[0, 100, 100, 200]] }, { name: 'House', levels: 1, rectsPx: [[100, 100, 200, 400]] }],
+    openings: [{ block: 'Wing', kind: 'garage door', atPx: [50, 200], widthFt: 8 }],
+  };
+  const ops = skeletonOps(layoutFootprint(footprint));
+  ops[1].segments[0][0] += 1; // Claude nudges a locked wall
+  const replies = [
+    { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'submit_footprint', input: footprint }] },
+    { stop_reason: 'end_turn', content: [{ type: 'text', text: 'The footprint matches the plan.' }] },
+    { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't2', name: 'compile_design', input: { design: { name: 'x', phases: ops.map((o) => o.phase), ops } } }] },
+    { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Walls done.' }] },
+  ];
+  const sent = [];
+  const client = { messages: { create: async (params) => { sent.push(JSON.parse(JSON.stringify(params))); return { role: 'assistant', ...replies[sent.length - 1] }; } } };
+  const seen = [];
+  const out = await designHouse({ client, model: 'fake', mode: 'parts', partsLimit: 1, photos: [{ mediaType: 'image/jpeg', data: 'PHOTO' }],
+    plan: { mediaType: 'image/png', data: 'PLAN' }, onEvent: (ev) => seen.push(ev) });
+  assert.equal(sent[0].tools[0].name, 'submit_footprint');
+  assert.ok(seen.some((e) => e.type === 'footprintDone'));
+  assert.match(sent[2].messages[0].content.at(-1).text, /LOCKED WALLS FROM THE FLOOR PLAN/);
+  const result = JSON.parse(sent[3].messages.at(-1).content[0].content);
+  assert.match(result.problems[0], /Floor plan \(op 1\): the House walls must keep the locked segments/);
+  assert.ok(out.planProblems.length > 0);
 });
 
 test('extractJson accepts fenced and surrounded JSON', () => {

@@ -1,7 +1,10 @@
 // Photos in, checked design out. Claude writes a design, calls compile_design (which runs
 // the engine right here), reads the errors, fixes them, and returns the final JSON.
+// With a floor plan, parts mode first has Claude read the footprint off the plan; code lays it
+// out in studs (footprint.js) and every compile checks the design's walls against it.
 const { compile } = require('../engine/engine.js');
-const { SPEC, designTask, fixTask, partsTask, PARTS } = require('./prompt');
+const { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask } = require('./prompt');
+const { layoutFootprint, skeletonOps, checkFootprint, describeLayout } = require('./footprint');
 
 const COMPILE_TOOL = {
   name: 'compile_design',
@@ -29,14 +32,79 @@ function problemList(result, limit = 30) {
   ].slice(0, limit);
 }
 
-function summarize(result) {
+// planProblems: walls that left the locked floor-plan footprint; they count as errors.
+function summarize(result, planProblems = []) {
   return {
     pieces: result.stats.pieces,
     steps: result.stats.steps,
-    errors: result.errors.length,
+    errors: result.errors.length + planProblems.length,
     warnings: result.warnings.length,
-    problems: problemList(result, 22),
+    problems: [...planProblems.map((p) => `error: ${p}`), ...problemList(result, 22)].slice(0, 22),
   };
+}
+
+function addUsage(usage, msg) {
+  const u = msg.usage || {};
+  usage.input += u.input_tokens || 0; usage.cacheRead += u.cache_read_input_tokens || 0;
+  usage.cacheWrite += u.cache_creation_input_tokens || 0; usage.output += u.output_tokens || 0;
+}
+
+const imageBlock = (p) => ({ type: 'image', source: { type: 'base64', media_type: p.mediaType, data: p.data } });
+
+// Claude reads the footprint off the plan (and a gridded copy); each submission is laid out in
+// studs and comes back with an overlay on the plan until Claude is satisfied. Returns the layout.
+async function planFootprint({ client, model, photos = [], plan, notes = '', effort = null, maxTokens = 64000,
+  planTools = null, onEvent = () => {}, usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 }, maxRounds = 5 }) {
+  let grid = null;
+  if (planTools && planTools.gridPlan) {
+    try { grid = await planTools.gridPlan(plan); } catch (e) { onEvent({ type: 'status', message: `Plan grid failed: ${e.message}` }); }
+  }
+  const messages = [{ role: 'user', content: [...photos.map(imageBlock), imageBlock(plan), ...(grid ? [imageBlock(grid)] : []),
+    { type: 'text', text: footprintTask({ photoCount: photos.length, notes, gridded: !!grid }) }] }];
+  const params = { model, max_tokens: maxTokens, system: FOOTPRINT_SPEC, tools: [FOOTPRINT_TOOL], cache_control: { type: 'ephemeral' },
+    thinking: { type: 'adaptive', display: 'summarized' } };
+  if (effort) params.output_config = { effort };
+  let best = null, n = 0;
+  for (let r = 0; r < maxRounds; r++) {
+    onEvent({ type: 'status', message: r === 0 ? 'Claude is reading the floor plan…' : `Claude is checking the footprint (round ${r + 1})…` });
+    const msg = await callClaude(client, { ...params, messages }, onEvent);
+    addUsage(usage, msg);
+    messages.push({ role: 'assistant', content: msg.content });
+    const uses = msg.content.filter((b) => b.type === 'tool_use');
+    if (!uses.length) break;
+    const results = [];
+    for (const tu of uses) {
+      if (tu.name !== FOOTPRINT_TOOL.name) {
+        results.push({ type: 'tool_result', tool_use_id: tu.id, content: `Unknown tool ${tu.name}`, is_error: true });
+        continue;
+      }
+      n++;
+      let locked;
+      try { locked = layoutFootprint(tu.input || {}); } catch (e) {
+        results.push({ type: 'tool_result', tool_use_id: tu.id, content: `Could not lay out the footprint: ${e.message}`, is_error: true });
+        continue;
+      }
+      locked.input = tu.input;
+      let overlay = null;
+      if (planTools && planTools.footprintOverlay && locked.map) {
+        try { overlay = await planTools.footprintOverlay(plan, locked); } catch (e) { onEvent({ type: 'status', message: `Overlay failed: ${e.message}` }); }
+      }
+      if (locked.blocks.length) best = locked;
+      onEvent({ type: 'footprint', n, locked, problems: locked.problems, overlay });
+      const body = [{ type: 'text', text: describeLayout(locked) }];
+      if (overlay) {
+        body.push({ type: 'text', text: 'Overlay of these walls on the plan, as they will sit on the baseplate: walls colored by block, red squares are doors, black squares garage doors, orange outlines stairs, street along the bottom.' });
+        body.push(imageBlock({ mediaType: 'image/png', data: overlay }));
+      }
+      results.push({ type: 'tool_result', tool_use_id: tu.id, content: body });
+    }
+    messages.push({ role: 'user', content: results });
+  }
+  if (!best) throw new Error('Claude did not submit a footprint from the floor plan.');
+  const fatal = best.problems.filter((p) => /too deep|too wide/.test(p));
+  if (fatal.length) throw new Error(`The floor plan doesn't fit the baseplate: ${fatal.join(' ')}`);
+  onEvent({ type: 'footprintDone', locked: best, usage: { ...usage } });
+  return best;
 }
 
 // Tolerant JSON extraction: whole reply, a fenced block, or first "{" to last "}".
@@ -92,21 +160,30 @@ async function callClaude(client, params, onEvent = () => {}) {
  * @param {function} [o.render] async design -> [{label, data}] base64 PNGs; each compile result then
  *                   carries renders of the draft so Claude can compare it with the photos
  * @param {number} [o.partsLimit] parts mode: stop after this many parts (for trying out one part)
+ * @param {boolean} [o.lockFootprint] parts mode with a plan: read the footprint first and lock the walls to it (default true)
+ * @param {object} [o.locked]   a footprint already laid out (from an earlier run's 'footprintDone'); skips reading the plan
+ * @param {object} [o.planTools] {gridPlan, footprintOverlay} from render.js, for the plan-reading step
  */
 async function designHouse({
   client, model, photos = [], plan = null, notes = '', target = 1200, mode = 'design', design = null,
   effort = null, maxRounds = 7, maxTokens = 64000, onEvent = () => {}, render = null, partsLimit = PARTS.length,
+  lockFootprint = true, locked = null, planTools = null,
 }) {
-  const content = [...photos, ...(plan ? [plan] : [])].map((p) => ({ type: 'image', source: { type: 'base64', media_type: p.mediaType, data: p.data } }));
+  const usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
+  if (mode === 'parts' && plan && lockFootprint && !locked) {
+    locked = await planFootprint({ client, model, photos, plan, notes, effort, maxTokens, planTools, onEvent, usage });
+  }
+  if (mode !== 'parts') locked = null;
+  const lockedOps = locked ? skeletonOps(locked) : null;
+  const content = [...photos, ...(plan ? [plan] : [])].map(imageBlock);
   if (mode === 'fix') {
     if (!isDesign(design)) throw new Error('Fix mode needs a design with phases and ops.');
     content.push({ type: 'text', text: fixTask({ design, problems: problemList(compile(design)) }) });
   } else {
     if (!photos.length && !notes) throw new Error('Add at least one photo or a description.');
-    content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target, hasPlan: !!plan }) });
+    content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target, hasPlan: !!plan, locked, lockedOps }) });
   }
   const messages = [{ role: 'user', content }];
-  const usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
   const st = { lastDraft: null, compiles: 0, rounds: 0 };
   // max_tokens includes thinking, which runs long at xhigh and max. Automatic caching moves the
   // breakpoint to the end of each request, so every round reads the photos and earlier drafts from cache.
@@ -123,9 +200,7 @@ async function designHouse({
         ? (mode === 'fix' ? 'Claude is fixing the design…' : 'Claude is studying the photos…')
         : `Claude is ${r === 0 ? 'starting' : 'revising'} ${part ? part.toLowerCase() : 'the design'} (round ${st.rounds})…` });
       const msg = await callClaude(client, { ...params, messages }, onEvent);
-      const u = msg.usage || {};
-      usage.input += u.input_tokens || 0; usage.cacheRead += u.cache_read_input_tokens || 0;
-      usage.cacheWrite += u.cache_creation_input_tokens || 0; usage.output += u.output_tokens || 0;
+      addUsage(usage, msg);
       // Keep the whole assistant turn, thinking blocks included; the API requires them in tool loops.
       messages.push({ role: 'assistant', content: msg.content });
 
@@ -152,15 +227,16 @@ async function designHouse({
           continue;
         }
         st.compiles++;
-        const res = compile(d);
+        const res = compile(d), planProblems = checkFootprint(d, locked);
         d.source = 'photos';
         st.lastDraft = d;
         let renders = [];
         if (render) {
           try { renders = await render(d); } catch (e) { onEvent({ type: 'status', message: `Rendering failed: ${e.message}` }); }
         }
-        onEvent({ type: 'draft', n: st.compiles, part, design: d, stats: res.stats, errors: res.errors.length, warnings: res.warnings.length, problems: problemList(res, 8), renders });
-        const body = [{ type: 'text', text: JSON.stringify(summarize(res)) }];
+        const sum = summarize(res, planProblems);
+        onEvent({ type: 'draft', n: st.compiles, part, design: d, stats: res.stats, errors: sum.errors, warnings: sum.warnings, problems: sum.problems.slice(0, 8), renders });
+        const body = [{ type: 'text', text: JSON.stringify(sum) }];
         if (renders.length) {
           body.push({ type: 'text', text: `Renders of this draft (${renders.map((r) => r.label).join('; ')}). Compare them with the photos.` });
           for (const r of renders) body.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: r.data } });
@@ -178,7 +254,7 @@ async function designHouse({
     if (!isDesign(final)) final = st.lastDraft;
     if (!isDesign(final)) throw new Error('Claude did not return a design.');
     final.source = 'photos';
-    return { design: final, result: compile(final), compiles: st.compiles, rounds: st.rounds, usage, ...(note ? { note } : {}) };
+    return { design: final, result: compile(final), planProblems: checkFootprint(final, locked), locked, compiles: st.compiles, rounds: st.rounds, usage, ...(note ? { note } : {}) };
   }
 
   if (mode !== 'parts') {
@@ -204,4 +280,4 @@ async function designHouse({
   return finish(msg, msg ? null : 'Stopped at the round limit; this is the last compiled draft.');
 }
 
-module.exports = { designHouse, extractJson, summarize, problemList, COMPILE_TOOL };
+module.exports = { designHouse, planFootprint, extractJson, summarize, problemList, COMPILE_TOOL };

@@ -12,8 +12,9 @@ WORLD
 - Default scale is about 2 ft per stud, so a story is 4 brick courses (12 plates). Compress the yard so the house, driveway and some front and back yard fit.
 
 OPS (run in list order; earlier ops claim space first, so list walls, then balcony and bay floors, then bands, then roofs, then landscaping, then sub-builds. Each op's "phase" must appear in "phases"; the manual builds phases in the order of that list, bottom to top)
-- walls {"op":"walls","phase","color","courses":[c0,c1],"base":plate,"segments":[[x0,z0,x1,z1],...],"openings":[...],"trim":color?,"trimSides":bool?,"trimHeader":bool?,"trimSill":bool?}
+- walls {"op":"walls","phase","color","courses":[c0,c1],"base":plate,"segments":[[x0,z0,x1,z1],...],"openings":[...],"trim":color?,"trimSides":bool?,"trimHeader":bool?,"trimSill":bool?,"block":name?}
   Segments are straight, 1-stud-thick wall lines. Course c starts at plate base+(c-c0)*3.
+  "block" ties the op to a block laid out from the floor plan; when the task gives locked walls, every op with that block keeps its segments exactly.
   Openings: {"cells":[x0,z0,x1,z1] (a run along one wall),"courses":[a,b],"fill":{...}}.
   fill {"part":"win22"} = window 2 wide, 2 courses; "win23" = 2 wide, 3 courses (tall windows, French doors); "win43" = 4 wide, 3 courses; "arch41" = arch 1x4, 1 course (put it on top of a 4-wide window for an arched window); "arch42" = arch 1x4, 2 courses. The opening must match the part exactly. Add "color" to set a window or arch color.
   fill {"color":C} fills the opening with bricks of another color (doors, garage doors, dark glass with "Trans-Black"). {"color":C,"small":true} uses small bricks (stone, tile surrounds). fill {} leaves the opening empty (place something there yourself).
@@ -80,13 +81,23 @@ ${JSON.stringify(design)}`;
 // Parts mode: the house is built over several short turns, each compiled right away, so a
 // preview exists after every part and no single turn has to plan the whole model.
 const PARTS = [
-  { name: 'Walls', task: 'PART 1 OF 4, WALLS. Set name, place, scale, facts, assumed and the full phases list for all four parts. Then write the walls of every building (house, garage, any outbuilding) with every door, window and garage-door opening, on a foundation where the house sits above the street. Nothing else yet.' },
+  { name: 'Walls', locked: 'PART 1 OF 4, WALLS. Set name, place, scale, facts, assumed and the full phases list for all four parts, including each locked op\'s phase. Start from the locked walls ops: set each block\'s heights (courses and base, a foundation where the house sits above the street), colors, trim, and each locked opening\'s courses and fill to match the photos, then add the windows and other openings the photos show. Nothing else yet.', task: 'PART 1 OF 4, WALLS. Set name, place, scale, facts, assumed and the full phases list for all four parts. Then write the walls of every building (house, garage, any outbuilding) with every door, window and garage-door opening, on a foundation where the house sits above the street. Nothing else yet.' },
   { name: 'Roofs', task: 'PART 2 OF 4, ROOFS AND TRIM. Add roofs, parapets and their caps, bands, awnings and bay roofs. Leave the walls alone unless the compiler flags them.' },
   { name: 'Site', task: 'PART 3 OF 4, THE LOT. Add the street, sidewalk, driveway, entry stairs and railings, walks, planters and retaining walls, patio paving, fences and gates.' },
   { name: 'Planting', task: 'PART 4 OF 4, PLANTING AND FINISH. Add trees, cacti, shrubs and other sub-builds. Then fix every remaining error and warning. When it compiles with 0 errors and 0 warnings, reply with one sentence; the last compiled design is kept.' },
 ];
 
-function partsTask({ photoCount, notes, target, hasPlan = false }) {
+// The walls laid out from the floor plan, which the design has to keep (checked on every compile).
+function lockedNote(locked, ops) {
+  if (!locked) return '';
+  return `
+LOCKED WALLS FROM THE FLOOR PLAN. These walls ops were laid out from the floor plan at ${locked.scale.ftPerStud} ft per stud, with the street along z=31. Start the design from them. Keep every op's "block" and "segments", and each listed opening's "cells", exactly as given: every compile checks them against the plan and reports changes as errors. Everything else is yours to set from the photos: courses and base (heights, raised floors, foundations), colors, trim, each opening's courses and fill, windows and other openings, and more walls ops for the same block (a foundation course or a parapet) with the same block and segments.
+${JSON.stringify(ops)}
+${locked.stairs.length ? `Stairs on the plan (stud rectangles [x0,z0,x1,z1]; build them in part 3): ${JSON.stringify(locked.stairs)}` : ''}
+`;
+}
+
+function partsTask({ photoCount, notes, target, hasPlan = false, locked = null, lockedOps = null }) {
   return `TASK
 Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes from the agent: "${notes}"` : ''}. The finished design should have about ${target} pieces (parts plus window glass plus the baseplate) and no more than 10 percent over. Fewer is fine when the house is simple.${planNote(hasPlan)}
 
@@ -99,7 +110,49 @@ WORK IN PARTS. You build the design in ${PARTS.length} parts, one part per turn;
 EXAMPLE of a valid finished design (a two-story house built from three listing photos, 778 pieces, 0 errors):
 ${JSON.stringify(JSON.parse(example()))}
 
-${PARTS[0].task}`;
+${lockedNote(locked, lockedOps)}
+${locked ? PARTS[0].locked : PARTS[0].task}`;
 }
 
-module.exports = { SPEC, designTask, fixTask, partsTask, PARTS, example };
+// The plan-reading step: Claude reads the footprint off a gridded plan; code lays it out in studs.
+const FOOTPRINT_SPEC = `You read a house's listing floor plan and photos and report its footprint for a brick model. Code turns your report into walls on a 32 x 32 stud baseplate at 2 ft per stud, so you only read the plan; you don't place bricks.
+
+Work in the plan's own pixel coordinates: x to the right, y down. The gridded copy of the plan has a thin line every 10 px and labels every 50 px (red across the top, blue down the side), all in original plan pixels. Read positions off that grid.
+
+Report with submit_footprint:
+- street: the plan side that faces the street (N top, S bottom, E right, W left). Use the photos, the entries and stairs, and the lot line.
+- rooms: three or more rooms with size labels (like "14 X 20"), each with rectPx along its wall lines. They set the scale, so pick rooms whose four walls are clear.
+- blocks: the exterior of every building, split into parts that differ in height (a two-level wing, the one-level main house, a detached garage). Each is one or more rectangles along the exterior wall center lines; rectangles of one block may touch or overlap. levels is the number of stories seen from outside (2 for a garage with rooms above it). List the tallest blocks first. A lower level drawn separately on the plan (like a garage under a bedroom wing) is not its own block when it sits under a main-level block; give that block 2 levels and put the lower level's doors on it.
+- openings: every exterior door, garage door, and sliding or French door, as the point on the wall line at its center (atPx), its block, kind and width in feet. Windows come later from the photos.
+- stairs: exterior stairs and steps as rectangles.
+Rectangles are [x0, y0, x1, y1] with x0 < x1 and y0 < y1.
+
+Each submission comes back with the layout in studs and an overlay of those walls on the plan, drawn as it will sit on the baseplate. Check the overlay: every wall on a plan wall line, doors on the plan's door swings, stairs where the plan draws them, and the street along the bottom. Fix what's off and submit again (at most 4 submissions). When it matches, reply with one sentence.`;
+
+const FOOTPRINT_TOOL = (() => {
+  const rect = { type: 'array', items: { type: 'number' }, minItems: 4, maxItems: 4 };
+  return {
+    name: 'submit_footprint',
+    description: 'Lays out the footprint read from the floor plan in studs at 2 ft per stud and returns the layout, any problems, and an overlay of the walls on the plan. Coordinates are original plan pixels.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        street: { type: 'string', enum: ['N', 'S', 'E', 'W'] },
+        rooms: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, label: { type: 'string' }, rectPx: rect }, required: ['name', 'label', 'rectPx'] } },
+        blocks: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, levels: { type: 'integer' }, rectsPx: { type: 'array', items: rect }, note: { type: 'string' } }, required: ['name', 'levels', 'rectsPx'] } },
+        openings: { type: 'array', items: { type: 'object', properties: { block: { type: 'string' }, kind: { type: 'string', enum: ['door', 'double door', 'sliding door', 'garage door'] }, atPx: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 }, widthFt: { type: 'number' }, note: { type: 'string' } }, required: ['block', 'kind', 'atPx', 'widthFt'] } },
+        stairs: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, rectPx: rect }, required: ['rectPx'] } },
+        notes: { type: 'string' },
+      },
+      required: ['street', 'rooms', 'blocks', 'openings'],
+    },
+  };
+})();
+
+function footprintTask({ photoCount, notes, gridded }) {
+  return `TASK
+The first ${photoCount} image${photoCount === 1 ? ' is a photo' : 's are photos'} of the house; then comes the floor plan${gridded ? ', then the same plan with a pixel grid' : ''}.${notes ? ` Notes from the agent: "${notes}"` : ''}
+Read the footprint and submit it with submit_footprint.`;
+}
+
+module.exports = { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask, example };

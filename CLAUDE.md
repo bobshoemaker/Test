@@ -20,7 +20,18 @@ closing gift that realtors give clients: a brick model of the house they just bo
   document it in SPEC in the same change.
 - `src/server/designer.js`: the Claude loop. Sends photos + SPEC + task, gives Claude a
   `compile_design` tool that runs the engine in-process, feeds errors back, returns the final
-  design. Keeps whole assistant turns (thinking blocks included) as the API requires.
+  design. Keeps whole assistant turns (thinking blocks included) as the API requires. Parts
+  mode builds walls, roofs, lot and planting in separate appended turns; each compile result
+  carries renders of the draft (front and three-quarter) for Claude to compare with the photos.
+- `src/server/footprint.js`: floor plan to locked walls. With a plan, parts mode first has Claude
+  read the footprint off a pixel-gridded copy (`submit_footprint`: labeled rooms for scale,
+  blocks as rectangles, doors, stairs, street side). This module scales it to studs from the
+  room labels, fits it on the baseplate with the street at z = 31 (pulling a detached back
+  building forward if needed), and turns it into walls ops tagged with `block`.
+  `checkFootprint` holds every draft to those walls and doors; changes count as errors. Pure
+  and tested.
+- `src/server/render.js`: optional (needs Playwright). Renders draft views with the viewer in
+  headless Chromium, the gridded plan, and the footprint overlaid on the plan.
 - `src/server/lookup.js`: address to candidate photos. Geocodes with OpenStreetMap Nominatim
   (building-level when OSM has the address) then the US Census geocoder (street-level), finds
   Mapillary street photos aimed at the house (`rankPhotos`, pure and tested), and fetches a
@@ -46,6 +57,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
                                               # an organization-scoped key also needs BRICKHOUSE_ANTHROPIC_WORKSPACE_ID
     node scripts/compile.js designs/634-unit-a.json --steps
     node scripts/design.js a.jpg b.jpg --target 1200 --out designs/new.json
+    node scripts/design.js a.jpg b.jpg --plan plan.png --parts --effort high --out designs/generated/x.json
+                                              # plan first, then four parts; drafts, renders and overlays saved next to --out
     node scripts/bundle.js designs/634-unit-a.json
     node scripts/lookup.js "12 Elm St, Springfield, IL" --take 1,2 --out photos/elm   # needs MAPILLARY_TOKEN
 
