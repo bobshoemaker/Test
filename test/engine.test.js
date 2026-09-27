@@ -188,3 +188,14 @@ test('a lift-off roof must hold together, rest on the walls and carry nothing el
   const stuck = flat([{ op: 'place', phase: 'b', part: 'brick:1x1', color: 'Red', at: [8, 13, 7] }, { ...tiles, rects: [[5, 5, 7, 10], [9, 5, 12, 10], [8, 5, 8, 6], [8, 8, 8, 10]] }]);
   assert.match(stuck.join(' '), /sits on lift-off roof "Flat" but isn't part of it/);
 });
+
+test('seams are compared at the same height, not the same course number of different walls ops', () => {
+  // A lower wall (courses 0-3 from height 0) and a shorter upper wall (courses 0-3 from height 12) on
+  // the same line: their course numbers match but their heights don't, so nothing lines up.
+  const d = { name: 's', phases: ['a'], ops: [
+    { op: 'walls', phase: 'a', color: 'White', courses: [0, 3], base: 0, segments: [[0, 5, 7, 5]] },
+    { op: 'walls', phase: 'a', color: 'White', courses: [0, 3], base: 12, segments: [[0, 5, 3, 5]] }] };
+  const r = compile(d);
+  assert.deepEqual(r.errors.map((e) => e.msg), []);
+  assert.deepEqual(r.warnings.map((w) => w.msg).filter((m) => /seam/.test(m)), []);
+});

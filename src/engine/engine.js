@@ -113,7 +113,8 @@ function compile(design){
   const errors=[], warnings=[], parts=[], occ=new Map(), subs=[];
   if(!BASEPLATES[BASE]) errors.push({msg:`plate must be 32 or 48 (got ${design.plate})`, op:null});
   const phases=design.phases||[]; const phaseIdx=new Map(phases.map((p,i)=>[p,i]));
-  const wallCourse=new Map(); const wallPairs=new Set(); const wallCourses=new Map();
+  // wall bricks by cell and height (not course number: each walls op counts its courses from its own base)
+  const wallCourse=new Map(); const wallPairs=new Set(); const wallCourses=new Set();
   const abutEdges=[], doors=[];
 
   const commit=p=>{ p.id=parts.length+1; parts.push(p); for(const v of p.occ) occ.set(K3(v[0],v[1],v[2]),p.id); return p; };
@@ -286,7 +287,7 @@ function compile(design){
           if(op.trimSill!==false) (op.trimSides===false?L:span).forEach(([x,z])=>put(x,z,o.courses[0]-1));
         }
         for(let c=op.courses[0];c<=op.courses[1];c++){
-          const y=wbase+(c-op.courses[0])*3; wallCourses.set(c,y);
+          const y=wbase+(c-op.courses[0])*3; wallCourses.add(y);
           // side-stud bricks fill every cell of their opening, one course tall
           for(const o of opens) if(o.fill.part==='snot' && o.courses[0]===c){
             if(!'NSEW'.includes(o.fill.face||'-')||!o.fill.face) errors.push({msg:`A side-stud brick needs "face": "N", "S", "E" or "W" (the way its stud points)`, op:i});
@@ -304,7 +305,7 @@ function compile(design){
           }
           const smallC=new Set(opens.filter(o=>o.fill.small&&o.fill.color).map(o=>o.fill.color));
           for(const id of pack(level,'brick',y,meta,col=>smallC.has(col)?[[1,3],[1,2],[1,1]]:null)){ const p=parts[id-1]; p.wall=true;
-            for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++) wallCourse.set(K3(p.x+a,p.z+b,c),id); }
+            for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++) wallCourse.set(K3(p.x+a,p.z+b,y),id); }
         }
         break; }
       case 'roof': {
@@ -525,14 +526,14 @@ function compile(design){
       if(held<2) errors.push({msg:`Lift-off roof "${name}" is held on by ${held} stud${held===1?'':'s'}; it should press onto the wall tops`, op:null});
     } }
   // stacked seams
-  const courses=[...wallCourses.keys()].sort((a,b)=>a-b);
+  const heights=[...wallCourses].sort((a,b)=>a-b);
   for(const pr of wallPairs){ const [a,b]=pr.split('|'); let run=0;
-    for(let idx=0;idx<courses.length;idx++){ const c=courses[idx];
-      const ia=wallCourse.get(a+','+c), ib=wallCourse.get(b+','+c);
+    for(let idx=0;idx<heights.length;idx++){ const y=heights[idx];
+      const ia=wallCourse.get(a+','+y), ib=wallCourse.get(b+','+y);
       const seam=ia&&ib&&ia!==ib&&parts[ia-1].color===parts[ib-1].color;
-      const contiguous=idx>0&&courses[idx-1]===c-1&&wallCourses.get(c-1)+3===wallCourses.get(c);
+      const contiguous=idx>0&&heights[idx-1]+3===y;
       run=seam?((contiguous&&run>0)?run+1:1):0;
-      if(run===3) warnings.push({msg:`Wall seam between (${a}) and (${b}) runs straight up through 3 courses from course ${c-2}`, op:null});
+      if(run===3) warnings.push({msg:`Wall seam between (${a}) and (${b}) runs straight up through 3 courses from height ${y-6}`, op:null});
     } }
 
   // ---------- inventory ----------
