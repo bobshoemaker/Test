@@ -199,3 +199,26 @@ test('seams are compared at the same height, not the same course number of diffe
   assert.deepEqual(r.errors.map((e) => e.msg), []);
   assert.deepEqual(r.warnings.map((w) => w.msg).filter((m) => /seam/.test(m)), []);
 });
+
+test('a lift-off roof rests on tiled wall tops, located by corner studs, and is built on its own', () => {
+  const seg = [[5, 5, 12, 5], [5, 10, 12, 10], [5, 6, 5, 9], [12, 6, 12, 9]];
+  const corners = [[5, 5], [12, 5], [5, 10], [12, 10]];
+  const ring = [[6, 5, 11, 5], [6, 10, 11, 10], [5, 6, 5, 9], [12, 6, 12, 9]]; // wall tops without the corners
+  const house = [{ op: 'walls', phase: 'a', color: 'White', courses: [0, 3], base: 0, segments: seg }, { op: 'floor', phase: 'a', color: 'Tan' }];
+  const roof = (y) => [{ op: 'fill', phase: 'b', kind: 'plate', color: 'White', rects: [[5, 5, 12, 10]], y, liftoff: 'Roof' },
+    { op: 'fill', phase: 'b', kind: 'tile', color: 'Light Bluish Gray', rects: [[5, 5, 12, 10]], y: y + 1, liftoff: 'Roof' }];
+  const seat = [{ op: 'places', phase: 'a', part: 'plate:1x1', color: 'White', y: 12, at: corners },
+    { op: 'fill', phase: 'a', kind: 'tile', color: 'White', rects: ring, y: 12 }];
+  const d = (ops) => compile({ name: 'l', phases: ['a', 'b'], ops });
+  const seated = d([...house, ...seat, ...roof(13)]);
+  assert.deepEqual(seated.errors.map((e) => e.msg), [], 'deck plates over the room need no studs below: the roof is built on its own');
+  assert.deepEqual(seated.warnings.map((w) => w.msg), []);
+  const sub = seated.subs.find((s) => s.name === 'Roof');
+  assert.ok(sub && sub.liftoff);
+  assert.ok(seated.steps.some((s) => s.kind === 'attach' && s.title === 'Place the roof'), 'the manual builds the roof, then places it');
+  // pressed onto every wall-top stud, it grips far too many to lift off
+  assert.match(d([...house, ...roof(12)]).warnings.map((w) => w.msg).join(' '), /Lift-off roof "Roof" grips the house with \d+ studs, too many/);
+  // on tiles with no locating studs it isn't held at all
+  const loose = d([...house, { op: 'fill', phase: 'a', kind: 'tile', color: 'White', rects: [...ring, ...corners.map(([x, z]) => [x, z, x, z])], y: 12 }, ...roof(13)]);
+  assert.match(loose.errors.map((e) => e.msg).join(' '), /Lift-off roof "Roof" is held on by 0 studs/);
+});
