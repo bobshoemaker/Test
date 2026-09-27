@@ -153,6 +153,17 @@ test('the owner\'s choices go into the design task as binding', async () => {
   assert.match(sent[0][0].content.at(-1).text, /CHOICES FROM THE OWNER[\s\S]*landscaping style should the model use\? Lush garden: Lawn and hedges\./);
 });
 
+test('the 48 x 48 plate is set on drafts and explained in the task', async () => {
+  const client = makeFakeClient({ delayMs: 0 });
+  const sent = [];
+  const create = client.messages.create.bind(client.messages);
+  client.messages.create = async (params) => { sent.push(JSON.parse(JSON.stringify(params.messages))); return create(params); };
+  let draft = null;
+  await designHouse({ client, model: 'fake', mode: 'parts', partsLimit: 1, plate: 48, photos: [{ mediaType: 'image/jpeg', data: 'A' }], onEvent: (ev) => { if (ev.type === 'draft') draft = ev.design; } });
+  assert.match(sent[0][0].content.at(-1).text, /PLATE AND SCALE\. This model is on the 48 x 48 baseplate: set "plate": 48/);
+  assert.equal(draft.plate, 48);
+});
+
 test('extractJson accepts fenced and surrounded JSON', () => {
   assert.deepEqual(extractJson('```json\n{"a":1}\n```'), { a: 1 });
   assert.deepEqual(extractJson('Here it is: {"a":2} done'), { a: 2 });

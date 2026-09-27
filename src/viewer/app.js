@@ -17,7 +17,7 @@ scene.add(sun);
 const fill=new THREE.DirectionalLight(0xffffff,0.2); fill.position.set(-28,18,-18); scene.add(fill);
 
 const lin=hex=>new THREE.Color(hex).convertSRGBToLinear();
-const PH=0.4, OFF=16;
+const PH=0.4; let PLATE=32, OFF=16; // the baseplate size comes from the design ("plate": 32 or 48)
 const tmp=new THREE.Object3D(), ZERO=new THREE.Matrix4().makeScale(0,0,0), col=new THREE.Color();
 let stageLin=lin('#D9E2EB');
 
@@ -77,7 +77,7 @@ function buildScene(){
   makeInstanced(boxGeo,matO,boxO,true); makeInstanced(boxGeo,matT,boxT,false); makeInstanced(cheeseGeo,matW,ch,true); makeInstanced(cylGeo,matO,cyl,true);
   // studs
   for(const p of R.parts) for(const [x,z] of p.studs){ const top=p.y+p.h; const cov=R.occ.get(x+','+z+','+top); studRecs.push({p,x,z,top,cov}); }
-  for(let x=0;x<32;x++) for(let z=0;z<32;z++){ const cov=R.occ.get(x+','+z+',0'); studRecs.push({p:null,x,z,top:0,cov}); }
+  for(let x=0;x<PLATE;x++) for(let z=0;z<PLATE;z++){ const cov=R.occ.get(x+','+z+',0'); studRecs.push({p:null,x,z,top:0,cov}); }
   studs=new THREE.InstancedMesh(studGeo,matO,studRecs.length); studs.instanceMatrix.setUsage(THREE.DynamicDrawUsage); studs.receiveShadow=true;
   studRecs.forEach((s,i)=>{ tmp.rotation.set(0,0,0); tmp.scale.set(1,1,1); tmp.position.set(s.x+0.5-OFF,s.top*PH+0.085,s.z+0.5-OFF); tmp.updateMatrix(); s.m=tmp.matrix.clone(); });
   root.add(studs); meshes.push(studs);
@@ -141,7 +141,7 @@ function applyState(){
 
 // ---------- camera ----------
 let theta=0.62, phi=0.98, radius=70, target=new THREE.Vector3(0,3.5,0), goal={theta, phi, radius, t:target.clone()}, autoSpin=false, dirty=true, userZoom=false, lastMode='main';
-function fitRadius(){ const a=camera.aspect; return Math.min(170,Math.max(82,77/Math.max(a,0.45))); }
+function fitRadius(){ const a=camera.aspect, k=PLATE/32; return Math.min(170*k,Math.max(82*k,77*k/Math.max(a,0.45))); }
 function frame(){
   if(mode===lastMode) return; lastMode=mode;
   if(mode==='sub'){ const s=R.steps[stepIdx]; const ps=R.parts.filter(p=>p.sub===s.sub&&p.copy===0);
@@ -244,7 +244,7 @@ function renderReport(){
   $('verdict').textContent=R.errors.length?`${R.errors.length} problem${R.errors.length>1?'s':''} to fix before this can ship.`:`Every piece locks to the baseplate through ${st.joints.toLocaleString()} stud joints, checked in build order.`;
   const list=[...R.errors.map(x=>['e',x]),...R.warnings.map(x=>['w',x])].slice(0,12);
   $('problems').innerHTML=list.map(([t,x])=>`<li class="${t}">${x.msg}${x.op!=null?` (design step ${x.op+1})`:''}</li>`).join('');
-  $('chips').innerHTML=`<span><b>${st.pieces.toLocaleString()}</b>pieces</span><span><b>${st.steps}</b>steps</span><span><b>${st.subBuilds}</b>sub-builds</span><span><b>32×32</b>studs</span><span><b>$${Math.round(st.cost)}</b>parts</span>`;
+  $('chips').innerHTML=`<span><b>${st.pieces.toLocaleString()}</b>pieces</span><span><b>${st.steps}</b>steps</span><span><b>${st.subBuilds}</b>sub-builds</span><span><b>${PLATE}×${PLATE}</b>studs</span><span><b>$${Math.round(st.cost)}</b>parts</span>`;
 }
 $('stress').onchange=e=>{ stress=e.target.checked; applyState(); };
 
@@ -252,7 +252,7 @@ $('stress').onchange=e=>{ stress=e.target.checked; applyState(); };
 let curDesign=null;
 function esc(t){ return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function showDesign(d){
-  curDesign=d; R=compile(d); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
+  curDesign=d; R=compile(d); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,1,PLATE/32); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
   buildScene(); renderReport(); renderParts(); renderStep(); frame();
   $('title').textContent=d.name||'Brick house'; document.title=(d.name||'Brick house')+', brick model';
   $('subline').textContent=(d.place?d.place+'. ':'')+'A closing-gift brick model with a full build manual.';

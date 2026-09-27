@@ -6,6 +6,7 @@ const { compile } = require('../engine/engine.js');
 const { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask,
   SURVEY_SPEC, SURVEY_TOOL, surveyTask, LANDSCAPE_STYLES } = require('./prompt');
 const { layoutFootprint, skeletonOps, checkFootprint, describeLayout } = require('./footprint');
+const { scaleFor } = require('./scale');
 
 const COMPILE_TOOL = {
   name: 'compile_design',
@@ -100,7 +101,8 @@ function resolveChoices(questions, answers = {}) {
 // Claude reads the footprint off the plan (and a gridded copy); each submission is laid out in
 // studs and comes back with an overlay on the plan until Claude is satisfied. Returns the layout.
 async function planFootprint({ client, model, photos = [], plan, notes = '', effort = null, maxTokens = 64000,
-  planTools = null, onEvent = () => {}, usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 }, maxRounds = 5 }) {
+  planTools = null, onEvent = () => {}, usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 }, maxRounds = 5, plate = 32 }) {
+  const sc = scaleFor(plate);
   let grid = null;
   if (planTools && planTools.gridPlan) {
     try { grid = await planTools.gridPlan(plan); } catch (e) { onEvent({ type: 'status', message: `Plan grid failed: ${e.message}` }); }
@@ -126,14 +128,14 @@ async function planFootprint({ client, model, photos = [], plan, notes = '', eff
       }
       n++;
       let locked;
-      try { locked = layoutFootprint(tu.input || {}); } catch (e) {
+      try { locked = layoutFootprint(tu.input || {}, { size: sc.size, ftPerStud: sc.ftPerStud, frontYard: sc.frontYard }); } catch (e) {
         results.push({ type: 'tool_result', tool_use_id: tu.id, content: `Could not lay out the footprint: ${e.message}`, is_error: true });
         continue;
       }
       locked.input = tu.input;
       let overlay = null;
       if (planTools && planTools.footprintOverlay && locked.map) {
-        try { overlay = await planTools.footprintOverlay(plan, locked); } catch (e) { onEvent({ type: 'status', message: `Overlay failed: ${e.message}` }); }
+        try { overlay = await planTools.footprintOverlay(plan, locked, { size: sc.size, px: sc.size > 32 ? 14 : 20 }); } catch (e) { onEvent({ type: 'status', message: `Overlay failed: ${e.message}` }); }
       }
       if (locked.blocks.length) best = locked;
       onEvent({ type: 'footprint', n, locked, problems: locked.problems, overlay });
@@ -212,16 +214,18 @@ async function callClaude(client, params, onEvent = () => {}) {
  * @param {object} [o.seed]     parts mode: a design from earlier parts to continue from (with fromPart)
  * @param {number} [o.fromPart] parts mode: the part to start at, 1-based (needs seed when above 1)
  * @param {Array<{question,answer,detail}>} [o.choices] the owner's answers to the survey (resolveChoices), binding for the design
+ * @param {32|48} [o.plate]     baseplate size; 48 is the larger model at 1.5 ft per stud (scale.js)
  */
 async function designHouse({
   client, model, photos = [], plan = null, notes = '', target = 1200, mode = 'design', design = null,
   effort = null, maxRounds = 7, maxTokens = 64000, onEvent = () => {}, render = null, partsLimit = PARTS.length,
-  lockFootprint = true, locked = null, planTools = null, seed = null, fromPart = 1, choices = null,
+  lockFootprint = true, locked = null, planTools = null, seed = null, fromPart = 1, choices = null, plate = 32,
 }) {
+  plate = scaleFor(plate).plate;
   if (mode === 'parts' && fromPart > 1 && !isDesign(seed)) throw new Error('Starting at a later part needs the design from the earlier parts (seed).');
   const usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
   if (mode === 'parts' && plan && lockFootprint && !locked) {
-    locked = await planFootprint({ client, model, photos, plan, notes, effort, maxTokens, planTools, onEvent, usage });
+    locked = await planFootprint({ client, model, photos, plan, notes, effort, maxTokens, planTools, onEvent, usage, plate });
   }
   if (mode !== 'parts') locked = null;
   const lockedOps = locked ? skeletonOps(locked) : null;
@@ -231,7 +235,7 @@ async function designHouse({
     content.push({ type: 'text', text: fixTask({ design, problems: problemList(compile(design)) }) });
   } else {
     if (!photos.length && !notes) throw new Error('Add at least one photo or a description.');
-    content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target, hasPlan: !!plan, locked, lockedOps, seed: fromPart > 1 ? seed : null, fromPart, choices }) });
+    content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target, hasPlan: !!plan, locked, lockedOps, seed: fromPart > 1 ? seed : null, fromPart, choices, plate }) });
   }
   const messages = [{ role: 'user', content }];
   const st = { lastDraft: mode === 'parts' && fromPart > 1 ? seed : null, compiles: 0, rounds: 0 };
@@ -277,6 +281,7 @@ async function designHouse({
           continue;
         }
         st.compiles++;
+        if (plate !== 32 && d.plate == null) d.plate = plate; // the larger plate is the task's choice, not a guess
         const res = compile(d), planProblems = checkFootprint(d, locked);
         d.source = 'photos';
         st.lastDraft = d;

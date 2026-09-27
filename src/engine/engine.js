@@ -1,7 +1,7 @@
 // Brickhouse engine: part catalog, design compiler, connection checker, manual steps.
 // Dependency-free. Runs in the browser (globals) and in Node (require).
 // The design language it compiles is documented in src/server/prompt.js (SPEC).
-const BASE = 32;
+
 const COLORS = {
   'White':{hex:'#F2F3F2',bl:1}, 'Tan':{hex:'#E4CD9E',bl:2}, 'Dark Tan':{hex:'#958A73',bl:69},
   'Light Bluish Gray':{hex:'#A0A5A9',bl:86}, 'Dark Bluish Gray':{hex:'#6C6E68',bl:85}, 'Black':{hex:'#2B2B2B',bl:11},
@@ -37,7 +37,8 @@ const SPECIAL = {
   fence4:{no:'3633', name:'Fence 1 x 4 x 1', w:4,d:1,h:3, shape:'fence', cost:0.10},
   palmtop:{no:'2566', name:'Palm tree top', w:1,d:1,h:1, studs:false, shape:'palm', cost:0.30}
 };
-const GLASS_COST = 0.10, BASEPLATE = {no:'3811', name:'Baseplate 32 x 32', color:'Green', cost:12};
+// Baseplates by size: a design sets "plate": 48 for the larger one (default 32).
+const GLASS_COST = 0.10, BASEPLATES = {32:{no:'3811', name:'Baseplate 32 x 32', color:'Green', cost:12}, 48:{no:'4186', name:'Baseplate 48 x 48', color:'Green', cost:25}};
 const N4 = [[1,0],[-1,0],[0,1],[0,-1]];
 const K3 = (x,z,p)=>x+','+z+','+p;
 
@@ -76,9 +77,11 @@ function lineCells(s){
 function rectCells(r){ const out=[]; for(let x=Math.min(r[0],r[2]);x<=Math.max(r[0],r[2]);x++) for(let z=Math.min(r[1],r[3]);z<=Math.max(r[1],r[3]);z++) out.push([x,z]); return out; }
 
 function compile(design){
+  const BASE=design&&design.plate!=null?Number(design.plate):32, BASEPLATE=BASEPLATES[BASE]||BASEPLATES[32];
   const clock=(typeof performance!=='undefined')?performance:Date;
   const t0=clock.now();
   const errors=[], warnings=[], parts=[], occ=new Map(), subs=[];
+  if(!BASEPLATES[BASE]) errors.push({msg:`plate must be 32 or 48 (got ${design.plate})`, op:null});
   const phases=design.phases||[]; const phaseIdx=new Map(phases.map((p,i)=>[p,i]));
   const wallCourse=new Map(); const wallPairs=new Set(); const wallCourses=new Map();
   const abutEdges=[];
@@ -410,6 +413,6 @@ function compile(design){
   const pages=1+Math.ceil(inventory.length/24)+steps.length;
   const ms=clock.now()-t0;
   return {parts,steps,subs,errors,warnings,joints,jn,inventory,occ,
-    stats:{pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms}};
+    stats:{pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32}};
 }
 if(typeof module!=='undefined') module.exports={compile,COLORS,SPECIAL,SIZE_PARTS};

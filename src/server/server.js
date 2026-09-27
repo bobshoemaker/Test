@@ -5,6 +5,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { designHouse, surveyHouse } = require('./designer');
+const { scaleFor } = require('./scale');
 const { lookupAddress, fetchMapillaryImage } = require('./lookup');
 const { lookupTerrain } = require('./terrain');
 const { anthropicKey, makeAnthropicClient } = require('./client');
@@ -92,7 +93,8 @@ async function handleDesign(req, res) {
   let body;
   try { body = JSON.parse(await readBody(req)); } catch (e) { return send(res, 400, { error: e.message }); }
   const photos = cleanPhotos(body.photos);
-  const target = Math.max(300, Math.min(2500, Number(body.target) || 1200));
+  const sc = scaleFor(body.plate);
+  const target = Math.max(300, Math.min(3000, Number(body.target) || sc.target));
   const notes = String(body.notes || '').slice(0, 1500);
   // The owner's answers to the survey, as {question, answer, detail}; the design follows them.
   const choices = (Array.isArray(body.choices) ? body.choices : []).slice(0, 8)
@@ -110,7 +112,7 @@ async function handleDesign(req, res) {
   const t0 = Date.now();
   try {
     const out = await designHouse({
-      client, model: MODEL, effort: EFFORT, photos, notes, target, choices,
+      client, model: MODEL, effort: EFFORT, photos, notes, target, choices, plate: sc.plate,
       mode: body.mode === 'fix' ? 'fix' : 'design', design: body.design || null, onEvent: emit,
     });
     if (credits.length) out.design.photoCredits = credits;
@@ -132,7 +134,7 @@ async function handleLookup(req, res) {
     const r = await lookupAddress(body.address);
     // Street and slope, best effort: a lookup still works when the elevation or street service is down.
     if (r.place) {
-      try { const t = await lookupTerrain(r.place, body.address); r.terrain = { note: t.note, streets: t.frontage.map((f) => f.name), building: t.building && { areaSqFt: t.building.areaSqFt, tags: t.building.tags }, analysis: t.analysis }; } catch (e) { r.notes = [...(r.notes || []), `No terrain: ${e.message}`]; }
+      try { const t = await lookupTerrain(r.place, body.address, { plate: body.plate }); r.terrain = { note: t.note, streets: t.frontage.map((f) => f.name), building: t.building && { areaSqFt: t.building.areaSqFt, tags: t.building.tags }, analysis: t.analysis }; } catch (e) { r.notes = [...(r.notes || []), `No terrain: ${e.message}`]; }
     }
     send(res, 200, r);
   } catch (e) { send(res, 502, { error: e.message }); }

@@ -108,3 +108,13 @@ test('a building outline turned 20 degrees becomes square locked walls with the 
   const ops = skeletonOps(L);
   assert.deepEqual(compile({ name: 'o', phases: ops.map((o) => o.phase), ops }).errors, []);
 });
+
+test('on the 48 x 48 plate at 1.5 ft per stud the same house is a third larger, with a front yard', () => {
+  const L = layoutFootprint(PLAN, { size: 48, ftPerStud: 1.5, frontYard: 3 });
+  assert.deepEqual(L.problems, []);
+  assert.equal(L.size, 48);
+  const house = L.blocks.find((b) => b.name === 'House');
+  assert.equal(Math.max(...house.cellRects.map((r) => r[3])), 42, 'three yard rows in front of row 45');
+  const wing = L.blocks.find((b) => b.name === 'Wing');
+  assert.equal(house.cellRects[0][2] - wing.cellRects[0][0], Math.round(20 / 1.5), 'wing plus house, 20 ft wide = 13 studs at 1.5 ft');
+});

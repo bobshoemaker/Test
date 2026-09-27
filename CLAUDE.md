@@ -87,6 +87,9 @@ before changing API parameters.
 
 ## Coordinates and units
 
+- A design may set `"plate": 48` for the larger model (48 x 48 baseplate, 1.5 ft per stud, about
+  2,400 pieces, room for yards and a corner lot's second street); `src/server/scale.js` holds the
+  numbers and `--plate 48` / `plate` on /api/design select it. The rest of this section is 32.
 - 32 x 32 stud baseplate. x = 0..31 left to right seen from the street; z = 0..31 back to
   front; the street runs along z = 31.
 - Heights are in plates: brick = 3, plate/tile = 1. Wall course c starts at
@@ -134,4 +137,5 @@ its license terms checked for a physical derived product.
    and oblique aerial imagery as photo sources, property facts (stories, size, year), and
    cropping Mapillary panoramas, which are skipped today and are much of recent coverage.
 5. Mobile client (Flutter) on top of the server API.
-6. Scale option (studs per foot) so small houses can use more of the baseplate.
+6. Scale option: done as the 48 x 48 plate at 1.5 ft per stud. Still to do: a detail pass and plant
+   library to use the room, and sideways (SNOT) parts for wall details.

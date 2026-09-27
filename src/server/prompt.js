@@ -2,14 +2,15 @@
 // design JSON may contain; src/engine/engine.js implements it. Keep them in sync.
 const fs = require('node:fs');
 const path = require('node:path');
+const { scaleFor } = require('./scale');
 const { COLORS } = require('../engine/engine.js');
 
 const SPEC = `You design buildable brick models of real houses for a realtor's closing-gift kit. You study listing photos and write the house as a design in the JSON language below. A deterministic engine compiles it into real parts, checks every stud connection in build order, and writes the building manual.
 
 WORLD
-- One 32 x 32 stud baseplate. x runs 0..31 from left to right as seen from the street; z runs 0..31 from back to front; the street is along z=31.
+- One 32 x 32 stud baseplate (or 48 x 48 when the task says so: then set "plate": 48 and read every 31 below as 47). x runs 0..31 from left to right as seen from the street; z runs 0..31 from back to front; the street is along z=31.
 - Heights are in plates: a brick is 3 plates tall, a plate or tile is 1. y=0 sits on the baseplate.
-- Default scale is about 2 ft per stud, so a story is 4 brick courses (12 plates). Compress the yard so the house, driveway and some front and back yard fit.
+- Default scale is about 2 ft per stud, so a story is 4 brick courses (12 plates); on the 48 x 48 plate it is about 1.5 ft per stud and a story is 5 or 6 courses. Compress the yard so the house, driveway and some front and back yard fit.
 
 OPS (run in list order; earlier ops claim space first, so list walls, then balcony and bay floors, then bands, then roofs, then landscaping, then sub-builds. Each op's "phase" must appear in "phases"; the manual builds phases in the order of that list, bottom to top)
 - walls {"op":"walls","phase","color","courses":[c0,c1],"base":plate,"segments":[[x0,z0,x1,z1],...],"openings":[...],"trim":color?,"trimSides":bool?,"trimHeader":bool?,"trimSill":bool?,"block":name?}
@@ -46,7 +47,7 @@ RULES
 - Sloped lots: when the house sits above the street (steps up to the front door), build a solid foundation under the raised part first (a walls or fill op of bricks, as tall as the rise) and start those walls on top of it with "base". Keep the garage at street level when the photos show it there.
 - Stairs: build them from fill ops at rising y, each step at least 2 studs deep and resting on the step below; the top step meets the floor at the door.
 
-OUTPUT: one JSON object with keys name, place, scale, facts, assumed, phases, ops. No comments.`;
+OUTPUT: one JSON object with keys name, place, scale, facts, assumed, phases, ops (and plate, when it is 48). No comments.`;
 
 function example() {
   // A hand-built design made from three listing photos; compiles with 0 errors and 0 warnings.
@@ -69,9 +70,9 @@ ${choices.map((c) => `- ${c.question} ${c.answer}${c.detail ? `: ${c.detail}` : 
 `;
 }
 
-function designTask({ photoCount, notes, target, hasPlan = false, choices = null }) {
+function designTask({ photoCount, notes, target, hasPlan = false, choices = null, plate = 32 }) {
   return `TASK
-Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes from the agent: "${notes}"` : ''}. Aim for about ${target} pieces (parts plus window glass plus the baseplate), within 10 percent.${planNote(hasPlan)}${choicesNote(choices)}
+Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes from the agent: "${notes}"` : ''}. Aim for about ${target} pieces (parts plus window glass plus the baseplate), within 10 percent.${plateNote(plate)}${planNote(hasPlan)}${choicesNote(choices)}
 Call compile_design on your draft, fix every error and warning it reports, and compile again until it reports 0 errors and 0 warnings near the target (at most 4 compiles). Then reply with only the final design JSON.
 
 EXAMPLE of a valid design (a two-story house built from three listing photos, 778 pieces, 0 errors):
@@ -98,14 +99,23 @@ const PARTS = [
   { name: 'Planting', task: 'PART 4 OF 4, PLANTING AND FINISH. Add trees, cacti, shrubs and other sub-builds, in the landscaping style from the owner\'s choices if there is one. Then fix every remaining error and warning. When it compiles with 0 errors and 0 warnings, reply with one sentence; the last compiled design is kept.' },
 ];
 
+// The larger plate: said once in the task, since SPEC is written for 32 x 32.
+function plateNote(plate) {
+  const sc = scaleFor(plate);
+  if (sc.plate === 32) return '';
+  return `
+PLATE AND SCALE. This model is on the ${sc.plate} x ${sc.plate} baseplate: set "plate": ${sc.plate} in the design. x and z run 0..${sc.last} and the street is along z = ${sc.last}. The scale is about ${sc.ftPerStud} ft per stud, so a story is about ${sc.storyCourses} courses. Use the extra room for what the photos show: yards and planting, both streets of a corner lot, trim, railings and details.
+`;
+}
+
 // The walls laid out from the floor plan, which the design has to keep (checked on every compile).
 function lockedNote(locked, ops) {
   if (!locked) return '';
   return `
-LOCKED WALLS FROM THE ${locked.source === 'outline' ? "HOUSE'S BUILDING OUTLINE (county or OpenStreetMap building footprint; it has no doors or windows, so place those from the photos)" : 'FLOOR PLAN'}. These walls ops were laid out from the ${locked.source === 'outline' ? 'outline' : 'floor plan'} at ${locked.scale.ftPerStud} ft per stud, with the street along z=31. Start the design from them. Keep every op's "block" and "segments", and each listed opening's "cells", exactly as given: every compile checks them and reports changes as errors. Everything else is yours to set from the photos: courses and base (heights, raised floors, foundations), colors, trim, each opening's courses and fill, windows and other openings, and more walls ops for the same block (a foundation course or a parapet) with the same block and segments.
+LOCKED WALLS FROM THE ${locked.source === 'outline' ? "HOUSE'S BUILDING OUTLINE (county or OpenStreetMap building footprint; it has no doors or windows, so place those from the photos)" : 'FLOOR PLAN'}. These walls ops were laid out from the ${locked.source === 'outline' ? 'outline' : 'floor plan'} at ${locked.scale.ftPerStud} ft per stud, with the street along z=${(locked.size || 32) - 1}. Start the design from them. Keep every op's "block" and "segments", and each listed opening's "cells", exactly as given: every compile checks them and reports changes as errors. Everything else is yours to set from the photos: courses and base (heights, raised floors, foundations), colors, trim, each opening's courses and fill, windows and other openings, and more walls ops for the same block (a foundation course or a parapet) with the same block and segments.
 ${JSON.stringify(ops)}
 Block rectangles for roofs ("rects"; blocks with the same wall-top height share one roof): ${JSON.stringify(locked.blocks.filter((b) => b.cells.length).map((b) => ({ block: b.name, rects: b.cellRects })))}
-${locked.sideStreet ? `Corner lot: a second street runs along x = ${locked.sideStreet.side === 'left' ? 0 : 31} (columns ${locked.sideStreet.columns.join(' to ')} are kept free for its street and sidewalk; build them in part 3).` : ''}
+${locked.sideStreet ? `Corner lot: a second street runs along x = ${locked.sideStreet.side === 'left' ? 0 : (locked.size || 32) - 1} (columns ${locked.sideStreet.columns.join(' to ')} are kept free for its street and sidewalk; build them in part 3).` : ''}
 ${locked.stairs.length ? `Stairs on the plan (stud rectangles [x0,z0,x1,z1]; build them in part 3): ${JSON.stringify(locked.stairs)}` : ''}
 `;
 }
@@ -118,9 +128,9 @@ ${JSON.stringify(seed)}
 `;
 }
 
-function partsTask({ photoCount, notes, target, hasPlan = false, locked = null, lockedOps = null, seed = null, fromPart = 1, choices = null }) {
+function partsTask({ photoCount, notes, target, hasPlan = false, locked = null, lockedOps = null, seed = null, fromPart = 1, choices = null, plate = 32 }) {
   return `TASK
-Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes from the agent: "${notes}"` : ''}. The finished design should have about ${target} pieces (parts plus window glass plus the baseplate) and no more than 10 percent over. Fewer is fine when the house is simple.${planNote(hasPlan)}${choicesNote(choices)}
+Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes from the agent: "${notes}"` : ''}. The finished design should have about ${target} pieces (parts plus window glass plus the baseplate) and no more than 10 percent over. Fewer is fine when the house is simple.${plateNote(plate)}${planNote(hasPlan)}${choicesNote(choices)}
 
 WORK IN PARTS. You build the design in ${PARTS.length} parts, one part per turn; each turn tells you which part to do. In every part:
 - Add that part's ops to the design so far and call compile_design on the complete design right away. The compiler is fast and exact. Send a rough draft early and let it find collisions and support problems; don't work out coordinates in your head.
@@ -136,7 +146,7 @@ ${seed ? PARTS[fromPart - 1].task : locked ? PARTS[0].locked : PARTS[0].task}`;
 }
 
 // The plan-reading step: Claude reads the footprint off a gridded plan; code lays it out in studs.
-const FOOTPRINT_SPEC = `You read a house's listing floor plan and photos and report its footprint for a brick model. Code turns your report into walls on a 32 x 32 stud baseplate at 2 ft per stud, so you only read the plan; you don't place bricks.
+const FOOTPRINT_SPEC = `You read a house's listing floor plan and photos and report its footprint for a brick model. Code turns your report into walls on the baseplate at the model's scale (2 ft per stud on 32 x 32, 1.5 on 48 x 48), so you only read the plan; you don't place bricks.
 
 Work in the plan's own pixel coordinates: x to the right, y down. The gridded copy of the plan has a thin line every 10 px and labels every 50 px (red across the top, blue down the side), all in original plan pixels. Read positions off that grid.
 
@@ -155,7 +165,7 @@ const FOOTPRINT_TOOL = (() => {
   const rect = { type: 'array', items: { type: 'number' }, minItems: 4, maxItems: 4 };
   return {
     name: 'submit_footprint',
-    description: 'Lays out the footprint read from the floor plan in studs at 2 ft per stud and returns the layout, any problems, and an overlay of the walls on the plan. Coordinates are original plan pixels.',
+    description: 'Lays out the footprint read from the floor plan in studs at the model scale and returns the layout, any problems, and an overlay of the walls on the plan. Coordinates are original plan pixels.',
     input_schema: {
       type: 'object',
       properties: {

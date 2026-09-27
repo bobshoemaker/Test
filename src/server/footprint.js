@@ -92,7 +92,7 @@ const DEFAULT_FILL = {
  * @returns {object} {scale, blocks:[{name,levels,cellRects,cells,openings}], stairs, map, problems}
  *   map: stud = [a*px + c*py + e, b*px + d*py + f], cell centers at integer + 0.5 (for overlays)
  */
-function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap = 2 } = {}) {
+function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap = 2, frontYard = 0 } = {}) {
   const problems = [];
   const cal = calibrate(fp.rooms);
   if (!cal) return { problems: ['Give at least two rooms with size labels (like "14 x 20") and their rectPx so the plan can be scaled.'], blocks: [] };
@@ -161,11 +161,13 @@ function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap 
     if (side === 'back') problems.push('The side street faces the back of the lot; only a street on the left or right can be laid out. Left out.');
   }
   const width = bx1 - bx0 + 1;
+  // front yard rows between the house and the sidewalk, as many as fit up to frontYard
+  const yard = Math.max(0, Math.min(frontYard, avail - (bz1 - bz0 + 1)));
   if ((side === 'left' || side === 'right') && width + streetRows > size) {
     problems.push(`There is no room for the side street's ${streetRows} rows beside the house at ${ftPerStud} ft per stud; the house is centered and the side street is left out.`);
     side = null;
   }
-  const offX = (side === 'left' ? streetRows : side === 'right' ? size - streetRows - width : Math.floor((size - width) / 2)) - bx0, offZ = avail - 1 - bz1;
+  const offX = (side === 'left' ? streetRows : side === 'right' ? size - streetRows - width : Math.floor((size - width) / 2)) - bx0, offZ = avail - 1 - yard - bz1;
   for (const b of blocks) b.cellRects = b.cellRects.map((r) => [r[0] + offX, r[1] + offZ, r[2] + offX, r[3] + offZ]);
 
   // Each wall cell belongs to one block: the first listed (tallest) wins, and a later block's
@@ -220,7 +222,7 @@ function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap 
     scale: { pxPerFt: Number(cal.pxPerFt.toFixed(3)), ftPerStud, rooms: cal.rooms.map((r) => ({ name: r.name, pxPerFt: Number(r.pxPerFt.toFixed(2)) })) },
     street,
     blocks: blocks.map((b) => ({ name: b.name, levels: b.levels, cellRects: b.cellRects, cells: b.cells, openings: b.openings, pulledForward: b.dz })),
-    stairs, map, problems, source: 'plan',
+    stairs, map, problems, source: 'plan', size,
     sideStreet: side === 'left' || side === 'right' ? { planSide: fp.sideStreet, side, columns: side === 'left' ? [0, streetRows - 1] : [size - streetRows, size - 1] } : null,
   };
 }
@@ -230,7 +232,7 @@ function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap 
 // sideStreet (optional) toward a corner lot's second street. The outline's walls are squared to the
 // stud grid (turned by its dominant edge direction), rasterized with walls on the outline's edges,
 // and laid out like a plan: same blocks, fitting and locking, but no doors (those come from photos).
-function footprintFromOutline({ buildings, toStreet, sideStreet = null, ftPerStud = 2, size = 32, streetRows = 2 }) {
+function footprintFromOutline({ buildings, toStreet, sideStreet = null, ftPerStud = 2, size = 32, streetRows = 2, frontYard = 0 }) {
   const main = buildings[0];
   // dominant wall direction, from edge lengths (angles folded to a quarter turn)
   let sx = 0, sy = 0;
@@ -270,7 +272,7 @@ function footprintFromOutline({ buildings, toStreet, sideStreet = null, ftPerStu
   let side = null;
   if (sideStreet) { const sxv = dot(sideStreet, xAxis), szv = dot(sideStreet, zAxis); if (Math.abs(sxv) > Math.abs(szv)) side = sxv < 0 ? 'W' : 'E'; }
   const L = layoutFootprint({ street: 'S', sideStreet: side, rooms: [{ name: 'scale', label: '10 x 10', rectPx: [0, 0, 10, 10] }, { name: 'scale', label: '10 x 10', rectPx: [0, 0, 10, 10] }],
-    blocks, openings: [], stairs: [] }, { ftPerStud, size, streetRows });
+    blocks, openings: [], stairs: [] }, { ftPerStud, size, streetRows, frontYard });
   L.source = 'outline';
   delete L.map; // no plan image to lay it over
   return L;

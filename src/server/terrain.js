@@ -8,8 +8,7 @@ const UA = `Brickhouse/0.4 (terrain${process.env.BRICKHOUSE_CONTACT ? '; ' + pro
 // Public Overpass servers are often busy; try each in turn.
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
 const EPQS = 'https://epqs.nationalmap.gov/v1/json';
-const FT_PER_COURSE = 2.5; // a story is about 10 ft and 4 courses at 2 ft per stud
-const PLATE_M = 32 * 2 * 0.3048; // the baseplate's 64 ft
+const { scaleFor } = require('./scale');
 const FRONTAGE_M = 20; // a street this close to the building's outline is one the lot fronts
 
 const SUFFIX = { blvd: 'boulevard', st: 'street', ave: 'avenue', av: 'avenue', dr: 'drive', rd: 'road', ln: 'lane', ct: 'court',
@@ -167,7 +166,8 @@ function lineSlope(pts) { // ft per metre of t
 
 // Slopes across the baseplate: each street (left to right as seen from it) and the lot behind the
 // first street (toward the back, and left to right).
-function analyzeTerrain(samples) {
+function analyzeTerrain(samples, { plate = 32 } = {}) {
+  const PLATE_M = scaleFor(plate).widthFt * 0.3048;
   const streets = [];
   for (const si of [...new Set(samples.filter((p) => p.kind === 'street').map((p) => p.si))]) {
     const st = samples.filter((p) => p.kind === 'street' && p.si === si && Number.isFinite(p.ft));
@@ -186,12 +186,13 @@ function analyzeTerrain(samples) {
     streetRiseRightFt: first.riseRightFt, streetGradePct: first.gradePct, streetFt: first.levelFt };
 }
 
-const courses = (ft) => { const c = Math.round(Math.abs(ft) / FT_PER_COURSE * 2) / 2; return c < 1 ? 'under 1 course' : `about ${c} course${c === 1 ? '' : 's'}`; };
+const coursesAt = (plate) => (ft) => { const c = Math.round(Math.abs(ft) / scaleFor(plate).ftPerCourse * 2) / 2; return c < 1 ? 'under 1 course' : `about ${c} course${c === 1 ? '' : 's'}`; };
 
 // The note the survey and the design get. Street slopes are measured well; the lot's rise less so
 // (bare-earth data is smoothed and interpolated under the house), so it's framed as approximate.
 function terrainNote(t) {
   if (!t || !t.analysis || !t.frontage.length) return '';
+  const sc = scaleFor(t.plate), courses = coursesAt(t.plate), L = sc.last;
   const a = t.analysis, [s0, s1] = t.frontage, side = (ft) => (ft > 0 ? 'right' : 'left');
   const b = t.building;
   const parts = [`Terrain (USGS elevation data, public domain; streets${b ? ' and the building outline' : ''} from OpenStreetMap):`];
@@ -199,23 +200,23 @@ function terrainNote(t) {
   if (s1) {
     const sideOf = (from, to) => { const { right } = streetFrame(from), d = [to.nearest[0] - from.from[0], to.nearest[1] - from.from[1]];
       return d[0] * right[0] + d[1] * right[1] > 0 ? 'right' : 'left'; };
-    const a1 = sideOf(s0, s1), a0 = sideOf(s1, s0), x = (sd) => (sd === 'right' ? 31 : 0);
-    parts.push(`It is a corner lot on ${s0.name} and ${s1.name}. Seen from ${s0.name} facing the house, ${s1.name} is on the ${a1}; seen from ${s1.name}, ${s0.name} is on the ${a0}. The street the plan's street side faces goes along z = 31 and the other one along the side it is on: with ${s0.name} at z = 31, ${s1.name} runs along x = ${x(a1)}; with ${s1.name} at z = 31, ${s0.name} runs along x = ${x(a0)}.`);
+    const a1 = sideOf(s0, s1), a0 = sideOf(s1, s0), x = (sd) => (sd === 'right' ? L : 0);
+    parts.push(`It is a corner lot on ${s0.name} and ${s1.name}. Seen from ${s0.name} facing the house, ${s1.name} is on the ${a1}; seen from ${s1.name}, ${s0.name} is on the ${a0}. The street the plan's street side faces goes along z = ${L} and the other one along the side it is on: with ${s0.name} at z = ${L}, ${s1.name} runs along x = ${x(a1)}; with ${s1.name} at z = ${L}, ${s0.name} runs along x = ${x(a0)}.`);
   } else {
-    parts.push(`${s0.name} runs along the side of the house that faces the street (z = 31).`);
+    parts.push(`${s0.name} runs along the side of the house that faces the street (z = ${L}).`);
   }
   for (const st of a.streets) {
     const s = t.frontage[st.si];
     parts.push(Math.abs(st.riseRightFt) < 1
       ? `${s.name} is close to level across the model.`
-      : `${s.name} slopes about ${st.gradePct}%: across the model's 64 ft it is ${Math.abs(st.riseRightFt)} ft (${courses(st.riseRightFt)}) higher on the ${side(st.riseRightFt)} as seen from ${s.name} facing the house, so its street, sidewalk and driveway should step up that way.`);
+      : `${s.name} slopes about ${st.gradePct}%: across the model's ${sc.widthFt} ft it is ${Math.abs(st.riseRightFt)} ft (${courses(st.riseRightFt)}) higher on the ${side(st.riseRightFt)} as seen from ${s.name} facing the house, so its street, sidewalk and driveway should step up that way.`);
   }
   parts.push(`Going back from ${s0.name}, the ground data shows the lot rising about ${a.lotRiseBackFt} ft across the model; it is smoothed and interpolated under the house, so a graded pad or retaining walls can make the real rise at the house larger. Where the photos show more (steps up to the door, a garage below the main floor), go by the photos.`);
   return parts.join(' ');
 }
 
 // Building, streets and slopes for a geocoded place. Returns {building, frontage, streets, samples, analysis, note}.
-async function lookupTerrain(place, address, { fetchImpl = fetch } = {}) {
+async function lookupTerrain(place, address, { fetchImpl = fetch, plate = 32 } = {}) {
   let building = null;
   try { building = await findBuilding(place, address, { fetchImpl }); } catch { /* fall back to the geocoded point */ }
   const center = building ? building.center : place;
@@ -223,7 +224,7 @@ async function lookupTerrain(place, address, { fetchImpl = fetch } = {}) {
   const frontage = frontageStreets(streets, address);
   if (!frontage.length) return { building, frontage, streets, samples: [], analysis: null, note: '' };
   const samples = await elevations(center, samplePlan(frontage), { fetchImpl });
-  const t = { building, frontage, streets, street: frontage[0], samples, analysis: analyzeTerrain(samples) };
+  const t = { building, frontage, streets, street: frontage[0], samples, plate, analysis: analyzeTerrain(samples, { plate }) };
   t.note = terrainNote(t);
   return t;
 }

@@ -11,6 +11,7 @@
 //            --address "..."  add the street and slope from USGS elevations and OpenStreetMap to the notes; with
 //                             --parts and no --plan, the walls are locked to the house's building outline
 //            --front-street "Wood Terrace"  on a corner lot, the street that goes at the front (z = 31)
+//            --plate 48  the larger model: 48 x 48 baseplate at 1.5 ft per stud, about 2,400 pieces
 //            --choices survey.json [--answer id=option ...]  the owner's answers from scripts/survey.js
 //            --parts-limit 1  stop after the first N parts   --no-render  don't send renders of each draft
 const fs = require('node:fs');
@@ -23,7 +24,8 @@ const flag = (name) => { const i = args.indexOf('--' + name); if (i >= 0) { args
 const address = opt('address', null), frontStreet = opt('front-street', null);
 let terrain = null;
 let notes = opt('notes', '');
-const target = Number(opt('target', 1200)), out = opt('out', null);
+const plateSize = Number(opt('plate', 32));
+const target = Number(opt('target', require('../src/server/scale').scaleFor(plateSize).target)), out = opt('out', null);
 const model = opt('model', process.env.BRICKHOUSE_MODEL || 'claude-opus-5-5'), effort = opt('effort', process.env.BRICKHOUSE_EFFORT || null);
 const maxTokens = Number(opt('max-tokens', 64000));
 const partsLimit = Number(opt('parts-limit', 4)), planFile = opt('plan', null), footprintFile = opt('footprint', null);
@@ -44,7 +46,7 @@ async function addTerrain() {
   const place = await require('../src/server/lookup').geocode(address);
   if (!place) { console.log(`Terrain skipped: ${address} not found.`); return; }
   try {
-    const t = await require('../src/server/terrain').lookupTerrain(place, address);
+    const t = await require('../src/server/terrain').lookupTerrain(place, address, { plate: plateSize });
     terrain = t;
     notes = [notes, `Address: ${place.label}.`, t.note].filter(Boolean).join(' ');
     if (t.note) console.log(t.note);
@@ -68,7 +70,8 @@ async function addTerrain() {
   if (!locked && parts && !plan && !noFootprint && terrain) {
     const input = require('../src/server/terrain').outlineInput(terrain, { frontStreet });
     if (input) {
-      locked = require('../src/server/footprint').footprintFromOutline(input);
+      const sc = require('../src/server/scale').scaleFor(plateSize);
+      locked = require('../src/server/footprint').footprintFromOutline({ ...input, size: sc.size, ftPerStud: sc.ftPerStud, frontYard: sc.frontYard });
       console.log(`Walls locked to the building outline, ${input.front} at the front${input.side ? `, ${input.side} on the ${locked.sideStreet ? locked.sideStreet.side : '?'}` : ''}:`);
       locked.blocks.forEach((b) => console.log(`  ${b.name} (${b.levels} level${b.levels > 1 ? 's' : ''}): studs ${JSON.stringify(b.cellRects)}`));
       locked.problems.forEach((p) => console.log(`  problem: ${p}`));
@@ -83,7 +86,7 @@ async function addTerrain() {
     choices = resolveChoices(sv.questions, answers);
     choices.forEach((c) => console.log(`Choice: ${c.question} ${c.answer}`));
   }
-  const res = await designHouse({ client, model, effort, maxTokens, photos, plan, notes, target, mode: parts ? 'parts' : 'design', partsLimit,
+  const res = await designHouse({ client, model, effort, maxTokens, photos, plan, notes, target, mode: parts ? 'parts' : 'design', partsLimit, plate: plateSize,
     render: renderer && renderer.render, planTools: renderer, lockFootprint: !noFootprint, locked,
     seed: resumeFile ? JSON.parse(fs.readFileSync(resumeFile, 'utf8')) : null, fromPart, choices,
     onEvent: (ev) => {
