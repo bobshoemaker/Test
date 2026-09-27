@@ -21,6 +21,16 @@ function makeFakeClient({ delayMs = 600 } = {}) {
               options: [{ id: 'hip', label: 'Hip roof', detail: 'Sloped on all four sides.' }, { id: 'gable', label: 'Gable ends', detail: 'Flat triangular ends on the sides.' }], recommended: 'hip' }],
           } }] };
         }
+        if (params.tools && params.tools.some((t) => t.name === 'submit_footprint')) {
+          // A 30 x 24 ft one-story house read off a plan at 5 px per ft, street at the bottom.
+          await wait();
+          return { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'toolu_fake_footprint', name: 'submit_footprint', input: {
+            street: 'S', rooms: [{ name: 'Living', label: '16 X 12', rectPx: [40, 60, 120, 120] }, { name: 'Bedroom', label: '12 x 10', rectPx: [120, 60, 180, 110] }],
+            blocks: [{ name: 'House', levels: 1, rectsPx: [[40, 60, 190, 180]] }],
+            openings: [{ block: 'House', kind: 'door', atPx: [110, 180], widthFt: 3 }, { block: 'House', kind: 'garage door', atPx: [160, 180], widthFt: 8 }],
+            stairs: [], notes: 'scripted example',
+          } }] };
+        }
         call++;
         await wait();
         const good = JSON.parse(example());

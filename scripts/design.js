@@ -22,7 +22,6 @@ const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 ? args.splice(i, 2)[1] : def; };
 const flag = (name) => { const i = args.indexOf('--' + name); if (i >= 0) { args.splice(i, 1); return true; } return false; };
 const address = opt('address', null), frontStreet = opt('front-street', null);
-let terrain = null;
 let notes = opt('notes', '');
 const plateSize = Number(opt('plate', 32));
 const target = Number(opt('target', require('../src/server/scale').scaleFor(plateSize).target)), out = opt('out', null);
@@ -40,21 +39,14 @@ const readImage = (f) => {
 };
 const photos = args.map(readImage), plan = planFile ? readImage(planFile) : null;
 
-// --address: geocode it and add the street and slope (USGS elevations, OpenStreetMap streets) to the notes.
-async function addTerrain() {
-  if (!address) return;
-  const place = await require('../src/server/lookup').geocode(address);
-  if (!place) { console.log(`Terrain skipped: ${address} not found.`); return; }
-  try {
-    const t = await require('../src/server/terrain').lookupTerrain(place, address, { plate: plateSize });
-    terrain = t;
-    notes = [notes, `Address: ${place.label}.`, t.note].filter(Boolean).join(' ');
-    if (t.note) console.log(t.note);
-  } catch (e) { console.log(`Terrain skipped: ${e.message}`); }
-}
-
 (async () => {
-  await addTerrain();
+  // The same preparation as the server: address to terrain note, and walls locked to the building
+  // outline when there's no plan (src/server/pipeline.js).
+  const prep = await require('../src/server/pipeline').prepareDesign({ address, notes, plan, plate: plateSize, frontStreet,
+    lockToOutline: parts && !noFootprint && !footprintFile });
+  notes = prep.notes;
+  prep.log.forEach((l) => console.log(l));
+  if (prep.terrain && prep.terrain.note) console.log(prep.terrain.note);
   let client;
   if (fake) client = require('../src/server/fakeClient').makeFakeClient({ delayMs: 50 });
   else {
@@ -65,18 +57,10 @@ async function addTerrain() {
   const base = (out || 'designs/generated/house.json').replace(/\.json$/, '');
   const renderer = noRender ? null : await require('../src/server/render').makeRenderer().catch((e) => { console.log(`Renders off: ${e.message}`); return null; });
   if (!noRender && !renderer) console.log('Renders off: Playwright is not installed.');
-  let locked = footprintFile ? JSON.parse(fs.readFileSync(footprintFile, 'utf8')) : null;
-  // No plan: lock the walls to the house's building outline, when the address lookup found one.
-  if (!locked && parts && !plan && !noFootprint && terrain) {
-    const input = require('../src/server/terrain').outlineInput(terrain, { frontStreet });
-    if (input) {
-      const sc = require('../src/server/scale').scaleFor(plateSize);
-      locked = require('../src/server/footprint').footprintFromOutline({ ...input, size: sc.size, ftPerStud: sc.ftPerStud, frontYard: sc.frontYard });
-      console.log(`Walls locked to the building outline, ${input.front} at the front${input.side ? `, ${input.side} on the ${locked.sideStreet ? locked.sideStreet.side : '?'}` : ''}:`);
-      locked.blocks.forEach((b) => console.log(`  ${b.name} (${b.levels} level${b.levels > 1 ? 's' : ''}): studs ${JSON.stringify(b.cellRects)}`));
-      locked.problems.forEach((p) => console.log(`  problem: ${p}`));
-      fs.writeFileSync(`${base}.footprint.json`, JSON.stringify(locked, null, 2));
-    } else console.log('No building outline found; the walls are not locked.');
+  const locked = footprintFile ? JSON.parse(fs.readFileSync(footprintFile, 'utf8')) : prep.locked;
+  if (prep.locked && !footprintFile) {
+    prep.locked.blocks.forEach((b) => console.log(`  ${b.name} (${b.levels} level${b.levels > 1 ? 's' : ''}): studs ${JSON.stringify(b.cellRects)}`));
+    fs.writeFileSync(`${base}.footprint.json`, JSON.stringify(prep.locked, null, 2));
   }
   let choices = null;
   if (choicesFile) {
@@ -109,8 +93,9 @@ async function addTerrain() {
         fs.writeFileSync(file, JSON.stringify(ev.design, null, 2));
         console.log(`${clock()}   draft ${ev.n}${ev.part ? ' (' + ev.part + ')' : ''}: ${ev.stats.pieces} pieces, ${ev.errors} errors, ${ev.warnings} warnings -> ${file}`);
         ev.problems.slice(0, 5).forEach((p) => console.log(`${clock()}     ${p}`));
-        (ev.renders || []).forEach((r, i) => fs.writeFileSync(`${base}.draft-${ev.n}-${i ? 'three-quarter' : 'front'}.png`, Buffer.from(r.data, 'base64')));
-        if ((ev.renders || []).length) console.log(`${clock()}   renders -> ${base}.draft-${ev.n}-front.png, -three-quarter.png`);
+        const views = ['front', 'three-quarter', 'back-left', 'back-right'];
+        (ev.renders || []).forEach((r, i) => fs.writeFileSync(`${base}.draft-${ev.n}-${views[i] || i}.png`, Buffer.from(r.data, 'base64')));
+        if ((ev.renders || []).length) console.log(`${clock()}   renders -> ${base}.draft-${ev.n}-{${views.slice(0, ev.renders.length).join(',')}}.png`);
       }
       if (ev.type === 'partDone') console.log(`${clock()} Part ${ev.n} done${ev.summary ? ': ' + ev.summary : ''} (${ev.usage.output} output tokens so far)`);
     } }).finally(() => renderer && renderer.close());

@@ -8,6 +8,7 @@ const { designHouse, surveyHouse } = require('./designer');
 const { scaleFor } = require('./scale');
 const { lookupAddress, fetchMapillaryImage } = require('./lookup');
 const { lookupTerrain } = require('./terrain');
+const { prepareDesign } = require('./pipeline');
 const { anthropicKey, makeAnthropicClient } = require('./client');
 
 const ROOT = path.resolve(__dirname, '../..');
@@ -71,6 +72,10 @@ function readBody(req) {
 function slug(s) { return String(s || 'house').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'house'; }
 
 const NO_KEY = 'Set BRICKHOUSE_ANTHROPIC_API_KEY (or ANTHROPIC_API_KEY) in .env, or run with BRICKHOUSE_FAKE=1 to try the flow.';
+// Draft renders need Playwright; one browser serves every job, started on first use.
+let rendererP = null;
+const getRenderer = () => (rendererP = rendererP || require('./render').makeRenderer().catch(() => null));
+const cleanAddress = (a) => (typeof a === 'string' && a.trim() ? a.trim().slice(0, 200) : null);
 const cleanPhotos = (list) => (list || []).slice(0, MAX_PHOTOS).filter((p) => p && /^image\/(jpeg|png|webp|gif)$/.test(p.mediaType) && typeof p.data === 'string');
 
 // POST /api/survey {photos, notes}: a cheap first look; returns {summary, seen, questions} for the owner to answer.
@@ -82,7 +87,9 @@ async function handleSurvey(req, res) {
   const photos = cleanPhotos(body.photos);
   if (!photos.length) return send(res, 400, { error: 'Add at least one photo to check.' });
   try {
-    const out = await surveyHouse({ client, model: SURVEY_MODEL, effort: SURVEY_EFFORT, photos, notes: String(body.notes || '').slice(0, 1500) });
+    // With an address, the survey sees the same building, street and slope facts as the design.
+    const prep = await prepareDesign({ address: cleanAddress(body.address), notes: String(body.notes || '').slice(0, 1500), plate: scaleFor(body.plate).plate, lockToOutline: false });
+    const out = await surveyHouse({ client, model: SURVEY_MODEL, effort: SURVEY_EFFORT, photos, plan: cleanPhotos([body.plan])[0] || null, notes: prep.notes });
     send(res, 200, { summary: out.summary, seen: out.seen, questions: out.questions, model: FAKE ? 'fake' : SURVEY_MODEL });
   } catch (e) { send(res, 502, { error: e && e.message ? e.message : String(e) }); }
 }
@@ -107,18 +114,32 @@ async function handleDesign(req, res) {
     .map((c) => c && ({ credit: String(c.credit || '').slice(0, 200), license: String(c.license || '').slice(0, 60), page: String(c.page || '').slice(0, 300) }))
     .filter((c) => c && c.credit);
 
+  const plan = cleanPhotos([body.plan])[0] || null, address = cleanAddress(body.address);
+
   res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' });
-  const emit = (ev) => res.write(JSON.stringify(ev) + '\n');
+  // Renders and plan overlays go to Claude, not down the wire: the viewer draws the drafts itself.
+  const emit = (ev) => res.write(JSON.stringify({ ...ev, renders: undefined, overlay: undefined }) + '\n');
   const t0 = Date.now();
   try {
-    const out = await designHouse({
-      client, model: MODEL, effort: EFFORT, photos, notes, target, choices, plate: sc.plate,
-      mode: body.mode === 'fix' ? 'fix' : 'design', design: body.design || null, onEvent: emit,
-    });
+    let out;
+    if (body.mode === 'fix') {
+      out = await designHouse({ client, model: MODEL, effort: EFFORT, photos, notes, target, plate: sc.plate, mode: 'fix', design: body.design || null, onEvent: emit });
+    } else {
+      // The same steps as scripts/design.js: address facts, walls locked to the plan or the building
+      // outline, then the house built in parts with renders of each draft (src/server/pipeline.js).
+      if (address) emit({ type: 'status', message: 'Looking up the building, streets and slope…' });
+      const prep = await prepareDesign({ address, notes, plan, plate: sc.plate, frontStreet: body.frontStreet ? String(body.frontStreet).slice(0, 100) : null });
+      prep.log.forEach((m) => emit({ type: 'status', message: m }));
+      const renderer = await getRenderer();
+      out = await designHouse({
+        client, model: MODEL, effort: EFFORT, photos, plan, notes: prep.notes, target, choices, plate: sc.plate, mode: 'parts',
+        locked: prep.locked, render: renderer && renderer.render, planTools: renderer, onEvent: emit,
+      });
+    }
     if (credits.length) out.design.photoCredits = credits;
     const name = `${slug(out.design.name)}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
     fs.writeFileSync(path.join(ROOT, 'designs/generated', name + '.json'), JSON.stringify(out.design, null, 2));
-    emit({ type: 'done', design: out.design, stats: out.result.stats, errors: out.result.errors.length,
+    emit({ type: 'done', design: out.design, stats: out.result.stats, errors: out.result.errors.length + (out.planProblems || []).length, planProblems: out.planProblems || [],
       warnings: out.result.warnings.length, compiles: out.compiles, seconds: Math.round((Date.now() - t0) / 1000),
       saved: `generated/${name}`, note: out.note || null, model: FAKE ? 'fake' : MODEL });
   } catch (e) {

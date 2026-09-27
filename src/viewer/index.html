@@ -218,7 +218,10 @@ textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-ra
             <div class="cands" id="cands"></div>
             <div class="row" id="candRow" hidden><button class="btn" id="useCands">Add selected photos</button></div>
             <div class="row" id="pickRow"><button class="btn" id="pickBtn">Choose photos</button><input type="file" id="photoInput" multiple hidden>
-              <label class="target">About <input type="number" id="target" value="1200" min="300" max="2500" step="50" inputmode="numeric"> pieces</label></div>
+              <button class="btn" id="planBtn" type="button">Add floor plan</button><input type="file" id="planInput" accept="image/jpeg,image/png,image/webp" hidden>
+              <label class="target">About <input type="number" id="target" value="1200" min="300" max="2500" step="50" inputmode="numeric"> pieces</label>
+              <label class="target"><input type="checkbox" id="bigPlate"> Larger model (48 × 48, about 2,400 pieces)</label></div>
+            <div class="out" id="planStatus"></div>
             <div class="photos" id="thumbs"></div>
             <textarea class="notes" id="notes" rows="2" placeholder="Anything the photos don't show, like the roof color or which side the garage is on"></textarea>
             <div class="survey" id="survey" hidden></div>

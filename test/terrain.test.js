@@ -10,13 +10,14 @@ const way = (tags, pts) => ({ type: 'way', tags, geometry: pts.map(([e, n]) => l
 
 // Ground (ft) = 100 - 0.05 * east + 0.1 * north, in metres: rising to the north and to the west.
 // streets: [name, points]; buildings: overpass ways for the building query.
-function fakeFetch({ streets, buildings = [], lanes = [] }) {
+function fakeFetch({ streets, buildings = [], lanes = [], noElevation = false }) {
   return async (url) => {
     if (url.includes('/api/interpreter')) {
       const q = decodeURIComponent(new URL(url).searchParams.get('data'));
       const elements = q.includes('[building]') ? buildings : [...streets.map(([name, pts]) => way({ name, highway: 'residential' }, pts)), ...lanes];
       return { ok: true, json: async () => ({ elements }) };
     }
+    if (noElevation) return { ok: true, json: async () => ({ value: -1000000 }) };
     const u = new URL(url), lon = Number(u.searchParams.get('x')), lat = Number(u.searchParams.get('y'));
     const e = (lon - place.lon) * mLon, n = (lat - place.lat) * mLat;
     return { ok: true, json: async () => ({ value: 100 - 0.05 * e + 0.1 * n }) };
@@ -76,4 +77,26 @@ test('a lane beside the garage and the ground under the garage are both in the n
   // Facing the house from Elm Street (looking west), north is on the right.
   assert.match(t.note, /The outbuilding \(\d+ sq ft\) is behind the house and to the right as seen from Elm Street; the ground there is about 2.5 ft \(about 1 course\) higher than at the house\./);
   assert.match(t.note, /An unnamed lane \(OpenStreetMap: alley\) runs about 3 m from the outbuilding, on the right of the lot as seen from Elm Street \(x = 31 with Elm Street at z = 31\)/);
+});
+
+test('outside LA County: the house is the building the point falls in, and a nearby shed is its outbuilding', async () => {
+  const sq = (e, n, w, d) => [[e, n], [e + w, n], [e + w, n + d], [e, n + d], [e, n]];
+  const buildings = [
+    way({ building: 'house' }, sq(-6, -5, 12, 10)), // no address tags; the geocoded point is inside it
+    way({ building: 'shed' }, sq(-4, 9, 3, 3)), // 4 m behind it
+    way({ building: 'house', 'addr:housenumber': '9' }, sq(-6, 30, 12, 10)), // the neighbour
+    way({ building: 'shed' }, sq(-4, 26, 3, 3)), // the neighbour's shed: nearer to their house
+  ];
+  const t = await lookupTerrain(place, '5 Elm St', { fetchImpl: fakeFetch({ buildings, streets: [elm] }) });
+  assert.ok(t.building, 'found by the geocoded point');
+  assert.equal(t.building.outbuildings.length, 1);
+  assert.match(t.note, /with 1 outbuilding on the lot/);
+});
+
+test('with no elevation data the note still gives the building and streets, without slopes', async () => {
+  const t = await lookupTerrain(place, '5 Elm St', { fetchImpl: fakeFetch({ streets: [elm], noElevation: true }) });
+  assert.equal(t.analysis, null);
+  assert.match(t.note, /no elevation data here, so no slopes/);
+  assert.match(t.note, /Elm Street runs along the side of the house that faces the street/);
+  assert.doesNotMatch(t.note, /slopes about|Going back/);
 });

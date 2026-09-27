@@ -118,3 +118,9 @@ test('on the 48 x 48 plate at 1.5 ft per stud the same house is a third larger, 
   const wing = L.blocks.find((b) => b.name === 'Wing');
   assert.equal(house.cellRects[0][2] - wing.cellRects[0][0], Math.round(20 / 1.5), 'wing plus house, 20 ft wide = 13 studs at 1.5 ft');
 });
+
+test('a story is about 9 ft of courses at either scale', () => {
+  const tall = (opts) => skeletonOps(layoutFootprint(PLAN, opts)).find((o) => o.block === 'Wing').courses;
+  assert.deepEqual(tall(), [0, 7], 'two stories of 4 courses at 2 ft per stud');
+  assert.deepEqual(tall({ size: 48, ftPerStud: 1.5, frontYard: 3 }), [0, 9], 'two stories of 5 courses at 1.5 ft per stud');
+});

@@ -25,7 +25,7 @@ function frame(origin) {
   return { toXY: (p) => [(p.lon - origin.lon) * mLon, (p.lat - origin.lat) * mLat], toLL: ([e, n]) => ({ lat: origin.lat + n / mLat, lon: origin.lon + e / mLon }) };
 }
 const unit = (deg) => [Math.sin(deg * Math.PI / 180), Math.cos(deg * Math.PI / 180)];
-const LANE_KINDS = ['service', 'track', 'unclassified', 'living_street'], LANE_M = 12;
+const LANE_KINDS = ['service', 'track', 'unclassified', 'living_street'], LANE_M = 12, OUTBUILDING_M = 15;
 const compass = (deg) => ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'][Math.round(((deg % 360) + 360) % 360 / 45) % 8];
 
 async function overpass(q, fetchImpl) {
@@ -67,7 +67,8 @@ function lineToLine(a, b) {
 const polygonArea = (pts) => Math.abs(pts.reduce((a, p, i) => { const q = pts[(i + 1) % pts.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0) / 2);
 
 // The address's own building in OpenStreetMap (many US areas carry county building outlines,
-// sometimes with height and year built), plus outbuildings on the same parcel when tagged.
+// sometimes with height and year built): the building tagged with the address, or else the one the
+// geocoded point falls inside; plus its outbuildings.
 // Returns {center:{lat,lon}, outline:[{lat,lon}], areaSqFt, tags, outbuildings:[...]} or null.
 async function findBuilding(place, address, { fetchImpl = fetch, radiusM = 150 } = {}) {
   const num = numberOf(address), street = streetOf(address);
@@ -85,11 +86,22 @@ async function findBuilding(place, address, { fetchImpl = fetch, radiusM = 150 }
   });
   const hits = all.filter((b) => hasNumber(b.w.tags['addr:housenumber']) && (!b.w.tags['addr:street'] || !street || norm(b.w.tags['addr:street']) === street))
     .sort((a, b) => Math.hypot(...a.c) - Math.hypot(...b.c));
+  // no addressed building: the one the geocoded point falls inside (building-level geocodes land there)
+  const inside = (b) => { let c = false; for (let i = 0, j = b.xy.length - 1; i < b.xy.length; j = i++) {
+    const [xi, yi] = b.xy[i], [xj, yj] = b.xy[j]; if ((yi > 0) !== (yj > 0) && 0 < (xj - xi) * (0 - yi) / (yj - yi) + xi) c = !c; } return c; };
+  if (!hits.length) { const at = all.find((b) => inside(b) && !b.w.tags['addr:housenumber']); if (at) hits.push(at); }
   if (!hits.length) return null;
   const h = hits[0], parcel = h.w.tags['lacounty:ain'];
   const toLL = frame(place).toLL, center = toLL(h.c);
-  const outbuildings = parcel ? all.filter((b) => b !== h && b.w.tags['lacounty:ain'] === parcel && !b.w.tags['addr:housenumber'])
-    .map((b) => ({ areaSqFt: Math.round(b.area * 10.764), tags: b.w.tags, center: toLL(b.c), outline: b.pts.map((p) => ({ lat: p.lat, lon: p.lon })) })) : [];
+  // Outbuildings: the same parcel where the outline carries one (LA County imports tag lacounty:ain);
+  // elsewhere, unaddressed buildings tagged or sized like a garage or shed, within OUTBUILDING_M of
+  // the house and nearer to it than to any other building.
+  const ring = (b) => [...b.xy, b.xy[0]], gap = (a, b) => (lineToLine(ring(a), ring(b)) || { d: Infinity }).d;
+  const small = (b) => /^(garage|garages|shed|carport|outbuilding|hut)$/.test(b.w.tags.building) || b.area <= 60;
+  const nearOnly = (b) => { const d = gap(b, h); return d <= OUTBUILDING_M && all.every((o) => o === b || o === h || gap(b, o) > d); };
+  const outbuildings = all.filter((b) => b !== h && !b.w.tags['addr:housenumber']
+      && (parcel ? b.w.tags['lacounty:ain'] === parcel : small(b) && nearOnly(b)))
+    .map((b) => ({ areaSqFt: Math.round(b.area * 10.764), tags: b.w.tags, center: toLL(b.c), outline: b.pts.map((p) => ({ lat: p.lat, lon: p.lon })) }));
   return { center, outline: h.pts.map((p) => ({ lat: p.lat, lon: p.lon })), areaSqFt: Math.round(h.area * 10.764), tags: h.w.tags, outbuildings };
 }
 
@@ -213,11 +225,12 @@ const coursesAt = (plate) => (ft) => { const c = Math.round(Math.abs(ft) / scale
 // The note the survey and the design get. Street slopes are measured well; the lot's rise less so
 // (bare-earth data is smoothed and interpolated under the house), so it's framed as approximate.
 function terrainNote(t) {
-  if (!t || !t.analysis || !t.frontage.length) return '';
+  if (!t || !t.frontage || !t.frontage.length) return '';
   const sc = scaleFor(t.plate), courses = coursesAt(t.plate), L = sc.last;
   const a = t.analysis, [s0, s1] = t.frontage, side = (ft) => (ft > 0 ? 'right' : 'left');
   const b = t.building;
-  const parts = [`Terrain (USGS elevation data, public domain; streets${b ? ' and the building outline' : ''} from OpenStreetMap):`];
+  // without elevations (USGS covers the US only) the note still gives the building, streets and lanes
+  const parts = [`Terrain (${a ? 'USGS elevation data, public domain; ' : 'no elevation data here, so no slopes; '}streets${b ? ' and the building outline' : ''} from OpenStreetMap):`];
   if (b) parts.push(`the house's outline is about ${b.areaSqFt} sq ft${b.tags.height ? `, about ${Math.round(Number(b.tags.height) * 3.28)} ft tall` : ''}${b.tags.start_date ? `, built ${b.tags.start_date}` : ''}${b.outbuildings.length ? `, with ${b.outbuildings.length} outbuilding${b.outbuildings.length > 1 ? 's' : ''} on the lot (${b.outbuildings.map((o) => `${o.areaSqFt} sq ft`).join(', ')})` : ''}.`);
   if (s1) {
     const sideOf = (from, to) => { const { right } = streetFrame(from), d = [to.nearest[0] - from.from[0], to.nearest[1] - from.from[1]];
@@ -227,7 +240,7 @@ function terrainNote(t) {
   } else {
     parts.push(`${s0.name} runs along the side of the house that faces the street (z = ${L}).`);
   }
-  for (const st of a.streets) {
+  for (const st of a ? a.streets : []) {
     const s = t.frontage[st.si];
     parts.push(Math.abs(st.riseRightFt) < 1
       ? `${s.name} is close to level across the model.`
@@ -252,7 +265,7 @@ function terrainNote(t) {
     const side = along ? (ln.nearest[0] * right[0] + ln.nearest[1] * right[1] > 0 ? 'right' : 'left') : (ln.nearest[0] * back[0] + ln.nearest[1] * back[1] > 0 ? 'back' : 'front');
     parts.push(`${ln.name ? ln.name : 'An unnamed lane'} (OpenStreetMap: ${ln.kind}) runs about ${Math.round(ln.distanceM)} m from the ${ln.building}, on the ${side} of the lot as seen from ${s0.name} (${edge[side]} with ${s0.name} at z = ${L}). A garage beside it likely opens onto it: build the lane along that edge at its own level, with a drive from the garage door.`);
   }
-  parts.push(`Going back from ${s0.name}, the ground data shows the lot rising about ${a.lotRiseBackFt} ft across the model; it is smoothed and interpolated under the house, so a graded pad or retaining walls can make the real rise at the house larger. Where the photos show more (steps up to the door, a garage below the main floor), go by the photos.`);
+  if (a) parts.push(`Going back from ${s0.name}, the ground data shows the lot rising about ${a.lotRiseBackFt} ft across the model; it is smoothed and interpolated under the house, so a graded pad or retaining walls can make the real rise at the house larger. Where the photos show more (steps up to the door, a garage below the main floor), go by the photos.`);
   return parts.join(' ');
 }
 

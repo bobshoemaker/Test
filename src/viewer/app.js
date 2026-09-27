@@ -286,7 +286,7 @@ $('revertBtn').onclick=()=>{ $('designSrc').value=DESIGN_TEXT; run(DESIGN_TEXT);
 let photos=[], photoUrls=[], busyCtl=null, health=null, survey=null;
 const photoCredit=new WeakMap(); // File -> credit for photos found by address lookup
 function status(html,err){ $('photoStatus').innerHTML=err?`<span class="status-err">${html}</span>`:html; }
-function setBusy(b){ $('surveyBtn').disabled=b; $('designBtn').disabled=b; $('pickBtn').disabled=b; $('addrBtn').disabled=b; $('useCands').disabled=b; $('stopBtn').hidden=!b; $('compileBtn').disabled=b; $('revertBtn').disabled=b; }
+function setBusy(b){ $('planBtn').disabled=b; $('surveyBtn').disabled=b; $('designBtn').disabled=b; $('pickBtn').disabled=b; $('addrBtn').disabled=b; $('useCands').disabled=b; $('stopBtn').hidden=!b; $('compileBtn').disabled=b; $('revertBtn').disabled=b; }
 function renderThumbs(){
   photoUrls.forEach(u=>URL.revokeObjectURL(u)); photoUrls=photos.map(f=>URL.createObjectURL(f));
   const html=photoUrls.map((u,i)=>`<img src="${u}" alt="House photo ${i+1}">`).join('');
@@ -294,14 +294,22 @@ function renderThumbs(){
   $('designBtn').textContent=photos.length?`Design from ${photos.length} photo${photos.length>1?'s':''}`:'Design from description';
   $('surveyBtn').hidden=!photos.length; if(survey){ survey=null; $('survey').hidden=true; $('survey').innerHTML=''; } // new photos: ask again
 }
-async function toPayload(file){
-  // Downscale on the device: Claude works at about 1.5 megapixels and uploads stay small.
-  const bmp=await createImageBitmap(file); const s=Math.min(1,1568/Math.max(bmp.width,bmp.height));
+async function toPayload(file,maxSide=1568){
+  // Downscale on the device: Claude works at about 1.5 megapixels and uploads stay small. Floor plans
+  // pass a larger limit so room labels stay readable.
+  const bmp=await createImageBitmap(file); const s=Math.min(1,maxSide/Math.max(bmp.width,bmp.height));
   const c=document.createElement('canvas'); c.width=Math.round(bmp.width*s); c.height=Math.round(bmp.height*s);
   c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
   return {mediaType:'image/jpeg', data:c.toDataURL('image/jpeg',0.88).split(',')[1]};
 }
 $('pickBtn').onclick=()=>$('photoInput').click();
+// Optional floor plan: the walls are laid out from it. Without one, a looked-up address locks the
+// walls to the county or OpenStreetMap building outline; without either, they come from the photos.
+let planFile=null;
+$('planBtn').onclick=()=>$('planInput').click();
+$('planInput').onchange=e=>{ planFile=e.target.files[0]||null; e.target.value='';
+  $('planStatus').textContent=planFile?`Floor plan: ${planFile.name}. The walls will follow it.`:''; $('planBtn').textContent=planFile?'Change floor plan':'Add floor plan'; };
+let lookedUp=''; // the address the last lookup found; the server adds its building, street and slope facts
 $('photoInput').accept='image/jpeg,image/png,image/webp';
 $('photoInput').onchange=e=>{ const max=(health&&health.maxPhotos)||6; photos=[...photos.filter(f=>photoCredit.has(f)),...e.target.files].slice(0,max); renderThumbs();
   status(photos.length>=max?`Using the first ${max} photos.`:''); e.target.value=''; };
@@ -321,8 +329,8 @@ $('addrForm').onsubmit=async e=>{
     $('cands').innerHTML=cands.map((c,i)=>`<button type="button" class="cand" data-i="${i}" aria-pressed="false"><img loading="lazy" src="${esc(c.thumb&&/^https:\/\//.test(c.thumb)?c.thumb:'/api/photo/'+c.id)}" alt="Street photo ${i+1}"><span>${c.distanceM} m away${c.capturedAt?', '+esc(c.capturedAt):''}<br>${esc(c.credit)}</span></button>`).join('');
     $('cands').querySelectorAll('.cand').forEach(b=>b.onclick=()=>{ const c=cands[+b.dataset.i]; c.on=!c.on; b.setAttribute('aria-pressed',c.on); });
     $('candRow').hidden=!cands.length;
-    const n=$('notes'); if(j.place&&!n.value.includes(j.place.label)) n.value=(n.value?n.value+'\n':'')+`Address: ${j.place.label}`;
-    if(j.terrain&&j.terrain.note&&!n.value.includes('Terrain (USGS')) n.value+='\n'+j.terrain.note;
+    lookedUp=j.place?address:'';
+    if(j.terrain&&j.terrain.building) addrStatus($('addrStatus').innerHTML+` Found the building outline${j.terrain.streets&&j.terrain.streets.length>1?` on a corner of ${j.terrain.streets.map(esc).join(' and ')}`:''}: the walls will follow it unless you add a floor plan.`);
   }catch(err){ addrStatus(esc(err.message),true); }
   finally{ $('addrBtn').disabled=false; }
 };
@@ -349,7 +357,10 @@ async function askServer(mode){
   const ctl=new AbortController(); busyCtl=ctl; setBusy(true); const t0=Date.now();
   status(mode==='design'?'Preparing photos…':'Sending the design back to Claude…');
   try{
-    const body={mode,notes,target,photos:mode==='design'?await Promise.all(photos.map(toPayload)):[],design:mode==='fix'?curDesign:undefined,
+    const big=$('bigPlate').checked;
+    const body={mode,notes,target:big?Math.max(target,2400):target,plate:big?48:32,address:mode==='design'&&lookedUp?lookedUp:undefined,
+      plan:mode==='design'&&planFile?await toPayload(planFile,2400):undefined,
+      photos:mode==='design'?await Promise.all(photos.map(f=>toPayload(f))):[],design:mode==='fix'?curDesign:undefined,
       credits:mode==='design'?photos.map(f=>photoCredit.get(f)).filter(Boolean):undefined,
       choices:mode==='design'?surveyChoices():undefined};
     status(mode==='design'?'Claude is studying the photos. This usually takes a few minutes.':'Claude is fixing the design…');
@@ -392,7 +403,8 @@ $('surveyBtn').onclick=async()=>{
   const ctl=new AbortController(); busyCtl=ctl; setBusy(true);
   status('Taking a quick look at the photos for anything they leave open…');
   try{
-    const body={notes:$('notes').value.trim().slice(0,1500),photos:await Promise.all(photos.map(toPayload))};
+    const body={notes:$('notes').value.trim().slice(0,1500),photos:await Promise.all(photos.map(f=>toPayload(f))),address:lookedUp||undefined,
+      plate:$('bigPlate').checked?48:32,plan:planFile?await toPayload(planFile,2400):undefined};
     const res=await fetch('/api/survey',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:ctl.signal});
     const j=await res.json(); if(!res.ok) throw new Error(j.error||`Server error ${res.status}`);
     survey=j; renderSurvey(j);

@@ -50,6 +50,12 @@ closing gift that realtors give clients: a brick model of the house they just bo
   plan, `footprintFromOutline` locks the walls to the house's building outline from the terrain
   lookup instead (squared to the grid, outbuildings as their own blocks, no doors). For 3221
   Griffith Park Blvd the county outline matched the plan's walls to about a stud. Pure and tested.
+- `src/server/pipeline.js`: `prepareDesign`, the steps before Claude designs, shared by the server
+  and `scripts/design.js` so the website and the CLI build every house the same way: an address
+  adds the terrain facts to the notes; a floor plan locks the walls (read in the design loop);
+  without a plan, the building outline found by address locks them; with neither, the walls come
+  from the photos. Keep house-specific facts out of code: they come from photos, plan, address
+  lookups, the owner's survey answers and notes.
 - `src/server/render.js`: optional (needs Playwright). Renders draft views with the viewer in
   headless Chromium, the gridded plan, and the footprint overlaid on the plan.
 - `src/server/lookup.js`: address to candidate photos. Geocodes with OpenStreetMap Nominatim
@@ -58,8 +64,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   chosen photo by numeric id only. Each photo carries credit and license; the server stores
   them on the design as `photoCredits` and the viewer shows them.
 - `src/server/server.js`: zero-dependency HTTP server. Serves the viewer and designs; `POST
-  /api/design` streams NDJSON events (`status`, `draft`, `done`, `error`) and saves results to
-  `designs/generated/`. `POST /api/lookup {address}` returns the place and ranked candidate
+  /api/design {photos, notes, address?, plan?, plate?, choices?}` runs the parts pipeline (renders
+  when Playwright is installed) and streams NDJSON events (`status`, `draft`, `done`, `error`),
+  saving results to `designs/generated/`. `POST /api/lookup {address}` returns the place and ranked candidate
   photos; `GET /api/photo/<mapillary id>` proxies one image.
 - `src/viewer/`: single-page three.js (r128, CDN) viewer: model, manual (sub-builds shown on
   their own), parts and BrickLink XML, design editor, photo upload, and "Lift roof" for designs

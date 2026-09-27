@@ -279,9 +279,11 @@ function footprintFromOutline({ buildings, toStreet, sideStreet = null, ftPerStu
 }
 
 // Walls ops for the locked footprint: one per block, heights and fills as defaults for Claude to set.
+// Courses per story: about 9 ft at the layout's scale (4 at 2 ft per stud, 5 at 1.5).
+const storyCourses = (locked) => Math.max(3, Math.round(9 / (1.2 * ((locked.scale && locked.scale.ftPerStud) || 2))));
 function skeletonOps(locked) {
   return locked.blocks.filter((b) => b.cells.length).map((b) => ({
-    op: 'walls', phase: b.name, block: b.name, color: 'White', courses: [0, 4 * b.levels - 1], base: 0,
+    op: 'walls', phase: b.name, block: b.name, color: 'White', courses: [0, storyCourses(locked) * b.levels - 1], base: 0,
     segments: segmentsFromCells(b.cells),
     openings: b.openings.map((o) => ({ cells: o.cells, ...(DEFAULT_FILL[o.kind] || DEFAULT_FILL.door), kind: o.kind === 'garage door' ? 'garage door' : 'door', note: `${o.kind} from the floor plan${o.note ? ': ' + o.note : ''}` })),
   }));
