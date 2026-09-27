@@ -3,7 +3,8 @@
 // With a floor plan, parts mode first has Claude read the footprint off the plan; code lays it
 // out in studs (footprint.js) and every compile checks the design's walls against it.
 const { compile } = require('../engine/engine.js');
-const { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask } = require('./prompt');
+const { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask,
+  SURVEY_SPEC, SURVEY_TOOL, surveyTask, LANDSCAPE_STYLES } = require('./prompt');
 const { layoutFootprint, skeletonOps, checkFootprint, describeLayout } = require('./footprint');
 
 const COMPILE_TOOL = {
@@ -50,6 +51,51 @@ function addUsage(usage, msg) {
 }
 
 const imageBlock = (p) => ({ type: 'image', source: { type: 'base64', media_type: p.mediaType, data: p.data } });
+
+// A first look before any design work, meant for a low effort (or a cheaper model): what the
+// photos show, and up to five questions about what they leave open, each with buildable options
+// and a recommended one. A landscaping-style question is always added. Returns
+// {summary, seen, questions:[{id, topic, question, why, options:[{id,label,detail}], recommended}], usage}.
+async function surveyHouse({ client, model, photos = [], plan = null, notes = '', effort = 'low', maxTokens = 32000, onEvent = () => {} }) {
+  if (!photos.length) throw new Error('The survey needs at least one photo.');
+  const usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
+  const messages = [{ role: 'user', content: [...photos.map(imageBlock), ...(plan ? [imageBlock(plan)] : []),
+    { type: 'text', text: surveyTask({ photoCount: photos.length, notes, hasPlan: !!plan }) }] }];
+  const params = { model, max_tokens: maxTokens, system: SURVEY_SPEC, tools: [SURVEY_TOOL], cache_control: { type: 'ephemeral' },
+    thinking: { type: 'adaptive', display: 'summarized' }, messages };
+  if (effort) params.output_config = { effort };
+  onEvent({ type: 'status', message: 'Claude is taking a first look at the photos…' });
+  const msg = await callClaude(client, params, onEvent);
+  addUsage(usage, msg);
+  const use = msg.content.find((b) => b.type === 'tool_use' && b.name === SURVEY_TOOL.name);
+  if (!use) throw new Error('Claude did not return a survey.');
+  const input = use.input || {};
+  const str = (v, n) => String(v == null ? '' : v).slice(0, n);
+  const questions = (Array.isArray(input.questions) ? input.questions : []).slice(0, 5).map((q, i) => {
+    const options = (Array.isArray(q.options) ? q.options : []).slice(0, 4)
+      .map((o, j) => ({ id: str(o.id || `o${j + 1}`, 40), label: str(o.label, 80), detail: str(o.detail, 240) })).filter((o) => o.label);
+    return { id: str(q.id || `q${i + 1}`, 40), topic: str(q.topic || 'other', 20), question: str(q.question, 200), why: str(q.why, 400), options,
+      recommended: options.some((o) => o.id === q.recommended) ? q.recommended : (options[0] || {}).id };
+  }).filter((q) => q.question && q.options.length >= 2);
+  const seenPlanting = str(input.landscapeSeen, 200);
+  questions.push({
+    id: 'landscape', topic: 'landscape', question: 'Which landscaping style should the model use?',
+    why: seenPlanting ? `The photos show ${seenPlanting.replace(/\.$/, '')}.` : '',
+    options: LANDSCAPE_STYLES.map((o) => (o.id === 'photos' ? { ...o, detail: seenPlanting ? `As in the photos: ${seenPlanting}` : 'As in the photos.' } : { ...o })),
+    recommended: 'photos',
+  });
+  return { summary: str(input.summary, 600), seen: (Array.isArray(input.seen) ? input.seen : []).slice(0, 20).map((x) => str(x, 200)), questions, usage };
+}
+
+// Survey answers ({questionId: optionId, or free text}) to the choices the design follows.
+// Unanswered questions take the recommended option.
+function resolveChoices(questions, answers = {}) {
+  return (questions || []).map((q) => {
+    const a = answers[q.id];
+    const opt = q.options.find((o) => o.id === a) || (a == null || a === '' ? q.options.find((o) => o.id === q.recommended) : null);
+    return opt ? { id: q.id, question: q.question, answer: opt.label, detail: opt.detail || '' } : { id: q.id, question: q.question, answer: String(a).slice(0, 300), detail: '' };
+  });
+}
 
 // Claude reads the footprint off the plan (and a gridded copy); each submission is laid out in
 // studs and comes back with an overlay on the plan until Claude is satisfied. Returns the layout.
@@ -165,11 +211,12 @@ async function callClaude(client, params, onEvent = () => {}) {
  * @param {object} [o.planTools] {gridPlan, footprintOverlay} from render.js, for the plan-reading step
  * @param {object} [o.seed]     parts mode: a design from earlier parts to continue from (with fromPart)
  * @param {number} [o.fromPart] parts mode: the part to start at, 1-based (needs seed when above 1)
+ * @param {Array<{question,answer,detail}>} [o.choices] the owner's answers to the survey (resolveChoices), binding for the design
  */
 async function designHouse({
   client, model, photos = [], plan = null, notes = '', target = 1200, mode = 'design', design = null,
   effort = null, maxRounds = 7, maxTokens = 64000, onEvent = () => {}, render = null, partsLimit = PARTS.length,
-  lockFootprint = true, locked = null, planTools = null, seed = null, fromPart = 1,
+  lockFootprint = true, locked = null, planTools = null, seed = null, fromPart = 1, choices = null,
 }) {
   if (mode === 'parts' && fromPart > 1 && !isDesign(seed)) throw new Error('Starting at a later part needs the design from the earlier parts (seed).');
   const usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
@@ -184,7 +231,7 @@ async function designHouse({
     content.push({ type: 'text', text: fixTask({ design, problems: problemList(compile(design)) }) });
   } else {
     if (!photos.length && !notes) throw new Error('Add at least one photo or a description.');
-    content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target, hasPlan: !!plan, locked, lockedOps, seed: fromPart > 1 ? seed : null, fromPart }) });
+    content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target, hasPlan: !!plan, locked, lockedOps, seed: fromPart > 1 ? seed : null, fromPart, choices }) });
   }
   const messages = [{ role: 'user', content }];
   const st = { lastDraft: mode === 'parts' && fromPart > 1 ? seed : null, compiles: 0, rounds: 0 };
@@ -283,4 +330,4 @@ async function designHouse({
   return finish(msg, msg ? null : 'Stopped at the round limit; this is the last compiled draft.');
 }
 
-module.exports = { designHouse, planFootprint, extractJson, summarize, problemList, COMPILE_TOOL };
+module.exports = { designHouse, surveyHouse, resolveChoices, planFootprint, extractJson, summarize, problemList, COMPILE_TOOL };

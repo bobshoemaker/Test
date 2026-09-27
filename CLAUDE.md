@@ -23,6 +23,11 @@ closing gift that realtors give clients: a brick model of the house they just bo
   design. Keeps whole assistant turns (thinking blocks included) as the API requires. Parts
   mode builds walls, roofs, lot and planting in separate appended turns; each compile result
   carries renders of the draft (front and three-quarter) for Claude to compare with the photos.
+- Survey (`surveyHouse` in designer.js, `POST /api/survey`, `scripts/survey.js`): a cheap first
+  look (low effort by default; `BRICKHOUSE_SURVEY_MODEL` / `BRICKHOUSE_SURVEY_EFFORT`) that lists
+  what the photos show and asks up to five questions about what they leave open (a roof hidden
+  by a parapet, an unseen side), each with buildable options and a recommended one, plus a
+  landscaping style. The owner's answers go into the design task as binding choices.
 - `src/server/footprint.js`: floor plan to locked walls. With a plan, parts mode first has Claude
   read the footprint off a pixel-gridded copy (`submit_footprint`: labeled rooms for scale,
   blocks as rectangles, doors, stairs, street side). This module scales it to studs from the
@@ -59,6 +64,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
     node scripts/design.js a.jpg b.jpg --target 1200 --out designs/new.json
     node scripts/design.js a.jpg b.jpg --plan plan.png --parts --effort high --out designs/generated/x.json
                                               # plan first, then four parts; drafts, renders and overlays saved next to --out
+    node scripts/survey.js a.jpg b.jpg --out survey.json          # questions for the owner; then design.js --choices survey.json
     node scripts/bundle.js designs/634-unit-a.json
     node scripts/lookup.js "12 Elm St, Springfield, IL" --take 1,2 --out photos/elm   # needs MAPILLARY_TOKEN
 

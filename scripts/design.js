@@ -8,10 +8,11 @@
 //            --footprint <out>.footprint.json  reuse a saved footprint instead of reading the plan again
 //            --no-footprint  send the plan as a picture only, without locking the walls to it
 //            --resume <draft>.json --from-part 2  continue from a design whose earlier parts are done
+//            --choices survey.json [--answer id=option ...]  the owner's answers from scripts/survey.js
 //            --parts-limit 1  stop after the first N parts   --no-render  don't send renders of each draft
 const fs = require('node:fs');
 const path = require('node:path');
-const { designHouse } = require('../src/server/designer');
+const { designHouse, resolveChoices } = require('../src/server/designer');
 
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 ? args.splice(i, 2)[1] : def; };
@@ -20,6 +21,8 @@ const notes = opt('notes', ''), target = Number(opt('target', 1200)), out = opt(
 const model = opt('model', process.env.BRICKHOUSE_MODEL || 'claude-opus-5-5'), effort = opt('effort', process.env.BRICKHOUSE_EFFORT || null);
 const maxTokens = Number(opt('max-tokens', 64000));
 const partsLimit = Number(opt('parts-limit', 4)), planFile = opt('plan', null), footprintFile = opt('footprint', null);
+const choicesFile = opt('choices', null), answerArgs = [];
+for (let i; (i = args.indexOf('--answer')) >= 0;) answerArgs.push(args.splice(i, 2)[1]);
 const resumeFile = opt('resume', null), fromPart = Number(opt('from-part', resumeFile ? 2 : 1));
 const fake = flag('fake'), parts = flag('parts'), noRender = flag('no-render'), noFootprint = flag('no-footprint');
 const types = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' };
@@ -41,9 +44,17 @@ const photos = args.map(readImage), plan = planFile ? readImage(planFile) : null
   const renderer = noRender ? null : await require('../src/server/render').makeRenderer().catch((e) => { console.log(`Renders off: ${e.message}`); return null; });
   if (!noRender && !renderer) console.log('Renders off: Playwright is not installed.');
   const locked = footprintFile ? JSON.parse(fs.readFileSync(footprintFile, 'utf8')) : null;
+  let choices = null;
+  if (choicesFile) {
+    const sv = JSON.parse(fs.readFileSync(choicesFile, 'utf8'));
+    const answers = { ...(sv.answers || {}) };
+    for (const a of answerArgs) { const i = a.indexOf('='); if (i > 0) answers[a.slice(0, i)] = a.slice(i + 1); }
+    choices = resolveChoices(sv.questions, answers);
+    choices.forEach((c) => console.log(`Choice: ${c.question} ${c.answer}`));
+  }
   const res = await designHouse({ client, model, effort, maxTokens, photos, plan, notes, target, mode: parts ? 'parts' : 'design', partsLimit,
     render: renderer && renderer.render, planTools: renderer, lockFootprint: !noFootprint, locked,
-    seed: resumeFile ? JSON.parse(fs.readFileSync(resumeFile, 'utf8')) : null, fromPart,
+    seed: resumeFile ? JSON.parse(fs.readFileSync(resumeFile, 'utf8')) : null, fromPart, choices,
     onEvent: (ev) => {
       if (ev.type === 'footprint') {
         console.log(`${clock()}   footprint ${ev.n}: scale ${ev.locked.scale ? ev.locked.scale.pxPerFt + ' px per ft' : 'unknown'}, street on the ${ev.locked.street || '?'} side of the plan`);

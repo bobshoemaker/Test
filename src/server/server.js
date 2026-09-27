@@ -4,7 +4,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const { designHouse } = require('./designer');
+const { designHouse, surveyHouse } = require('./designer');
 const { lookupAddress, fetchMapillaryImage } = require('./lookup');
 const { anthropicKey, makeAnthropicClient } = require('./client');
 
@@ -14,6 +14,10 @@ loadDotEnv(path.join(ROOT, '.env'));
 const PORT = Number(process.env.PORT || 5173);
 const MODEL = process.env.BRICKHOUSE_MODEL || 'claude-opus-5-5';
 const EFFORT = process.env.BRICKHOUSE_EFFORT || null; // low | medium | high | xhigh | max
+// The survey (first look and questions for the owner) is meant to be cheap: low effort by default,
+// optionally a cheaper model.
+const SURVEY_MODEL = process.env.BRICKHOUSE_SURVEY_MODEL || MODEL;
+const SURVEY_EFFORT = process.env.BRICKHOUSE_SURVEY_EFFORT || 'low';
 const FAKE = process.env.BRICKHOUSE_FAKE === '1';
 const MAX_BODY = 40 * 1024 * 1024;
 const MAX_PHOTOS = 6;
@@ -64,14 +68,35 @@ function readBody(req) {
 
 function slug(s) { return String(s || 'house').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'house'; }
 
-async function handleDesign(req, res) {
+const NO_KEY = 'Set BRICKHOUSE_ANTHROPIC_API_KEY (or ANTHROPIC_API_KEY) in .env, or run with BRICKHOUSE_FAKE=1 to try the flow.';
+const cleanPhotos = (list) => (list || []).slice(0, MAX_PHOTOS).filter((p) => p && /^image\/(jpeg|png|webp|gif)$/.test(p.mediaType) && typeof p.data === 'string');
+
+// POST /api/survey {photos, notes}: a cheap first look; returns {summary, seen, questions} for the owner to answer.
+async function handleSurvey(req, res) {
   const client = makeClient();
-  if (!client) return send(res, 503, { error: 'Set BRICKHOUSE_ANTHROPIC_API_KEY (or ANTHROPIC_API_KEY) in .env, or run with BRICKHOUSE_FAKE=1 to try the flow.' });
+  if (!client) return send(res, 503, { error: NO_KEY });
   let body;
   try { body = JSON.parse(await readBody(req)); } catch (e) { return send(res, 400, { error: e.message }); }
-  const photos = (body.photos || []).slice(0, MAX_PHOTOS).filter((p) => p && /^image\/(jpeg|png|webp|gif)$/.test(p.mediaType) && typeof p.data === 'string');
+  const photos = cleanPhotos(body.photos);
+  if (!photos.length) return send(res, 400, { error: 'Add at least one photo to check.' });
+  try {
+    const out = await surveyHouse({ client, model: SURVEY_MODEL, effort: SURVEY_EFFORT, photos, notes: String(body.notes || '').slice(0, 1500) });
+    send(res, 200, { summary: out.summary, seen: out.seen, questions: out.questions, model: FAKE ? 'fake' : SURVEY_MODEL });
+  } catch (e) { send(res, 502, { error: e && e.message ? e.message : String(e) }); }
+}
+
+async function handleDesign(req, res) {
+  const client = makeClient();
+  if (!client) return send(res, 503, { error: NO_KEY });
+  let body;
+  try { body = JSON.parse(await readBody(req)); } catch (e) { return send(res, 400, { error: e.message }); }
+  const photos = cleanPhotos(body.photos);
   const target = Math.max(300, Math.min(2500, Number(body.target) || 1200));
   const notes = String(body.notes || '').slice(0, 1500);
+  // The owner's answers to the survey, as {question, answer, detail}; the design follows them.
+  const choices = (Array.isArray(body.choices) ? body.choices : []).slice(0, 8)
+    .map((c) => c && ({ question: String(c.question || '').slice(0, 200), answer: String(c.answer || '').slice(0, 300), detail: String(c.detail || '').slice(0, 300) }))
+    .filter((c) => c && c.question && c.answer);
   // Credits for looked-up photos (source, author, license) travel with the saved design,
   // including through a fix round, where Claude rewrites the design.
   const rawCredits = body.mode === 'fix' ? body.design && body.design.photoCredits : body.credits;
@@ -84,7 +109,7 @@ async function handleDesign(req, res) {
   const t0 = Date.now();
   try {
     const out = await designHouse({
-      client, model: MODEL, effort: EFFORT, photos, notes, target,
+      client, model: MODEL, effort: EFFORT, photos, notes, target, choices,
       mode: body.mode === 'fix' ? 'fix' : 'design', design: body.design || null, onEvent: emit,
     });
     if (credits.length) out.design.photoCredits = credits;
@@ -131,6 +156,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, fs.readFileSync(file));
     }
     if (req.method === 'POST' && url.pathname === '/api/design') return handleDesign(req, res);
+    if (req.method === 'POST' && url.pathname === '/api/survey') return handleSurvey(req, res);
     if (req.method === 'POST' && url.pathname === '/api/lookup') return handleLookup(req, res);
     const ph = /^\/api\/photo\/(\d{1,20})$/.exec(url.pathname);
     if (req.method === 'GET' && ph) return handlePhoto(res, ph[1]);

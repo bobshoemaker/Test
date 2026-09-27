@@ -105,6 +105,15 @@ textarea.xml{width:100%;height:140px;margin-top:10px;background:var(--code);colo
 .photos img{width:76px;height:76px;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
 .target{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--muted)}
 .target input{width:78px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-variant-numeric:tabular-nums}
+.survey{margin-top:12px;display:grid;gap:10px}
+.survey .sum{margin:0;font-size:14px;color:var(--muted)}
+.survey fieldset{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0;background:var(--panel)}
+.survey legend{font-weight:700;font-size:15px;padding:0 4px}
+.survey .why{margin:0 0 6px;font-size:13px;color:var(--muted)}
+.survey label{display:flex;gap:8px;align-items:flex-start;font-size:14px;padding:4px 0;cursor:pointer}
+.survey label input{margin-top:3px;accent-color:var(--accent)}
+.survey .rec{font-size:12px;font-weight:700;color:var(--muted);margin-left:4px}
+.survey .opt small{display:block;color:var(--muted);font-size:13px}
 textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel);font-size:15px;resize:vertical}
 .status-err{color:var(--flag)}
 .addr{display:flex;gap:8px;margin-top:10px}
@@ -211,7 +220,8 @@ textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-ra
               <label class="target">About <input type="number" id="target" value="1200" min="300" max="2500" step="50" inputmode="numeric"> pieces</label></div>
             <div class="photos" id="thumbs"></div>
             <textarea class="notes" id="notes" rows="2" placeholder="Anything the photos don't show, like the roof color or which side the garage is on"></textarea>
-            <div class="row"><button class="btn primary" id="designBtn">Design from photos</button><button class="btn" id="stopBtn" hidden>Stop</button><button class="btn" id="lastBtn" hidden>Load last photo design</button></div>
+            <div class="survey" id="survey" hidden></div>
+            <div class="row"><button class="btn" id="surveyBtn">Check the photos first</button><button class="btn primary" id="designBtn">Design from photos</button><button class="btn" id="stopBtn" hidden>Stop</button><button class="btn" id="lastBtn" hidden>Load last photo design</button></div>
             <div class="out" id="photoStatus" aria-live="polite"></div>
           </div>
         </div>

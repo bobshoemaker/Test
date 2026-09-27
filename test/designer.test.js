@@ -1,7 +1,7 @@
 // The Claude loop, driven by a scripted client: draft with an error, then a fixed final design.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { designHouse, extractJson } = require('../src/server/designer');
+const { designHouse, extractJson, surveyHouse, resolveChoices } = require('../src/server/designer');
 const { makeFakeClient } = require('../src/server/fakeClient');
 
 test('the loop compiles drafts, reports errors to Claude, and returns a clean design', async () => {
@@ -120,6 +120,37 @@ test('parts mode can resume at a later part from an earlier design', async () =>
   assert.match(first, /THE DESIGN SO FAR\. Parts 1 to 1 are done/);
   assert.match(first, /PART 2 OF 4, ROOFS/);
   await assert.rejects(designHouse({ client, model: 'fake', mode: 'parts', fromPart: 2, photos: [{ mediaType: 'image/jpeg', data: 'AAAA' }] }), /needs the design/);
+});
+
+test('the survey asks about what the photos leave open, always adds landscaping, and sends at low effort', async () => {
+  const sent = [];
+  const input = {
+    summary: 'Stucco house.', seen: ['Flat roof edge'], landscapeSeen: 'olive trees and agaves.',
+    questions: [
+      { id: 'roof', topic: 'roof', question: 'Flat or sloped roof?', why: 'Parapet hides it.', recommended: 'nope',
+        options: [{ id: 'flat', label: 'Flat, tile caps' }, { id: 'tile', label: 'Low tile hip roof' }] },
+      { id: 'bad', topic: 'other', question: 'Only one option', options: [{ id: 'x', label: 'X' }], recommended: 'x' },
+    ],
+  };
+  const client = { messages: { create: async (p) => { sent.push(p); return { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 's', name: 'submit_survey', input }] }; } } };
+  const out = await surveyHouse({ client, model: 'fake', photos: [{ mediaType: 'image/jpeg', data: 'A' }] });
+  assert.deepEqual(sent[0].output_config, { effort: 'low' });
+  assert.deepEqual(out.questions.map((q) => q.id), ['roof', 'landscape'], 'a question with one option is dropped');
+  assert.equal(out.questions[0].recommended, 'flat', 'an unknown recommendation falls back to the first option');
+  assert.match(out.questions[1].options[0].detail, /olive trees and agaves/);
+  const choices = resolveChoices(out.questions, { landscape: 'drought' });
+  assert.deepEqual(choices.map((c) => c.answer), ['Flat, tile caps', 'Drought-tolerant']);
+  assert.equal(resolveChoices(out.questions, { roof: 'Tile, but only on the back half' })[0].answer, 'Tile, but only on the back half');
+});
+
+test('the owner\'s choices go into the design task as binding', async () => {
+  const client = makeFakeClient({ delayMs: 0 });
+  const sent = [];
+  const create = client.messages.create.bind(client.messages);
+  client.messages.create = async (params) => { sent.push(JSON.parse(JSON.stringify(params.messages))); return create(params); };
+  const choices = [{ question: 'Which landscaping style should the model use?', answer: 'Lush garden', detail: 'Lawn and hedges.' }];
+  await designHouse({ client, model: 'fake', mode: 'parts', partsLimit: 1, photos: [{ mediaType: 'image/jpeg', data: 'A' }], choices });
+  assert.match(sent[0][0].content.at(-1).text, /CHOICES FROM THE OWNER[\s\S]*landscaping style should the model use\? Lush garden: Lawn and hedges\./);
 });
 
 test('extractJson accepts fenced and surrounded JSON', () => {

@@ -275,15 +275,16 @@ $('compileBtn').onclick=()=>run($('designSrc').value);
 $('revertBtn').onclick=()=>{ $('designSrc').value=DESIGN_TEXT; run(DESIGN_TEXT); };
 
 // ---------- design from photos (local server: POST /api/design, NDJSON progress) ----------
-let photos=[], photoUrls=[], busyCtl=null, health=null;
+let photos=[], photoUrls=[], busyCtl=null, health=null, survey=null;
 const photoCredit=new WeakMap(); // File -> credit for photos found by address lookup
 function status(html,err){ $('photoStatus').innerHTML=err?`<span class="status-err">${html}</span>`:html; }
-function setBusy(b){ $('designBtn').disabled=b; $('pickBtn').disabled=b; $('addrBtn').disabled=b; $('useCands').disabled=b; $('stopBtn').hidden=!b; $('compileBtn').disabled=b; $('revertBtn').disabled=b; }
+function setBusy(b){ $('surveyBtn').disabled=b; $('designBtn').disabled=b; $('pickBtn').disabled=b; $('addrBtn').disabled=b; $('useCands').disabled=b; $('stopBtn').hidden=!b; $('compileBtn').disabled=b; $('revertBtn').disabled=b; }
 function renderThumbs(){
   photoUrls.forEach(u=>URL.revokeObjectURL(u)); photoUrls=photos.map(f=>URL.createObjectURL(f));
   const html=photoUrls.map((u,i)=>`<img src="${u}" alt="House photo ${i+1}">`).join('');
   $('thumbs').innerHTML=html; $('refPhotos').innerHTML=html; $('refWrap').hidden=!photos.length;
   $('designBtn').textContent=photos.length?`Design from ${photos.length} photo${photos.length>1?'s':''}`:'Design from description';
+  $('surveyBtn').hidden=!photos.length; if(survey){ survey=null; $('survey').hidden=true; $('survey').innerHTML=''; } // new photos: ask again
 }
 async function toPayload(file){
   // Downscale on the device: Claude works at about 1.5 megapixels and uploads stay small.
@@ -340,7 +341,8 @@ async function askServer(mode){
   status(mode==='design'?'Preparing photos…':'Sending the design back to Claude…');
   try{
     const body={mode,notes,target,photos:mode==='design'?await Promise.all(photos.map(toPayload)):[],design:mode==='fix'?curDesign:undefined,
-      credits:mode==='design'?photos.map(f=>photoCredit.get(f)).filter(Boolean):undefined};
+      credits:mode==='design'?photos.map(f=>photoCredit.get(f)).filter(Boolean):undefined,
+      choices:mode==='design'?surveyChoices():undefined};
     status(mode==='design'?'Claude is studying the photos. This usually takes a few minutes.':'Claude is fixing the design…');
     const res=await fetch('/api/design',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:ctl.signal});
     if(!res.ok){ const j=await res.json().catch(()=>({})); throw new Error(j.error||`Server error ${res.status}`); }
@@ -362,6 +364,33 @@ function handleEvent(ev,t0){
   else if(ev.type==='error') status(esc(ev.message),true);
 }
 $('designBtn').onclick=()=>askServer('design');
+
+// ---------- survey: POST /api/survey, a quick first look that asks about what the photos leave open ----------
+function renderSurvey(sv){
+  const opt=(q,o)=>`<label class="opt"><input type="radio" name="sq-${esc(q.id)}" value="${esc(o.id)}"${o.id===q.recommended?' checked':''}><span>${esc(o.label)}${o.id===q.recommended?'<span class="rec">what the photos suggest</span>':''}${o.detail?`<small>${esc(o.detail)}</small>`:''}</span></label>`;
+  $('survey').innerHTML=(sv.summary?`<p class="sum">${esc(sv.summary)}</p>`:'')+sv.questions.map(q=>
+    `<fieldset><legend>${esc(q.question)}</legend>${q.why?`<p class="why">${esc(q.why)}</p>`:''}${q.options.map(o=>opt(q,o)).join('')}</fieldset>`).join('');
+  $('survey').hidden=false;
+}
+function surveyChoices(){
+  if(!survey) return undefined;
+  return survey.questions.map(q=>{ const v=(document.querySelector(`input[name="sq-${CSS.escape(q.id)}"]:checked`)||{}).value;
+    const o=q.options.find(x=>x.id===v)||q.options.find(x=>x.id===q.recommended); return o&&{question:q.question,answer:o.label,detail:o.detail||''}; }).filter(Boolean);
+}
+$('surveyBtn').hidden=true;
+$('surveyBtn').onclick=async()=>{
+  if(busyCtl||!photos.length) return;
+  const ctl=new AbortController(); busyCtl=ctl; setBusy(true);
+  status('Taking a quick look at the photos for anything they leave open…');
+  try{
+    const body={notes:$('notes').value.trim().slice(0,1500),photos:await Promise.all(photos.map(toPayload))};
+    const res=await fetch('/api/survey',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:ctl.signal});
+    const j=await res.json(); if(!res.ok) throw new Error(j.error||`Server error ${res.status}`);
+    survey=j; renderSurvey(j);
+    status(`${j.questions.length} question${j.questions.length===1?'':'s'}. The photos' best guess is picked; change any answer, then design.`);
+  }catch(e){ status(e.name==='AbortError'?'Stopped.':esc(e.message),e.name!=='AbortError'); }
+  finally{ busyCtl=null; setBusy(false); }
+};
 
 async function loadDesignList(selected){
   try{ const list=await (await fetch('/api/designs')).json(); const sel=$('designPick'); const cur=selected||new URLSearchParams(location.search).get('design')||'634-unit-a';

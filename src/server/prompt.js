@@ -58,9 +58,18 @@ FLOOR PLAN. The last image is the listing's floor plan, not a photo. Take the fo
 ` : '';
 }
 
-function designTask({ photoCount, notes, target, hasPlan = false }) {
+// What the owner picked where the photos left things open (from the survey); binding for the design.
+function choicesNote(choices) {
+  if (!choices || !choices.length) return '';
+  return `
+CHOICES FROM THE OWNER. These settle what the photos leave open. Follow them over your own reading of the photos:
+${choices.map((c) => `- ${c.question} ${c.answer}${c.detail ? `: ${c.detail}` : ''}`).join('\n')}
+`;
+}
+
+function designTask({ photoCount, notes, target, hasPlan = false, choices = null }) {
   return `TASK
-Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes from the agent: "${notes}"` : ''}. Aim for about ${target} pieces (parts plus window glass plus the baseplate), within 10 percent.${planNote(hasPlan)}
+Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes from the agent: "${notes}"` : ''}. Aim for about ${target} pieces (parts plus window glass plus the baseplate), within 10 percent.${planNote(hasPlan)}${choicesNote(choices)}
 Call compile_design on your draft, fix every error and warning it reports, and compile again until it reports 0 errors and 0 warnings near the target (at most 4 compiles). Then reply with only the final design JSON.
 
 EXAMPLE of a valid design (a two-story house built from three listing photos, 778 pieces, 0 errors):
@@ -83,8 +92,8 @@ ${JSON.stringify(design)}`;
 const PARTS = [
   { name: 'Walls', locked: 'PART 1 OF 4, WALLS. Set name, place, scale, facts, assumed and the full phases list for all four parts, including each locked op\'s phase. Start from the locked walls ops: set each block\'s heights (courses and base, a foundation where the house sits above the street), colors, trim, and each locked opening\'s courses and fill to match the photos, then add the windows and other openings the photos show. Nothing else yet.', task: 'PART 1 OF 4, WALLS. Set name, place, scale, facts, assumed and the full phases list for all four parts. Then write the walls of every building (house, garage, any outbuilding) with every door, window and garage-door opening, on a foundation where the house sits above the street. Nothing else yet.' },
   { name: 'Roofs', task: 'PART 2 OF 4, ROOFS AND TRIM. Add roofs, parapets and their caps, bands, awnings and bay roofs. Leave the walls alone unless the compiler flags them.' },
-  { name: 'Site', task: 'PART 3 OF 4, THE LOT. Add the street, sidewalk, driveway, entry stairs and railings, walks, planters and retaining walls, patio paving, fences and gates.' },
-  { name: 'Planting', task: 'PART 4 OF 4, PLANTING AND FINISH. Add trees, cacti, shrubs and other sub-builds. Then fix every remaining error and warning. When it compiles with 0 errors and 0 warnings, reply with one sentence; the last compiled design is kept.' },
+  { name: 'Site', task: 'PART 3 OF 4, THE LOT. Add the street, sidewalk, driveway, entry stairs and railings, walks, planters and retaining walls, patio paving, fences and gates. Follow the landscaping style in the owner\'s choices, if there is one, for beds, lawn, gravel and paving.' },
+  { name: 'Planting', task: 'PART 4 OF 4, PLANTING AND FINISH. Add trees, cacti, shrubs and other sub-builds, in the landscaping style from the owner\'s choices if there is one. Then fix every remaining error and warning. When it compiles with 0 errors and 0 warnings, reply with one sentence; the last compiled design is kept.' },
 ];
 
 // The walls laid out from the floor plan, which the design has to keep (checked on every compile).
@@ -105,9 +114,9 @@ ${JSON.stringify(seed)}
 `;
 }
 
-function partsTask({ photoCount, notes, target, hasPlan = false, locked = null, lockedOps = null, seed = null, fromPart = 1 }) {
+function partsTask({ photoCount, notes, target, hasPlan = false, locked = null, lockedOps = null, seed = null, fromPart = 1, choices = null }) {
   return `TASK
-Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes from the agent: "${notes}"` : ''}. The finished design should have about ${target} pieces (parts plus window glass plus the baseplate) and no more than 10 percent over. Fewer is fine when the house is simple.${planNote(hasPlan)}
+Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes from the agent: "${notes}"` : ''}. The finished design should have about ${target} pieces (parts plus window glass plus the baseplate) and no more than 10 percent over. Fewer is fine when the house is simple.${planNote(hasPlan)}${choicesNote(choices)}
 
 WORK IN PARTS. You build the design in ${PARTS.length} parts, one part per turn; each turn tells you which part to do. In every part:
 - Add that part's ops to the design so far and call compile_design on the complete design right away. The compiler is fast and exact. Send a rough draft early and let it find collisions and support problems; don't work out coordinates in your head.
@@ -163,4 +172,59 @@ The first ${photoCount} image${photoCount === 1 ? ' is a photo' : 's are photos'
 Read the footprint and submit it with submit_footprint.`;
 }
 
-module.exports = { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask, example };
+// The survey: a cheap first look that lists what the photos show and asks the owner about what
+// they leave open, before any design work. Landscaping is always asked (see LANDSCAPE_STYLES).
+const LANDSCAPE_STYLES = [
+  { id: 'photos', label: 'Match the photos', detail: '' },
+  { id: 'drought', label: 'Drought-tolerant', detail: 'Agaves, yucca, cacti and grasses in gravel and mulch beds, no lawn.' },
+  { id: 'lush', label: 'Lush garden', detail: 'Lawn, clipped hedges, flowering shrubs and a shade tree.' },
+  { id: 'mediterranean', label: 'Mediterranean', detail: 'Olive trees, lavender and rosemary, terracotta pots, paved paths.' },
+  { id: 'minimal', label: 'Minimal', detail: 'Lawn with one or two trees and clean edges; the fewest pieces.' },
+];
+
+const SURVEY_SPEC = `You take a first look at a house's listing photos (and floor plan, if there is one) before anyone builds a brick model of it. You don't design anything. You say what the photos show, and you ask the owner about what they leave open.
+
+Ask only when the answer changes what gets built and the photos don't settle it. Typical cases: a roof hidden behind a parapet or seen only edge-on (flat, or low-sloped tile?), a side or the back never shown, a garage door style or color seen only at night, what sits behind a fence. Don't ask about anything the photos show clearly, and don't ask about taste; landscaping style is asked separately. Ask at most 5 questions, each with 2 to 4 options that the design language below can build. Mark the option the photos point to as recommended and say in "why" what you see and what's unclear. Keep option labels to a few words and details to one sentence. Say in landscapeSeen what planting the photos show, in a few words.
+
+Submit with submit_survey.
+
+DESIGN LANGUAGE (what the model can be built from):
+${SPEC}`;
+
+const SURVEY_TOOL = {
+  name: 'submit_survey',
+  description: 'Reports what the photos show and the questions for the owner about what they leave open.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      summary: { type: 'string', description: 'One or two sentences on the house.' },
+      seen: { type: 'array', items: { type: 'string' }, description: 'Short facts the photos show clearly.' },
+      landscapeSeen: { type: 'string', description: 'The planting the photos show, in a few words.' },
+      questions: {
+        type: 'array', maxItems: 5,
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            topic: { type: 'string', enum: ['roof', 'walls', 'windows', 'doors', 'garage', 'entry', 'site', 'other'] },
+            question: { type: 'string' },
+            why: { type: 'string' },
+            options: { type: 'array', minItems: 2, maxItems: 4, items: { type: 'object', properties: { id: { type: 'string' }, label: { type: 'string' }, detail: { type: 'string' } }, required: ['id', 'label'] } },
+            recommended: { type: 'string' },
+          },
+          required: ['id', 'topic', 'question', 'options', 'recommended'],
+        },
+      },
+    },
+    required: ['summary', 'seen', 'questions'],
+  },
+};
+
+function surveyTask({ photoCount, notes, hasPlan }) {
+  return `TASK
+The first ${photoCount} image${photoCount === 1 ? ' is a photo' : 's are photos'} of the house${hasPlan ? '; the last image is its floor plan' : ''}.${notes ? ` Notes from the agent: "${notes}"` : ''}
+Look them over and submit the survey with submit_survey.`;
+}
+
+module.exports = { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask,
+  SURVEY_SPEC, SURVEY_TOOL, surveyTask, LANDSCAPE_STYLES, choicesNote, example };
