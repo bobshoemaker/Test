@@ -12,10 +12,13 @@ if (!address) { console.error('Usage: node scripts/terrain.js "<address>"'); pro
   if (!place) throw new Error('Address not found.');
   console.log(`${place.label}\n  ${place.lat.toFixed(6)}, ${place.lon.toFixed(6)} (${place.precision} match)`);
   const t = await lookupTerrain(place, address);
-  t.streets.slice(0, 5).forEach((s) => console.log(`  ${s.name}: ${Math.round(s.distanceM)} m to the ${compass(s.bearingTo)}${t.street && s.name === t.street.name ? '  <- faces the street' : ''}`));
+  const b = t.building;
+  console.log(b ? `  Building: ${b.areaSqFt} sq ft${b.tags.height ? `, ${b.tags.height} m tall` : ''}${b.tags.start_date ? `, built ${b.tags.start_date}` : ''}, ${Math.round(Math.hypot(...[b.center.lat - place.lat, (b.center.lon - place.lon) * Math.cos(place.lat * Math.PI / 180)]) * 111320)} m from the geocoded point; ${b.outbuildings.length} outbuilding(s)`
+    : '  Building: not found in OpenStreetMap; measuring from the geocoded point');
+  t.streets.slice(0, 5).forEach((s) => console.log(`  ${s.name}: ${Math.round(s.distanceM)} m from the ${b ? 'house' : 'point'}, to the ${compass(s.bearingTo)}${t.frontage.some((f) => f.name === s.name) ? '  <- frontage' : ''}`));
   if (!t.analysis) { console.log('No elevation data came back.'); return; }
   const a = t.analysis;
-  console.log(`  Street at ${a.streetFt} ft; across the model it rises ${a.streetRiseRightFt} ft left to right (${a.streetGradePct}% grade).`);
-  console.log(`  Lot rises ${a.lotRiseBackFt} ft from the street to the back, ${a.lotRiseRightFt} ft left to right.`);
+  a.streets.forEach((st) => console.log(`  ${t.frontage[st.si].name} at ${st.levelFt} ft; across the model it rises ${st.riseRightFt} ft left to right as seen from it (${st.gradePct}% grade).`));
+  console.log(`  Lot rises ${a.lotRiseBackFt} ft going back from ${t.frontage[0].name}, ${a.lotRiseRightFt} ft left to right.`);
   console.log(`\nNote for the design:\n${t.note}`);
 })().catch((e) => { console.error(e.message || e); process.exit(1); });

@@ -153,7 +153,18 @@ function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap 
   const bx0 = Math.min(...allRects.map((r) => r[0])), bx1 = Math.max(...allRects.map((r) => r[2]));
   const bz0 = Math.min(...allRects.map((r) => r[1])), bz1 = Math.max(...allRects.map((r) => r[3]));
   if (bx1 - bx0 + 1 > size) problems.push(`The house is ${bx1 - bx0 + 1 - size} studs too wide for the baseplate at ${ftPerStud} ft per stud.`);
-  const offX = Math.floor((size - (bx1 - bx0 + 1)) / 2) - bx0, offZ = avail - 1 - bz1;
+  // A corner lot's second street: keep streetRows columns free on its side instead of centering.
+  let side = null;
+  if (fp.sideStreet && ROT[fp.sideStreet] && fp.sideStreet !== street) {
+    const v = { N: [0, -1], S: [0, 1], W: [-1, 0], E: [1, 0] }[fp.sideStreet], [X, Y] = rot(v);
+    side = X < 0 ? 'left' : X > 0 ? 'right' : Y < 0 ? 'back' : null;
+    if (side === 'back') problems.push('The side street faces the back of the lot; only a street on the left or right can be laid out. Left out.');
+  }
+  const width = bx1 - bx0 + 1;
+  if (side === 'left' || side === 'right') {
+    if (width + streetRows > size) problems.push(`There is no room for ${fp.sideStreet} side street's ${streetRows} rows beside the house at ${ftPerStud} ft per stud.`);
+  }
+  const offX = (side === 'left' ? streetRows : side === 'right' ? size - streetRows - width : Math.floor((size - width) / 2)) - bx0, offZ = avail - 1 - bz1;
   for (const b of blocks) b.cellRects = b.cellRects.map((r) => [r[0] + offX, r[1] + offZ, r[2] + offX, r[3] + offZ]);
 
   // Each wall cell belongs to one block: the first listed (tallest) wins, and a later block's
@@ -209,6 +220,7 @@ function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap 
     street,
     blocks: blocks.map((b) => ({ name: b.name, levels: b.levels, cellRects: b.cellRects, cells: b.cells, openings: b.openings, pulledForward: b.dz })),
     stairs, map, problems,
+    sideStreet: side === 'left' || side === 'right' ? { planSide: fp.sideStreet, side, columns: side === 'left' ? [0, streetRows - 1] : [size - streetRows, size - 1] } : null,
   };
 }
 
@@ -257,7 +269,7 @@ function describeLayout(locked) {
     scale: locked.scale, street: locked.street,
     blocks: locked.blocks.map((b) => ({ name: b.name, levels: b.levels, studRects: b.cellRects, wallCells: b.cells.length, pulledForward: b.pulledForward || undefined,
       openings: b.openings.map((o) => `${o.kind} on the ${o.side} wall at cells [${o.cells.join(', ')}]`) })),
-    stairs: locked.stairs, problems: locked.problems,
+    stairs: locked.stairs, sideStreet: locked.sideStreet || undefined, problems: locked.problems,
   });
 }
 

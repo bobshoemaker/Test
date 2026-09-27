@@ -132,7 +132,7 @@ async function handleLookup(req, res) {
     const r = await lookupAddress(body.address);
     // Street and slope, best effort: a lookup still works when the elevation or street service is down.
     if (r.place) {
-      try { const t = await lookupTerrain(r.place, body.address); r.terrain = { note: t.note, street: t.street && t.street.name, analysis: t.analysis }; } catch (e) { r.notes = [...(r.notes || []), `No terrain: ${e.message}`]; }
+      try { const t = await lookupTerrain(r.place, body.address); r.terrain = { note: t.note, streets: t.frontage.map((f) => f.name), building: t.building && { areaSqFt: t.building.areaSqFt, tags: t.building.tags }, analysis: t.analysis }; } catch (e) { r.notes = [...(r.notes || []), `No terrain: ${e.message}`]; }
     }
     send(res, 200, r);
   } catch (e) { send(res, 502, { error: e.message }); }

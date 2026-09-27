@@ -28,12 +28,14 @@ closing gift that realtors give clients: a brick model of the house they just bo
   what the photos show and asks up to five questions about what they leave open (a roof hidden
   by a parapet, an unseen side), each with buildable options and a recommended one, plus a
   landscaping style. The owner's answers go into the design task as binding choices.
-- `src/server/terrain.js`: street and slope for an address, from OpenStreetMap street positions
-  (Overpass) and USGS 3DEP elevations (public domain, no key). Finds the street the house faces
-  and reports, in model terms, how the street rises across the baseplate and the lot rises toward
-  the back, as a note for the survey and design (`/api/lookup` adds it; `--address` on the
-  scripts). The street slope is measured well; the lot's rise is smoothed and interpolated under
-  the house, so the note defers to the photos there. Not Street View: Google's terms bar it.
+- `src/server/terrain.js`: the house's own building outline (OpenStreetMap; in LA County these carry
+  county outlines with height, year built and parcel, so outbuildings on the same parcel show up),
+  the streets its lot fronts (two on a corner lot), and USGS 3DEP elevations (public domain, no
+  key). The note says, relative to each street, how it rises across the baseplate, which side a
+  corner's second street is on, and roughly how the lot rises toward the back (`/api/lookup` adds
+  it; `--address` on the scripts). Geocoders can land on a neighbour, so it measures from the
+  outline when it finds one. The lot's rise is smoothed and interpolated under the house, so the
+  note defers to the photos there. Not Street View: Google's terms bar it.
 - `src/server/footprint.js`: floor plan to locked walls. With a plan, parts mode first has Claude
   read the footprint off a pixel-gridded copy (`submit_footprint`: labeled rooms for scale,
   blocks as rectangles, doors, stairs, street side). This module scales it to studs from the

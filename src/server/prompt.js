@@ -105,6 +105,7 @@ function lockedNote(locked, ops) {
 LOCKED WALLS FROM THE FLOOR PLAN. These walls ops were laid out from the floor plan at ${locked.scale.ftPerStud} ft per stud, with the street along z=31. Start the design from them. Keep every op's "block" and "segments", and each listed opening's "cells", exactly as given: every compile checks them against the plan and reports changes as errors. Everything else is yours to set from the photos: courses and base (heights, raised floors, foundations), colors, trim, each opening's courses and fill, windows and other openings, and more walls ops for the same block (a foundation course or a parapet) with the same block and segments.
 ${JSON.stringify(ops)}
 Block rectangles for roofs ("rects"; blocks with the same wall-top height share one roof): ${JSON.stringify(locked.blocks.filter((b) => b.cells.length).map((b) => ({ block: b.name, rects: b.cellRects })))}
+${locked.sideStreet ? `Corner lot: a second street runs along x = ${locked.sideStreet.side === 'left' ? 0 : 31} (columns ${locked.sideStreet.columns.join(' to ')} are kept free for its street and sidewalk; build them in part 3).` : ''}
 ${locked.stairs.length ? `Stairs on the plan (stud rectangles [x0,z0,x1,z1]; build them in part 3): ${JSON.stringify(locked.stairs)}` : ''}
 `;
 }
@@ -141,6 +142,7 @@ Work in the plan's own pixel coordinates: x to the right, y down. The gridded co
 
 Report with submit_footprint:
 - street: the plan side that faces the street (N top, S bottom, E right, W left). The street-level garage door opens toward the street, a lower level sits on the street side of a sloping lot, and exterior stairs run down toward it. A garage door is on the garage's short side (a one-car garage is about 10 ft wide and 17 to 20 ft deep). If the agent's notes name the street side, use it.
+- sideStreet (corner lots only): the plan side that faces a second street, if the lot has one. The agent's notes or terrain say whether it's a corner lot.
 - rooms: three or more rooms with size labels (like "14 X 20"), each with rectPx along its wall lines. They set the scale, so pick rooms whose four walls are clear.
 - blocks: the exterior of every building, split into parts that differ in height (a two-level wing, the one-level main house, a detached garage). Each is one or more rectangles along the exterior wall center lines; rectangles of one block may touch or overlap. levels is the number of stories seen from outside (2 for a garage with rooms above it). List the tallest blocks first. A lower level drawn separately on the plan (like a garage under a bedroom wing) is not its own block when it sits under a main-level block; give that block 2 levels and put the lower level's doors on it.
 - openings: every exterior door, garage door, and sliding or French door, as the point on the wall line at its center (atPx), its block, kind and width in feet. Windows come later from the photos.
@@ -158,6 +160,7 @@ const FOOTPRINT_TOOL = (() => {
       type: 'object',
       properties: {
         street: { type: 'string', enum: ['N', 'S', 'E', 'W'] },
+        sideStreet: { type: 'string', enum: ['N', 'S', 'E', 'W'], description: 'Corner lots only: the plan side facing the second street.' },
         rooms: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, label: { type: 'string' }, rectPx: rect }, required: ['name', 'label', 'rectPx'] } },
         blocks: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, levels: { type: 'integer' }, rectsPx: { type: 'array', items: rect }, note: { type: 'string' } }, required: ['name', 'levels', 'rectsPx'] } },
         openings: { type: 'array', items: { type: 'object', properties: { block: { type: 'string' }, kind: { type: 'string', enum: ['door', 'double door', 'sliding door', 'garage door'] }, atPx: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 }, widthFt: { type: 'number' }, note: { type: 'string' } }, required: ['block', 'kind', 'atPx', 'widthFt'] } },

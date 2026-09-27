@@ -81,3 +81,13 @@ test('segments cover exactly the cells they came from', () => {
   for (const [x0, z0, x1, z1] of segmentsFromCells(cells)) for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) got.add(x + ',' + z);
   assert.deepEqual([...got].sort(), cells.map((c) => c.join()).sort());
 });
+
+test('a corner lot keeps room for the second street on its side instead of centering the house', () => {
+  const L = layoutFootprint({ ...PLAN, sideStreet: 'W' });
+  assert.deepEqual(L.problems, []);
+  assert.deepEqual(L.sideStreet, { planSide: 'W', side: 'left', columns: [0, 1] });
+  assert.equal(Math.min(...L.blocks.flatMap((b) => b.cellRects.map((r) => r[0]))), 2);
+  const R = layoutFootprint({ ...PLAN, street: 'E', sideStreet: 'N', blocks: [{ name: 'House', levels: 1, rectsPx: [[0, 0, 200, 100]] }], openings: [], stairs: [] });
+  assert.equal(R.sideStreet.side, 'right', 'with the street on the east, north is on the right as seen from it');
+  assert.equal(Math.max(...R.blocks.flatMap((b) => b.cellRects.map((r) => r[2]))), 29);
+});
