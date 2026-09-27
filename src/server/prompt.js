@@ -50,9 +50,16 @@ function example() {
   return fs.readFileSync(path.join(__dirname, '../../designs/634-unit-a.json'), 'utf8');
 }
 
-function designTask({ photoCount, notes, target }) {
+// Floor plans answer what photos can't: footprint, how the wings fit, which way doors face.
+function planNote(hasPlan) {
+  return hasPlan ? `
+FLOOR PLAN. The last image is the listing's floor plan, not a photo. Take the footprint, how the wings and rooms fit together, which way each wall and door faces, and where the entries, stairs, garages and patio are from the plan; take heights, materials, colors, windows and roofs from the photos. Room sizes are in feet: at 2 ft per stud a 14 x 20 ft room is 7 x 10 studs. Match each photo to the side of the plan it shows, and work out which plan edge faces the street before placing anything.
+` : '';
+}
+
+function designTask({ photoCount, notes, target, hasPlan = false }) {
   return `TASK
-Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes from the agent: "${notes}"` : ''}. Aim for about ${target} pieces (parts plus window glass plus the baseplate), within 10 percent.
+Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes from the agent: "${notes}"` : ''}. Aim for about ${target} pieces (parts plus window glass plus the baseplate), within 10 percent.${planNote(hasPlan)}
 Call compile_design on your draft, fix every error and warning it reports, and compile again until it reports 0 errors and 0 warnings near the target (at most 4 compiles). Then reply with only the final design JSON.
 
 EXAMPLE of a valid design (a two-story house built from three listing photos, 778 pieces, 0 errors):
@@ -79,9 +86,9 @@ const PARTS = [
   { name: 'Planting', task: 'PART 4 OF 4, PLANTING AND FINISH. Add trees, cacti, shrubs and other sub-builds. Then fix every remaining error and warning. When it compiles with 0 errors and 0 warnings, reply with one sentence; the last compiled design is kept.' },
 ];
 
-function partsTask({ photoCount, notes, target }) {
+function partsTask({ photoCount, notes, target, hasPlan = false }) {
   return `TASK
-Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes from the agent: "${notes}"` : ''}. The finished design should have about ${target} pieces (parts plus window glass plus the baseplate) and no more than 10 percent over. Fewer is fine when the house is simple.
+Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes from the agent: "${notes}"` : ''}. The finished design should have about ${target} pieces (parts plus window glass plus the baseplate) and no more than 10 percent over. Fewer is fine when the house is simple.${planNote(hasPlan)}
 
 WORK IN PARTS. You build the design in ${PARTS.length} parts, one part per turn; each turn tells you which part to do. In every part:
 - Add that part's ops to the design so far and call compile_design on the complete design right away. The compiler is fast and exact. Send a rough draft early and let it find collisions and support problems; don't work out coordinates in your head.

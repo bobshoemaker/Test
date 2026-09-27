@@ -85,6 +85,7 @@ async function callClaude(client, params, onEvent = () => {}) {
  * @param {object} o.client     Anthropic client (or a test double with messages.create)
  * @param {string} o.model      e.g. 'claude-opus-5-5'
  * @param {Array<{mediaType:string,data:string}>} [o.photos] base64 images
+ * @param {{mediaType:string,data:string}} [o.plan] base64 floor plan image, sent after the photos
  * @param {'design'|'parts'|'fix'} [o.mode]  'parts' builds walls, roofs, site and planting in separate turns
  * @param {object} [o.design]   required for mode 'fix'
  * @param {function} [o.onEvent] receives {type:'status'|'part'|'progress'|'thought'|'draft'|'partDone', ...}
@@ -93,16 +94,16 @@ async function callClaude(client, params, onEvent = () => {}) {
  * @param {number} [o.partsLimit] parts mode: stop after this many parts (for trying out one part)
  */
 async function designHouse({
-  client, model, photos = [], notes = '', target = 1200, mode = 'design', design = null,
+  client, model, photos = [], plan = null, notes = '', target = 1200, mode = 'design', design = null,
   effort = null, maxRounds = 7, maxTokens = 64000, onEvent = () => {}, render = null, partsLimit = PARTS.length,
 }) {
-  const content = photos.map((p) => ({ type: 'image', source: { type: 'base64', media_type: p.mediaType, data: p.data } }));
+  const content = [...photos, ...(plan ? [plan] : [])].map((p) => ({ type: 'image', source: { type: 'base64', media_type: p.mediaType, data: p.data } }));
   if (mode === 'fix') {
     if (!isDesign(design)) throw new Error('Fix mode needs a design with phases and ops.');
     content.push({ type: 'text', text: fixTask({ design, problems: problemList(compile(design)) }) });
   } else {
     if (!photos.length && !notes) throw new Error('Add at least one photo or a description.');
-    content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target }) });
+    content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target, hasPlan: !!plan }) });
   }
   const messages = [{ role: 'user', content }];
   const usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };

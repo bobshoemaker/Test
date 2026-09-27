@@ -66,6 +66,18 @@ test('each compile result carries renders of the draft when a renderer is given'
   assert.equal(sent.length, 2, 'partsLimit 1 stops after the first part');
 });
 
+test('a floor plan goes after the photos and the task explains it', async () => {
+  const client = makeFakeClient({ delayMs: 0 });
+  const sent = [];
+  const create = client.messages.create.bind(client.messages);
+  client.messages.create = async (params) => { sent.push(JSON.parse(JSON.stringify(params.messages))); return create(params); };
+  await designHouse({ client, model: 'fake', mode: 'parts', partsLimit: 1, photos: [{ mediaType: 'image/jpeg', data: 'PHOTO' }], plan: { mediaType: 'image/png', data: 'PLAN' } });
+  const first = sent[0][0].content;
+  assert.deepEqual(first.filter((b) => b.type === 'image').map((b) => b.source.data), ['PHOTO', 'PLAN']);
+  assert.match(first.at(-1).text, /1 attached photo using|1 attached photo\./);
+  assert.match(first.at(-1).text, /FLOOR PLAN\. The last image/);
+});
+
 test('extractJson accepts fenced and surrounded JSON', () => {
   assert.deepEqual(extractJson('```json\n{"a":1}\n```'), { a: 1 });
   assert.deepEqual(extractJson('Here it is: {"a":2} done'), { a: 2 });

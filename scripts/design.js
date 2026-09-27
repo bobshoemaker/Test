@@ -3,6 +3,7 @@
 //   node scripts/design.js front.jpg side.jpg --notes "garage on the right" --target 1200 --out designs/my-house.json
 //   Options: --model claude-opus-5-5  --effort high|xhigh|max  --max-tokens 128000  --fake (scripted Claude, no key)
 //            --parts  build in four turns (walls, roofs, site, planting); saves each compiled draft next to --out
+//            --plan floorplan.png  the listing's floor plan, sent after the photos
 //            --parts-limit 1  stop after the first N parts   --no-render  don't send renders of each draft
 const fs = require('node:fs');
 const path = require('node:path');
@@ -14,13 +15,14 @@ const flag = (name) => { const i = args.indexOf('--' + name); if (i >= 0) { args
 const notes = opt('notes', ''), target = Number(opt('target', 1200)), out = opt('out', null);
 const model = opt('model', process.env.BRICKHOUSE_MODEL || 'claude-opus-5-5'), effort = opt('effort', process.env.BRICKHOUSE_EFFORT || null);
 const maxTokens = Number(opt('max-tokens', 64000));
-const partsLimit = Number(opt('parts-limit', 4));
+const partsLimit = Number(opt('parts-limit', 4)), planFile = opt('plan', null);
 const fake = flag('fake'), parts = flag('parts'), noRender = flag('no-render');
 const types = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' };
-const photos = args.map((f) => {
+const readImage = (f) => {
   const t = types[path.extname(f).toLowerCase()]; if (!t) throw new Error(`Unsupported image type: ${f}`);
   return { mediaType: t, data: fs.readFileSync(f).toString('base64') };
-});
+};
+const photos = args.map(readImage), plan = planFile ? readImage(planFile) : null;
 
 (async () => {
   let client;
@@ -33,7 +35,7 @@ const photos = args.map((f) => {
   const base = (out || 'designs/generated/house.json').replace(/\.json$/, '');
   const renderer = noRender ? null : await require('../src/server/render').makeRenderer().catch((e) => { console.log(`Renders off: ${e.message}`); return null; });
   if (!noRender && !renderer) console.log('Renders off: Playwright is not installed.');
-  const res = await designHouse({ client, model, effort, maxTokens, photos, notes, target, mode: parts ? 'parts' : 'design', partsLimit,
+  const res = await designHouse({ client, model, effort, maxTokens, photos, plan, notes, target, mode: parts ? 'parts' : 'design', partsLimit,
     render: renderer && renderer.render,
     onEvent: (ev) => {
       if (ev.type === 'status') console.log(`${clock()} ${ev.message}`);
