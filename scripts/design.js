@@ -2,7 +2,7 @@
 // Photos to design from the command line, using the same loop as the server.
 //   node scripts/design.js front.jpg side.jpg --notes "garage on the right" --target 1200 --out designs/my-house.json
 //   Options: --model claude-opus-5-5  --effort high|xhigh|max  --max-tokens 128000  --fake (scripted Claude, no key)
-//            --parts  build in four turns (walls, roofs, site, planting); saves each compiled draft next to --out
+//            --parts  build in five turns (walls, roofs, site, planting, details); saves each compiled draft next to --out
 //            --plan floorplan.png  the listing's floor plan; with --parts, Claude reads the footprint off it first
 //                                  and the walls are locked to it (saved as <out>.footprint.json)
 //            --footprint <out>.footprint.json  reuse a saved footprint instead of reading the plan again
@@ -28,7 +28,7 @@ const plateSize = Number(opt('plate', 32));
 const target = Number(opt('target', require('../src/server/scale').scaleFor(plateSize).target)), out = opt('out', null);
 const model = opt('model', process.env.BRICKHOUSE_MODEL || 'claude-opus-5-5'), effort = opt('effort', process.env.BRICKHOUSE_EFFORT || null);
 const maxTokens = Number(opt('max-tokens', 64000));
-const partsLimit = Number(opt('parts-limit', 4)), planFile = opt('plan', null), footprintFile = opt('footprint', null);
+const partsLimit = Number(opt('parts-limit', 5)), planFile = opt('plan', null), footprintFile = opt('footprint', null);
 const choicesFile = opt('choices', null), answerArgs = [];
 for (let i; (i = args.indexOf('--answer')) >= 0;) answerArgs.push(args.splice(i, 2)[1]);
 const resumeFile = opt('resume', null), fromPart = Number(opt('from-part', resumeFile ? 2 : 1));

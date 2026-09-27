@@ -103,3 +103,13 @@ test('a roof leaning on a taller building rises into its wall there and has an e
   // A tower no taller than the shed leaves the leaning edge showing.
   assert.match(lean(3).warnings.map((w) => w.msg).join(' '), /Roof leans on another building, but/);
 });
+
+test('every plant in the library stands on its own, and an unknown kind is named', () => {
+  const { PLANTS } = require('../src/engine/engine.js');
+  for (const kind of Object.keys(PLANTS)) {
+    const r = compile({ name: kind, phases: ['p'], ops: [{ op: 'plant', phase: 'p', kind, at: [[10, 0, 10], [20, 0, 20]], bloom: 'Red' }] });
+    assert.deepEqual([kind, r.errors.length, r.warnings.length, r.subs[0].copies], [kind, 0, 0, 2]);
+  }
+  const bad = compile({ name: 'x', phases: ['p'], ops: [{ op: 'plant', phase: 'p', kind: 'baobab', at: [[5, 0, 5]] }] });
+  assert.match(bad.errors[0].msg, /Unknown plant "baobab"; the library has olive tree, yucca/);
+});

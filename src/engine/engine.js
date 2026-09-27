@@ -39,6 +39,28 @@ const SPECIAL = {
 };
 // Baseplates by size: a design sets "plate": 48 for the larger one (default 32).
 const GLASS_COST = 0.10, BASEPLATES = {32:{no:'3811', name:'Baseplate 32 x 32', color:'Green', cost:12}, 48:{no:'4186', name:'Baseplate 48 x 48', color:'Green', cost:25}};
+// Plant library for the "plant" op: sub-builds checked to stand on their own, placed by kind.
+// Offsets are from the plant's corner stud; "bloom" parts take the op's bloom color.
+const P=(part,color,x,y,z,dir)=>({part,color,at:[x,y,z],...(dir?{dir}:{})});
+const PLANTS = {
+  'olive tree':{name:'Olive tree', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Reddish Brown',0,1,0),P('round1','Reddish Brown',1,1,1),P('round1','Reddish Brown',0,4,0),P('round1','Reddish Brown',1,4,1),
+    P('plate:2x2','Olive Green',0,7,0),P('plate:4x4','Olive Green',-1,8,-1),P('plate:2x2','Olive Green',0,9,0),P('roundplate1','Sand Green',-1,9,-1),P('roundplate1','Sand Green',2,9,-1),P('roundplate1','Sand Green',-1,9,2),P('roundplate1','Sand Green',2,9,2),P('roundplate2','Sand Green',0,10,0)]},
+  'yucca':{name:'Yucca', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Tan',0,1,0),P('round1','Tan',0,4,0),P('palmtop','Sand Green',0,7,0)]},
+  'agave':{name:'Agave', parts:[P('plate:2x2','Sand Green',0,0,0),P('cheese','Sand Green',0,1,0,'W'),P('cheese','Sand Green',1,1,0,'N'),P('cheese','Sand Green',1,1,1,'E'),P('cheese','Sand Green',0,1,1,'S')]},
+  'columnar cactus':{name:'Columnar cactus', parts:[P('plate:2x2','Dark Tan',0,0,0),P('round1','Green',0,1,0),P('round1','Green',0,4,0),P('round1','Green',0,7,0),P('roundplate1','Green',0,10,0),P('round1','Green',1,1,1),P('round1','Green',1,4,1),P('roundplate1','Green',1,7,1)]},
+  'palm':{name:'Palm tree', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Reddish Brown',0,1,0),P('round1','Dark Tan',0,4,0),P('round1','Reddish Brown',0,7,0),P('round1','Dark Tan',0,10,0),P('round1','Reddish Brown',0,13,0),P('palmtop','Green',0,16,0)]},
+  'cypress':{name:'Cypress', parts:[P('roundbrick2','Dark Green',0,0,0),P('roundbrick2','Dark Green',0,3,0),P('roundbrick2','Dark Green',0,6,0),P('roundbrick2','Dark Green',0,9,0),P('roundplate2','Dark Green',0,12,0)]},
+  'shade tree':{name:'Shade tree', parts:[P('roundbrick2','Reddish Brown',0,0,0),P('roundbrick2','Reddish Brown',0,3,0),P('roundbrick2','Reddish Brown',0,6,0),P('plate:6x6','Green',-2,9,-2),
+    P('brick:6x2','Green',-2,10,-2),P('brick:6x2','Dark Green',-2,10,0),P('brick:6x2','Green',-2,10,2),P('plate:4x4','Dark Green',-1,13,-1),P('brick:4x2','Green',-1,14,-1),P('brick:4x2','Green',-1,14,1),P('roundplate2','Dark Green',0,17,0)]},
+  'shrub':{name:'Shrub', parts:[P('roundbrick2','Dark Green',0,0,0),P('roundplate2','Green',0,3,0)]},
+  'flowering shrub':{name:'Flowering shrub', parts:[P('roundbrick2','Dark Green',0,0,0),P('roundplate1','bloom',0,3,0),P('roundplate1','Green',1,3,0),P('roundplate1','Green',0,3,1),P('roundplate1','bloom',1,3,1)]},
+  'grasses':{name:'Grasses', parts:[P('plate:2x1','Olive Green',0,0,0),P('cheese','Olive Green',0,1,0,'W'),P('cheese','Olive Green',1,1,0,'E')]},
+  'lavender':{name:'Lavender', parts:[P('plate:2x1','Sand Green',0,0,0),P('roundplate1','Sand Blue',0,1,0),P('roundplate1','Sand Blue',1,1,0)]},
+  'flower bed':{name:'Flower bed', parts:[P('plate:4x2','Reddish Brown',0,0,0),...[0,1,2,3].flatMap(x=>[0,1].map(z=>P('roundplate1',(x+z)%2?'Green':'bloom',x,1,z)))]},
+  'lemon tree':{name:'Lemon tree', parts:[P('roundplate2','Reddish Brown',0,0,0),P('round1','Reddish Brown',0,1,0),P('round1','Reddish Brown',1,1,1),P('plate:2x2','Dark Green',0,4,0),P('roundbrick2','Green',0,5,0),
+    P('roundplate1','Yellow',0,8,0),P('roundplate1','Green',1,8,0),P('roundplate1','Green',0,8,1),P('roundplate1','Yellow',1,8,1)]},
+};
+
 const N4 = [[1,0],[-1,0],[0,1],[0,-1]];
 const K3 = (x,z,p)=>x+','+z+','+p;
 
@@ -315,7 +337,15 @@ function compile(design){
         const si=subs.length; subs.push({name:op.name, phase:op.phase, copies:op.copies.length, op:i, partIds:[]});
         op.copies.forEach((c,ci)=>op.parts.forEach((pp,pi)=>{
           const q=place(pp.part,c[0]+pp.at[0],c[1]+pp.at[1],c[2]+pp.at[2],pp.rot||0,pp.color,Object.assign({},meta,{sub:si,copy:ci,tpl:pi}),true);
-          if(q) subs[si].partIds.push(q.id); }));
+          if(q){ if(pp.dir) q.dir=pp.dir; subs[si].partIds.push(q.id); } }));
+        break; }
+      case 'plant': {
+        const def=PLANTS[String(op.kind||'').toLowerCase()];
+        if(!def){ errors.push({msg:`Unknown plant "${op.kind}"; the library has ${Object.keys(PLANTS).join(', ')}`, op:i}); break; }
+        const si=subs.length; subs.push({name:def.name, phase:op.phase, copies:op.at.length, op:i, partIds:[]});
+        op.at.forEach((c,ci)=>def.parts.forEach((pp,pi)=>{
+          const q=place(pp.part,c[0]+pp.at[0],c[1]+pp.at[1],c[2]+pp.at[2],0,pp.color==='bloom'?(op.bloom||'Bright Pink'):pp.color,Object.assign({},meta,{sub:si,copy:ci,tpl:pi}),true);
+          if(q){ if(pp.dir) q.dir=pp.dir; subs[si].partIds.push(q.id); } }));
         break; }
       default: errors.push({msg:`Unknown operation "${op.op}"`, op:i});
     }
@@ -415,4 +445,4 @@ function compile(design){
   return {parts,steps,subs,errors,warnings,joints,jn,inventory,occ,
     stats:{pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32}};
 }
-if(typeof module!=='undefined') module.exports={compile,COLORS,SPECIAL,SIZE_PARTS};
+if(typeof module!=='undefined') module.exports={compile,COLORS,SPECIAL,SIZE_PARTS,PLANTS};
