@@ -718,26 +718,33 @@ function compile(design){
   for(const p of parts){ const op=design.ops[p.op]; if(op&&op.liftoff&&p.liftoff===undefined){ p.liftoff=String(op.liftoff); if(!riders.has(p.liftoff)) riders.set(p.liftoff,[]); riders.get(p.liftoff).push(p.id); } }
 
   // ---------- manual steps ----------
-  const STEP_MAX=8, SUB_MAX=4, steps=[];
+  // Like a big LEGO set's manual: a step is one layer (a course of bricks, a layer of plates), split evenly
+  // when it has more than STEP_MAX pieces; a step under STEP_MIN pieces joins its neighbour.
+  const STEP_MAX=20, STEP_MIN=6, steps=[];
+  // steps for parts sorted by height; brk(y, steps so far) is called before each new layer, and true starts a new step
+  function layerSteps(list,brk){ const out=[]; let cur=null;
+    for(let i=0;i<list.length;){ let j=i; while(j<list.length&&list[j].y===list[i].y) j++; const L=list.slice(i,j); i=j;
+      if(brk&&brk(L[0].y,out)) cur=null;
+      const size=Math.ceil(L.length/Math.ceil(L.length/STEP_MAX));
+      for(let a=0;a<L.length;a+=size){ const c=L.slice(a,a+size);
+        if(cur&&(cur.length<STEP_MIN||c.length<STEP_MIN)&&cur.length+c.length<=STEP_MAX) cur.push(...c); else { cur=c; out.push(cur); } } }
+    return out; }
   const main=phases.map(()=>[]);
   for(const p of parts) if(p.sub===undefined) main[phaseIdx.get(p.phase)].push(p);
   phases.forEach((ph,pi)=>{
-    const list=main[pi].sort((a,b)=>a.y-b.y||a.id-b.id), local=[], seq=[]; let cur=null;
+    const list=main[pi].sort((a,b)=>a.y-b.y||a.id-b.id), local=[], seq=[];
     // an assembly in the same phase as parts that stand on it (a story's own slab) is placed when the
     // build reaches its height; other sub-builds are placed at the end of the phase
     const asm=subs.map((s,si)=>({s,si})).filter(a=>a.s.phase===ph&&a.s.assembly)
       .map(a=>({si:a.si,y:Math.min(...a.s.partIds.map(id=>parts[id-1].y))})).sort((a,b)=>a.y-b.y);
-    const early=new Set();
-    for(const p of list){
-      while(asm.length&&p.y>=asm[0].y){ const a=asm.shift(); early.add(a.si); seq.push({sub:a.si}); cur=null; }
-      const n=cur?cur.parts.length:0;
-      if(!cur||n>=STEP_MAX||(p.y!==cur.lastY&&n>=4)){ cur={kind:'main',phase:ph,parts:[],lastY:p.y}; local.push(cur); seq.push(cur); }
-      cur.parts.push(p.id); cur.lastY=p.y;
-    }
+    const early=new Set(); let done=0;
+    // an assembly reached by the build goes in between; the steps grouped so far go in before it
+    const flush=all=>{ for(;done<all.length;done++){ const st={kind:'main',phase:ph,parts:all[done].map(p=>p.id)}; local.push(st); seq.push(st); } };
+    flush(layerSteps(list,(y,sofar)=>{ let hit=false; while(asm.length&&y>=asm[0].y){ const a=asm.shift(); early.add(a.si); flush(sofar); seq.push({sub:a.si}); hit=true; } return hit; }));
     local.forEach((s,k)=>{ s.title=ph; s.n=k+1; s.of=local.length; });
     const subSteps=si=>{ const s=subs[si];
-      const tpl=s.partIds.map(id=>parts[id-1]).filter(p=>p.copy===0).sort((a,b)=>a.y-b.y||a.id-b.id), ss=[];
-      for(let k=0;k<tpl.length;k+=SUB_MAX) ss.push({kind:'sub',phase:ph,sub:si,parts:tpl.slice(k,k+SUB_MAX).map(p=>p.id)});
+      const tpl=s.partIds.map(id=>parts[id-1]).filter(p=>p.copy===0).sort((a,b)=>a.y-b.y||a.id-b.id);
+      const ss=layerSteps(tpl).map(g=>({kind:'sub',phase:ph,sub:si,parts:g.map(p=>p.id)}));
       ss.forEach((st,k)=>{ st.title=s.name; st.n=k+1; st.of=ss.length; steps.push(st); });
       steps.push({kind:'attach',phase:ph,sub:si,parts:s.partIds.slice(),title:s.copies>1?`Place the ${s.name.toLowerCase()}s`:`Place the ${s.name.toLowerCase()}`,n:1,of:1});
     };

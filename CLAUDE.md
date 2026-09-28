@@ -33,7 +33,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   textures lawn, meadow, dry) and a warning for a big open stretch of bare baseplate (about 12 ft
   square; `"lot": false` for a building alone, as most unit tests are), hints (never
   blocking) for big open stretches of plain tile, a fixture library for roofs (skylight, HVAC unit,
-  vents, solar panel, hatch, chimney), manual step grouping, and the inventory.
+  vents, solar panel, hatch, chimney), manual step grouping (one layer a step, like a big LEGO set: split evenly past
+  20 pieces, a step under 6 joins its neighbour), and the inventory.
   Parts must be easy to buy: `src/engine/parts-availability.js` (built by `scripts/availability.js`
   from Rebrickable's database downloads) says how many LEGO sets have included each part in each
   color and when; a part in a color is easy to get with 6+ sets, the latest 2018 or later. The packer
