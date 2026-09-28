@@ -347,6 +347,19 @@ function compile(design){
     return out;
   }
 
+  // Stud texture: paving and floors aren't all smooth tile. A share of the tiles become the plate of the
+  // same size and color, bunched in patches like worn paving; same footprint and height, so nothing
+  // else changes. "studs" on the op sets the share (0 for none); by default, with the subtle variation,
+  // ground paving gets 15% and floors 8% (not lift-off roofs or assemblies, which stay smooth).
+  function studTexture(ids,op,i,dflt){
+    const f=op.studs!==undefined?Number(op.studs):(design.variation==='subtle'?dflt:0); if(!(f>0)) return;
+    const h=(a,b,c)=>((((a*73856093)^(b*19349663)^(c*83492791)^(i*2654435761))>>>0)%10000)/10000;
+    for(const id of ids){ const p=parts[id-1]; if(p.kind!=='tile') continue;
+      const worn=h(Math.floor(p.x/4),Math.floor(p.z/4),1)<0.4; if(h(p.x,p.z,2)>=f*(worn?2.2:0.3)) continue;
+      const key='plate:'+p.w+'x'+p.d; let def; try{ def=resolvePart(key); }catch(e){ continue; }
+      if(!easyToGet(def.no,p.color)) continue;
+      const q=makePart(def,p.x,p.y,p.z,0,p.color,{op:p.op,phase:p.phase}); q.id=p.id; parts[id-1]=q; } }
+
   // "mix" on a fill or walls op: after packing, recolor a scattered few whole pieces of the op's main
   // color (a weathered roof, varied pavers or stucco). Whole pieces, so the structure doesn't change.
   // an op's own mix, or the design's default variation for its color (not for context stubs or seats)
@@ -577,12 +590,13 @@ function compile(design){
         break; }
       case 'fill': {
         const level=new Map(); for(const r of op.rects) for(const [x,z] of rectCells(r)) level.set(x+','+z,op.color);
-        mixColors(pack(level,op.kind||'tile',op.y||0,meta),op,op.color,i); break; }
+        const ids=pack(level,op.kind||'tile',op.y||0,meta); if((op.kind||'tile')==='tile') studTexture(ids,op,i,op.liftoff||op.assembly?0:0.15);
+        mixColors(ids,op,op.color,i); break; }
       case 'floor': { // every stud inside the buildings (within rects, if given) at height y
         const lim=op.rects?new Set(op.rects.flatMap(r=>rectCells(r)).map(([x,z])=>x+','+z)):null, level=new Map();
         for(const k of insideCells()) if(!lim||lim.has(k)) level.set(k,op.color);
         if(!level.size) warnings.push({msg:'The floor op found no studs inside walls (it floors what walls at least 4 courses tall enclose)', op:i});
-        pack(level,op.kind||'tile',op.y||0,meta); break; }
+        const fids=pack(level,op.kind||'tile',op.y||0,meta); if((op.kind||'tile')==='tile') studTexture(fids,op,i,0.08); break; }
       case 'lawn': { // bare ground made into a finished lawn: patches of lighter and darker green, tufts, a few flowers
         const T=LAWN[op.texture||'lawn']; if(!T){ errors.push({msg:`Lawn texture must be one of ${Object.keys(LAWN).join(', ')}`, op:i}); break; }
         const inside=insideCells(), area=[];

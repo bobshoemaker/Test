@@ -21,7 +21,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   gets its story's floor laid under it that way (covering the story below too, so a set-back story
   rests on its walls), so a story that juts out past the one below needs no brackets (a warning past 4 studs of overhang, unless a post or wall spans it); upper stories can lift
   off too, each resting on the one below, and the viewer lifts them top first; "variation": "subtle",
-  which the design loop sets, recolors a few pieces of each material), a plant library built from
+  which the design loop sets, recolors a few pieces of each material and turns about 15% of ground
+  paving tiles and 8% of floor tiles into same-size plates, in patches, so some studs show;
+  `"studs"` on a fill or floor op sets the share), a plant library built from
   real LEGO foliage (branching "plant leaves" 4 x 3 and 6 x 5 with studs on their tips, stacked into
   canopies with fruit or flowers on the tips; leafy and flower-edged round plates; a palm top with
   swordleaf fronds clipped to its bars) in colors true to each plant, a `lawn` op that

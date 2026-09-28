@@ -446,3 +446,17 @@ test('bare baseplate around a house is flagged, and a lawn op listed last finish
   assert.match(engine.compile({ name: 'x', phases: ['h', 'g'], ops: [...house, { op: 'lawn', phase: 'g', texture: 'astroturf' }] }).errors[0].msg, /Lawn texture must be one of lawn, meadow, dry/);
   assert.deepEqual(engine.compile({ name: 'a', lot: false, phases: ['h'], ops: house }).warnings, [], 'a building alone skips the check');
 });
+
+test('paving and floors show some stud texture: a share of the tiles become plates of the same size, in patches', () => {
+  const drive = (extra) => ({ name: 'd', variation: 'subtle', phases: ['p'], ops: [{ op: 'fill', phase: 'p', kind: 'tile', color: 'Light Bluish Gray', rects: [[0, 0, 23, 23]], ...extra }] });
+  const plain = compile({ ...drive({ studs: 0 }) }), textured = compile(drive({}));
+  assert.deepEqual([textured.errors.length, textured.warnings.length], [0, 0]);
+  const plates = textured.parts.filter((p) => p.kind === 'plate');
+  assert.ok(plates.length > 0 && plates.length < textured.parts.length * 0.3, `some studded pieces (${plates.length} of ${textured.parts.length})`);
+  assert.equal(textured.parts.length, plain.parts.length, 'same pieces, some swapped');
+  textured.parts.forEach((p, k) => assert.deepEqual([p.x, p.y, p.z, p.w, p.d, p.h], [plain.parts[k].x, plain.parts[k].y, plain.parts[k].z, plain.parts[k].w, plain.parts[k].d, plain.parts[k].h]));
+  assert.ok(plates.every((p) => engine.easyToGet(p.no, p.color)));
+  // a lift-off roof's tiles stay smooth unless asked
+  assert.equal(compile(drive({ liftoff: 'R', y: 0 })).parts.filter((p) => p.kind === 'plate').length, 0);
+  assert.equal(compile(drive({ studs: 0.3 })).parts.filter((p) => p.kind === 'plate').length > plates.length, true);
+});
