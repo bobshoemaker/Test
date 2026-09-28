@@ -167,11 +167,12 @@ function compile(design){
       for(const [a,bb] of sizes){
         const ors=a===bb?[[a,bb]]:[[a,bb],[bb,a]];
         for(const [w,d] of ors) for(let ox=0;ox<w;ox++) for(let oz=0;oz<d;oz++){
-          const x0=c.x-ox, z0=c.z-oz; let ok=true, supN=0; const bel=new Set(), own=new Set();
+          const x0=c.x-ox, z0=c.z-oz; let ok=true, supN=0, restN=0; const bel=new Set(), own=new Set();
           for(let i=0;i<w&&ok;i++) for(let j=0;j<d;j++){
             const kk=(x0+i)+','+(z0+j), cc=avail.get(kk);
             if(!cc||owner.has(kk)||cc.color!==c.color){ ok=false; break; }
-            own.add(kk); const s=supportAt(x0+i,z0+j,y); if(s!==undefined){ supN++; bel.add(s); } }
+            own.add(kk); const s=supportAt(x0+i,z0+j,y); if(s!==undefined){ supN++; bel.add(s); }
+            if(floating&&y>0&&occ.has(K3(x0+i,z0+j,y-1))) restN++; }
           if(!ok||(supN===0&&!floating)) continue;
           let aligned=0, stacked=0;
           if(y>0) for(let i=0;i<w;i++) for(let j=0;j<d;j++){ const x=x0+i, z=z0+j;
@@ -179,7 +180,9 @@ function compile(design){
               if(seamBelow(x,z,nx,nz,1)){ aligned++; if(y-1-h>=0&&seamBelow(x,z,nx,nz,1+h)) stacked++; } } }
           const orient=((w>=d)===(par===0))?1:0;
           const jit=small?(((x0*92821)^(z0*68917)^(y*31337)^(w*7))>>>0)%7*0.9:0;
-          const score=w*d*3+Math.min(bel.size,3)*5-aligned*7-stacked*30+orient+jit;
+          // a floating piece (lift-off roof, assembly) should still rest on something where it can, even a
+          // tile, so an eave or edge row reaches back over the wall instead of hanging on its own
+          const score=w*d*3+Math.min(bel.size,3)*5-aligned*7-stacked*30+orient+jit+(floating&&restN>0?1000:0);
           if(!best||score>best.score) best={score,x0,z0,w,d};
         }
       }

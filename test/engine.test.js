@@ -305,3 +305,13 @@ test('a floor slab over a wide room is an assembly: built on its own, then walls
   assert.ok(asm.subs.some((s) => s.assembly && s.name === 'Second floor'));
   assert.ok(asm.steps.some((s) => s.kind === 'attach' && s.title === 'Place the second floor'));
 });
+
+test('a hip roof seated on tiles holds together: its eave reaches back over the wall', () => {
+  const seg = [[6, 6, 18, 6], [6, 20, 18, 20], [6, 7, 6, 19], [18, 7, 18, 19]];
+  const r = compile({ name: 'h', phases: ['a', 'b'], ops: [
+    { op: 'walls', phase: 'a', color: 'White', courses: [0, 3], base: 0, segments: seg, seat: true },
+    { op: 'roof', phase: 'b', rect: [6, 6, 18, 20], base: 13, color: 'Dark Orange', fascia: 'Dark Brown', liftoff: 'Roof' },
+    { op: 'floor', phase: 'a', color: 'Tan' }] });
+  assert.deepEqual(r.errors.map((e) => e.msg), []);
+  assert.deepEqual(r.warnings.map((w) => w.msg), []);
+});
