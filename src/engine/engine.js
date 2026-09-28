@@ -914,7 +914,7 @@ function compile(design){
     const plant=fop.op==='plant'?` (the ${fop.kind} plant uses it: pick another plant${fop.bloom!==undefined?' or bloom color':''})`:'';
     e.hard=true;
     warnings.push({msg:all.length?`${SUP.name} doesn't make ${e.name} in ${e.color} (${e.q}): use a color it makes (${all.slice(0,6).join(', ')}${all.length>6?`, or ${all.length-6} more`:''}) or another part${plant}`
-      :`${e.name} (${e.no}) isn't made by ${SUP.name}: use another part${plant}`, op:first?first.op:null, part:first?first.id:undefined}); }
+      :`${e.name} (${e.no}) can't be ordered from ${SUP.name}: use another part${plant}`, op:first?first.op:null, part:first?first.id:undefined}); }
   // parts that are hard to get in their color: few sets have included them, or none lately (LEGO parts only)
   if(!SUP) for(const e of inventory){ if(easyToGet(e.no,e.color)) continue;
     const a=availOf(e.no,e.color), alt=easyColors(e.no).slice(0,6), first=parts.find(p=>p.no===e.no&&p.color===e.color);

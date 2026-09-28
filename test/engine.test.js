@@ -515,4 +515,9 @@ test('a design held to GoBricks uses exactly the parts and colors GoBricks makes
   assert.deepEqual(one({ supplier: 'gobricks' }).warnings, []);
   assert.match(one({}).warnings.map((w) => w.msg).join(' '), /hard to get/);
   assert.match(compile({ name: 'x', supplier: 'acme', phases: ['p'], ops: [] }).errors[0].msg, /Unknown supplier "acme"; known: gobricks/);
+  // GoBricks makes the 1 x 2 x 3 window, but its store's part-list upload doesn't know it, so it can't be ordered
+  const win = (part) => compile({ name: 'w', supplier: 'gobricks', phases: ['p'], ops: [{ op: 'walls', phase: 'p', color: 'White', courses: [0, 3], base: 0,
+    segments: [[2, 2, 9, 2]], openings: [{ cells: [4, 2, 5, 2], courses: [0, 2], fill: { part, color: 'Dark Green' } }] }] }).warnings.map((w) => w.msg);
+  assert.deepEqual(win('win22'), []);
+  assert.match(win('win23').join(' '), /Window 1 x 2 x 3 \(60593\) can't be ordered from GoBricks: use another part/);
 });
