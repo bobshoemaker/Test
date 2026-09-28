@@ -3,7 +3,7 @@
 // The design language it compiles is documented in src/server/prompt.js (SPEC).
 
 const COLORS = {
-  'White':{hex:'#F2F3F2',bl:1}, 'Tan':{hex:'#E4CD9E',bl:2}, 'Dark Tan':{hex:'#958A73',bl:69},
+  'White':{hex:'#F2F3F2',bl:1}, 'Tan':{hex:'#E4CD9E',bl:2}, 'Dark Tan':{hex:'#958A73',bl:69}, 'Light Nougat':{hex:'#F6D7B3',bl:90},
   'Light Bluish Gray':{hex:'#A0A5A9',bl:86}, 'Dark Bluish Gray':{hex:'#6C6E68',bl:85}, 'Black':{hex:'#2B2B2B',bl:11},
   'Reddish Brown':{hex:'#582A12',bl:88}, 'Dark Orange':{hex:'#A95500',bl:68}, 'Green':{hex:'#237841',bl:6},
   'Dark Green':{hex:'#184632',bl:80}, 'Bright Green':{hex:'#4B9F4A',bl:36}, 'Trans-Clear':{hex:'#CFE6F2',bl:12},
@@ -87,7 +87,7 @@ const GRIP_MAX = 12;
 const OVERHANG_MAX = 4;
 // "variation": "subtle" gives every walls, fill and roof op without its own "mix" one close color on a
 // few pieces, by material; "mix": [] on an op keeps it plain.
-const SUBTLE_MIX = { 'White':[['Light Gray',0.04]], 'Tan':[['Dark Tan',0.05]], 'Dark Tan':[['Tan',0.06]], 'Medium Nougat':[['Dark Tan',0.06]],
+const SUBTLE_MIX = { 'White':[['Light Gray',0.04]], 'Tan':[['Light Nougat',0.06]], 'Dark Tan':[['Tan',0.06]], 'Medium Nougat':[['Dark Tan',0.06]],
   'Light Bluish Gray':[['Light Gray',0.05]], 'Dark Bluish Gray':[['Black',0.04]], 'Reddish Brown':[['Dark Brown',0.06]], 'Dark Orange':[['Reddish Brown',0.08]] }; // studs a lift-off roof may grip: enough to locate it, few enough to lift it off
 const K3 = (x,z,p)=>x+','+z+','+p;
 
