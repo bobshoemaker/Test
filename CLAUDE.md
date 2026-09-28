@@ -108,7 +108,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
 - `designs/`: hand-built reference designs. `634-unit-a.json` was built by hand from three
   listing photos; use it as the quality bar for photo-generated designs.
 - `src/viewer/ldraw-parts.js`: real part geometry from the LDraw Parts Library (CC BY 4.0, credited in
-  the viewer and file header) for the plant parts; `scripts/ldraw.js` regenerates it (`--lowres` uses
+  the viewer and file header) for the plant parts and the specialty parts (cheese slope, round bricks
+  and plates, cone, bracket, side-stud brick, windows and their glass, arches, fence), at low detail;
+  plain bricks, plates and tiles stay boxes with drawn studs; `?ldraw=0` shows the simple shapes; `scripts/ldraw.js` regenerates it (`--lowres` uses
   8-sided round primitives). The engine's stud layouts for those parts follow the LDraw files.
 - `scripts/`: `compile.js` (check a design), `design.js` (photos to design from the CLI),
   `bundle.js` (single-file HTML for sharing or publishing as a Claude artifact), `ldraw.js`,
@@ -166,7 +168,7 @@ before changing API parameters.
   scripts/availability.js). LDraw lists 2566 palm top and 6064 plant bush as obsolete molds, though
   sets still include both; costs are placeholder
   per-piece prices. Check before any real order.
-- Part geometry is simplified in the renderer. Sideways building is limited to side-stud bricks
+- Plain bricks, plates and tiles are drawn as boxes with studs (no underside or logo). Sideways building is limited to side-stud bricks
   in wall openings with a few details hung on them (lantern, house number, plaque, vent); mounted
   parts are drawn as small blocks.
 - The manual exists in the viewer only; there's no PDF export yet.

@@ -32,7 +32,7 @@ const boxGeo=new THREE.BoxGeometry(1,1,1);
 const studGeo=(()=>{ const g=new THREE.CylinderGeometry(0.3,0.3,0.17,10,1,true), top=new THREE.CircleGeometry(0.3,10); top.rotateX(-Math.PI/2); top.translate(0,0.085,0); return mergeGeos([[g],[top]]); })();
 const cylGeo=new THREE.CylinderGeometry(0.5,0.5,1,24);
 function wedgeGeo(){
-  const a=0.485, hb=0.27, hf=0.035;
+  const a=0.485, hb=0.78, hf=0.2; // the real slope is 2 plates tall at the back (LDraw 54200)
   const P={bl:[-a,0,-a],br:[a,0,-a],fl:[-a,0,a],fr:[a,0,a],tbl:[-a,hb,-a],tbr:[a,hb,-a],tfl:[-a,hf,a],tfr:[a,hf,a]};
   const v=[]; const q=(A,B,C,D)=>{ v.push(...P[A],...P[B],...P[C],...P[A],...P[C],...P[D]); };
   q('bl','br','fr','fl'); q('bl','tbl','tbr','br'); q('fl','fr','tfr','tfl'); q('tbl','tfl','tfr','tbr'); q('bl','fl','tfl','tbl'); q('br','tbr','tfr','fr');
@@ -61,7 +61,7 @@ const place3=(g,x,y,z,ry)=>{ if(ry) g.rotateY(ry); g.translate(x,y,z); return g;
 // LDraw units are 1/20 stud with y down, so a part's geometry is scaled by 1/20 and flipped.
 const ldrawCache={};
 // ?ldraw=0 in the address draws the simple shapes instead, to compare looks and speed
-const USE_LDRAW=!(typeof location!=='undefined'&&/[?&]ldraw=0\b/.test(location.search));
+const USE_LDRAW=!(typeof location!=='undefined'&&/[?&]ldraw=0\b/.test(location.search))&&!(typeof window!=='undefined'&&window.BRICKHOUSE_LDRAW===false);
 function ldrawGeo(no){ if(!USE_LDRAW||typeof LDRAW_PARTS==='undefined'||!LDRAW_PARTS.parts[no]) return null; if(ldrawCache[no]) return ldrawCache[no];
   const bin=atob(LDRAW_PARTS.parts[no].tris), u8=new Uint8Array(bin.length); for(let k=0;k<bin.length;k++) u8[k]=bin.charCodeAt(k);
   const q=new Int16Array(u8.buffer), f=new Float32Array(q.length), s=1/(20*LDRAW_PARTS.q);
@@ -78,9 +78,14 @@ function ldrawPose(p){ const def=SPECIAL[p.key]||{};
   // long side of windows, arches and fences runs along x at rot 0), and slopes and side studs by "dir"/"face"
   const turn=LDRAW_TURN[p.key], d=p.dir||p.face;
   const r=turn&&d?turn[d]:(p.rot||0)%2;
-  return [p.x+p.w/2-OFF,(p.y+p.h)*PH,p.z+p.d/2-OFF,r]; }
+  return [p.x+p.w/2-OFF,(LDRAW_BOTTOM[p.key]?p.y:p.y+p.h)*PH,p.z+p.d/2-OFF,r]; }
 // quarter turns for parts that face a way: the slope's low side, the side stud, the bracket's plate
-const LDRAW_TURN={ cheese:{S:0,W:1,N:2,E:3}, snot:{S:0,W:1,N:2,E:3}, bracket11:{S:0,W:1,N:2,E:3} };
+// (LDraw's slope runs down toward -z and its side stud points to -z; the bracket's plate reaches +z)
+// glass whose LDraw origin isn't its frame's: how far down (LDU) it sits in the frame
+const GLASS_DROP={ 60603: 8 };
+const LDRAW_TURN={ cheese:{N:0,E:1,S:2,W:3}, snot:{N:0,E:1,S:2,W:3}, bracket11:{S:0,W:1,N:2,E:3} };
+// parts whose LDraw origin is the bottom of the part, not the top of its body
+const LDRAW_BOTTOM={ cheese:true };
 const folCache={};
 function foliageGeo(p){ const key=`${p.shape}|${p.key}|${p.w}x${p.d}|${p.dir||''}`; if(folCache[key]) return folCache[key];
   const items=[], H=PH*0.9, def=SPECIAL[p.key]||{};
@@ -138,7 +143,7 @@ function buildScene(){
       const [lx,ly,lz,r]=ldrawPose(p); tmp.position.set(lx,ly,lz); tmp.scale.set(1,1,1); tmp.rotation.set(0,-r*Math.PI/2,0); tmp.updateMatrix();
       const geo=ldrawGeo(p.no), rec={p,m:tmp.matrix.clone()}, key=p.color.startsWith('Trans-')?'T':'O';
       if(!fol.has(geo)) fol.set(geo,{O:[],T:[]}); fol.get(geo)[key].push(rec); inst.push(rec); recOf.set(p.id,rec);
-      const gg=p.glass&&ldrawGeo(p.glass.no); if(gg){ const g={p,m:rec.m.clone(),glass:true}; if(!fol.has(gg)) fol.set(gg,{O:[],T:[]}); fol.get(gg).T.push(g); inst.push(g); rec.extra=[g]; }
+      const gg=p.glass&&ldrawGeo(p.glass.no); if(gg){ const g={p,m:rec.m.clone().multiply(new THREE.Matrix4().makeTranslation(0,-(GLASS_DROP[p.glass.no]||0)/20,0)),glass:true}; if(!fol.has(gg)) fol.set(gg,{O:[],T:[]}); fol.get(gg).T.push(g); inst.push(g); rec.extra=[g]; }
     } else if(p.shape==='box'||p.shape==='cyl'){
       tmp.rotation.set(0,0,0); tmp.position.set(cx,y0+hh/2,cz);
       if(p.shape==='box') tmp.scale.set(p.w-0.035,hh-0.018,p.d-0.035); else tmp.scale.set(p.diam,hh-0.018,p.diam);

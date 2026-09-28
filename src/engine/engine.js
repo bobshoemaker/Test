@@ -28,7 +28,7 @@ const H = {brick:3, plate:1, tile:1};
 const KIND_NAME = {brick:'Brick', plate:'Plate', tile:'Tile'};
 const KIND_COST = {brick:0.08, plate:0.05, tile:0.06};
 const SPECIAL = {
-  cheese:{no:'54200', name:'Slope 30 1 x 1 x 2/3', w:1,d:1,h:1, studs:false, shape:'cheese', cost:0.07},
+  cheese:{no:'54200', name:'Slope 30 1 x 1 x 2/3', w:1,d:1,h:2, studs:false, shape:'cheese', cost:0.07}, // 2/3 of a brick: 2 plates
   round1:{no:'3062b', name:'Brick round 1 x 1', w:1,d:1,h:3, shape:'cyl', diam:0.94, cost:0.06},
   roundplate1:{no:'4073', name:'Plate round 1 x 1', w:1,d:1,h:1, shape:'cyl', diam:0.94, cost:0.04},
   roundplate2:{no:'4032', name:'Plate round 2 x 2', w:2,d:2,h:1, shape:'cyl', diam:1.94, cost:0.08},
@@ -755,7 +755,8 @@ function compile(design){
   for(const p of parts){ const area=p.shape==='arch'?4:p.sockets.length; if(area>=2&&jn.get(p.id)<=1&&!flagged.has(p.id)) warnings.push({msg:`${p.name} #${p.id} at (${p.x}, ${p.y}, ${p.z}) is held by a single stud`, op:p.op, part:p.id}); }
   // roof edges left showing: an abutted side whose neighbour (a wall or another roof) stays lower
   if(abutEdges.length){
-    const colTop=new Map(); for(const p of parts) for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++){ const k=(p.x+a)+','+(p.z+b); colTop.set(k,Math.max(colTop.get(k)||0,p.y+p.h)); }
+    // (a slope hides only its low edge's height, a plate above what it sits on, not its full 2 plates)
+    const colTop=new Map(); for(const p of parts) for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++){ const k=(p.x+a)+','+(p.z+b); colTop.set(k,Math.max(colTop.get(k)||0,p.y+(p.key==='cheese'?1:p.h))); }
     for(const e of abutEdges){
       const mine=new Map(); for(const id of e.ids){ const p=parts[id-1]; for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++){ const k=(p.x+a)+','+(p.z+b); mine.set(k,Math.max(mine.get(k)||0,p.y+p.h)); } }
       const bad=e.cells.filter(([x,z,dx,dz])=>{ const t=mine.get(x+','+z)||0; return t>0&&(colTop.get((x+dx)+','+(z+dz))||0)<t-1; });
