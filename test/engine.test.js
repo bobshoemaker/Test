@@ -315,3 +315,19 @@ test('a hip roof seated on tiles holds together: its eave reaches back over the 
   assert.deepEqual(r.errors.map((e) => e.msg), []);
   assert.deepEqual(r.warnings.map((w) => w.msg), []);
 });
+
+test('seated lift-off roofs hold together across building sizes (flat 4 to 14 studs, hip 5 to 14)', () => {
+  const broken = [];
+  for (let W = 4; W <= 14; W++) for (let D = 4; D <= 14; D++) {
+    const [x0, z0, x1, z1] = [4, 4, 4 + W - 1, 4 + D - 1];
+    const walls = { op: 'walls', phase: 'a', color: 'White', courses: [0, 3], base: 0, seat: true, segments: [[x0, z0, x1, z0], [x0, z1, x1, z1], [x0, z0 + 1, x0, z1 - 1], [x1, z0 + 1, x1, z1 - 1]] };
+    const flat = [{ op: 'fill', phase: 'b', kind: 'plate', color: 'White', rects: [[x0, z0, x1, z1]], y: 13, liftoff: 'R' },
+      { op: 'fill', phase: 'b', kind: 'tile', color: 'Light Bluish Gray', rects: [[x0, z0, x1, z1]], y: 14, liftoff: 'R' }];
+    const hip = [{ op: 'roof', phase: 'b', rect: [x0, z0, x1, z1], base: 13, color: 'Dark Orange', fascia: 'Dark Brown', liftoff: 'R' }];
+    for (const [kind, roof] of [['flat', flat], ...(W > 4 && D > 4 ? [['hip', hip]] : [])]) {
+      const r = compile({ name: 't', phases: ['a', 'b'], ops: [walls, ...roof, { op: 'floor', phase: 'a', color: 'Tan' }] });
+      if (r.errors.length) broken.push(`${kind} ${W}x${D}: ${r.errors[0].msg.slice(0, 60)}`);
+    }
+  }
+  assert.deepEqual(broken, []);
+});

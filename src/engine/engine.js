@@ -156,9 +156,15 @@ function compile(design){
       let ok=x>=0&&z>=0&&x<BASE&&z<BASE; for(let q=0;q<h&&ok;q++) if(occ.has(K3(x,z,y+q))) ok=false;
       if(ok) cells.push({x,z,color,k}); }
     const avail=new Map(cells.map(c=>[c.k,c])), owner=new Map(), plan=[];
-    for(const c of cells){ c.sup=supportAt(c.x,c.z,y)!==undefined; let n=0; for(const [dx,dz] of N4) if(supportAt(c.x+dx,c.z+dz,y)!==undefined) n++; c.nsup=n; }
+    // cells with nothing under them are packed first, so their pieces reach over to cells that rest on
+    // something (for a floating pack, resting on a tile counts)
+    const rests=(x,z)=>supportAt(x,z,y)!==undefined||(floating&&y>0&&occ.has(K3(x,z,y-1)));
+    for(const c of cells){ c.sup=rests(c.x,c.z); let n=0; for(const [dx,dz] of N4) if(rests(c.x+dx,c.z+dz)) n++; c.nsup=n; }
     const par=Math.floor(y/h)%2;
-    cells.sort((a,b)=>(a.sup-b.sup)||(a.nsup-b.nsup)||(par?(a.x-b.x||a.z-b.z):(a.z-b.z||a.x-b.x)));
+    // floating layers (lift-off roofs, assemblies) hold together only through the layer above, so lay
+    // them in running bond: alternate rows start from opposite ends and their seams can't line up
+    const bond=(a,b)=>par?(a.x-b.x||(a.x%2?b.z-a.z:a.z-b.z)):(a.z-b.z||(a.z%2?b.x-a.x:a.x-b.x));
+    cells.sort((a,b)=>(a.sup-b.sup)||((!floating||!a.sup)?(a.nsup-b.nsup):0)||(floating?bond(a,b):(par?(a.x-b.x||a.z-b.z):(a.z-b.z||a.x-b.x))));
     const seamBelow=(x,z,nx,nz,dy)=>{ const b1=occ.get(K3(x,z,y-dy)), b2=occ.get(K3(nx,nz,y-dy)); return !!(b1&&b2&&b1!==b2); };
     for(const c of cells){
       if(owner.has(c.k)) continue;
@@ -182,7 +188,7 @@ function compile(design){
           const jit=small?(((x0*92821)^(z0*68917)^(y*31337)^(w*7))>>>0)%7*0.9:0;
           // a floating piece (lift-off roof, assembly) should still rest on something where it can, even a
           // tile, so an eave or edge row reaches back over the wall instead of hanging on its own
-          const score=w*d*3+Math.min(bel.size,3)*5-aligned*7-stacked*30+orient+jit+(floating&&restN>0?1000:0);
+          const score=w*d*3+Math.min(bel.size,3)*5-aligned*(floating?60:7)-stacked*30+orient+jit+(floating&&restN>0?1000:0);
           if(!best||score>best.score) best={score,x0,z0,w,d};
         }
       }
