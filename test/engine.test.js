@@ -520,4 +520,12 @@ test('a design held to GoBricks uses exactly the parts and colors GoBricks makes
     segments: [[2, 2, 9, 2]], openings: [{ cells: [4, 2, 5, 2], courses: [0, 2], fill: { part, color: 'Dark Green' } }] }] }).warnings.map((w) => w.msg);
   assert.deepEqual(win('win22'), []);
   assert.match(win('win23').join(' '), /Window 1 x 2 x 3 \(60593\) can't be ordered from GoBricks: use another part/);
+  // no green baseplate at GoBricks: a neutral one it sells, and the lawn lays a full layer of grass over it
+  const yard = (supplier) => compile({ name: 'y', lot: true, plate: 48, supplier, phases: ['g'], ops: [{ op: 'lawn', phase: 'g' }] });
+  const lego = yard(undefined), gds = yard('gobricks');
+  assert.equal(lego.stats.baseColor, 'Green');
+  assert.ok(supplies(G, '4186', gds.stats.baseColor) && gds.stats.baseColor !== 'Green', gds.stats.baseColor);
+  const ground = (r) => new Set(r.parts.filter((q) => q.y === 0).flatMap((q) => q.occ.filter((v) => v[2] === 0).map((v) => v[0] + ',' + v[1]))).size;
+  assert.equal(ground(gds), 48 * 48); assert.ok(ground(lego) < 48 * 48 / 2);
+  assert.deepEqual(gds.errors, []); assert.deepEqual(gds.warnings, []);
 });

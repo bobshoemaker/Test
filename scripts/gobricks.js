@@ -37,8 +37,9 @@ async function matched(lots) {
   for (const s of Object.values(SPECIAL)) { ours.add(s.no); if (s.glass) ours.add(s.glass); }
   const colors = Object.keys(COLORS).filter((c) => LDRAW_COLOR[c] !== undefined);
   const lots = [...ours].flatMap((no) => colors.map((color) => ({ no, color, q: 1 })));
-  // the baseplates, in their own color only, asked about after the parts (so earlier replies stay cached)
-  const plates = Object.values(BASEPLATES).map((b) => ({ no: b.no, color: b.color, q: 1 }));
+  // the baseplates, in every palette color (a design held to GoBricks takes a neutral one it sells), asked
+  // about after the parts so the parts' replies stay cached
+  const plates = Object.values(BASEPLATES).flatMap((b) => colors.map((color) => ({ no: b.no, color, q: 1 })));
   for (const b of plates) ours.add(b.no);
   // made: part -> color -> catalog price; a GDS number is the part's number and the color's code
   // (GDS-536 in Tan, 031, is GDS-536-031). Out of stock today still counts as made.

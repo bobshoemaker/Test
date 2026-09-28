@@ -218,7 +218,7 @@ function applyState(){
   for(const r of inst){ r.mesh.setMatrixAt(r.i,r.p._v?r.m:ZERO); r.mesh.setColorAt(r.i,r.glass?col.copy(lin(COLORS['Trans-Clear'].hex)):colorFor(r.p,r.p._c)); }
   for(const m of meshes){ m.instanceMatrix.needsUpdate=true; if(m.instanceColor) m.instanceColor.needsUpdate=true; }
   for(const s of specials){ s.obj.visible=s.p._v; s.obj.position.copy(s.pos0); s.obj.rotation.set(0,s.rot0,0); s.obj.scale.setScalar(1); for(const o of s.mats){ if(o.glass) continue; o.mat.color.copy(colorFor(s.p,s.p._c)); } }
-  const baseHex=COLORS['Green'].hex;
+  const baseHex=COLORS[R.stats.baseColor||'Green'].hex;
   // only the studs that show are drawn: they're packed into the first slots and the rest skipped
   let n=0;
   studRecs.forEach(s=>{ s.slot=-1;
@@ -424,7 +424,7 @@ function renderParts(){
     const gap=rows.filter(r=>r.kind!=='baseplate'&&!supplierNo(GB,r.no,r.color)), gp=gap.reduce((n,r)=>n+r.q,0);
     const est=rows.reduce((s,r)=>s+(GB.made[r.no]&&GB.made[r.no][r.color]!=null?r.q*GB.made[r.no][r.color]:0),0);
     const total=live?live.total:est;
-    // GoBricks may not sell the baseplate (it had no green 32 x 32 or 48 x 48 on sale when last checked)
+    // GoBricks sells no green baseplate; a design held to GoBricks takes a neutral one it does sell
     const plate=rows.find(r=>r.kind==='baseplate'), noPlate=plate&&each(plate)==null;
     $('pGds').textContent=yuan(total);
     $('pGdsLabel').textContent=(live?`GoBricks today, about ${usd(total)} at Brickwith`:gq.busy?`GoBricks, checking today's price…`:`GoBricks catalog, about ${usd(total)} at Brickwith`)+(noPlate?', no baseplate':'');
@@ -436,7 +436,7 @@ function renderParts(){
         (gq.err?`today's quote didn't come back (${esc(gq.err)}).`:health&&health.quote?`checking today's price and stock…`:`the Brickhouse server checks today's price and stock.`)+
         (gap.length?` It doesn't make ${gap.length} of these lots (${gp} piece${gp===1?'':'s'}: ${list(gap,r=>r.name+' in '+r.color)}); get those from BrickLink, or hold the design to GoBricks ("supplier": "gobricks") and it uses only what GoBricks makes.`:' It makes every part here.');
     $('gdsNote').innerHTML=`GoBricks makes compatible bricks at a fraction of the price. ${says} <b>Order from GoBricks</b> saves this list as a BrickLink XML file for their <a href="${GB.order}" target="_blank" rel="noopener">part list tool</a>. `+
-      (noPlate?`GoBricks doesn't sell the ${plate.name.toLowerCase()} in ${plate.color} right now, so the total leaves it out: any compatible one fits, from LEGO or another brand. `:'')+`Check colors against a sample before a big order.`;
+      (noPlate?`GoBricks doesn't sell the ${plate.name.toLowerCase()} in ${plate.color} right now, so the total leaves it out: any compatible one fits, or hold the design to GoBricks ("supplier": "gobricks") and it uses a neutral baseplate GoBricks sells, with the lawn laid over it. `:'')+`Check colors against a sample before a big order.`;
     if(!$('pane-parts').hidden) fetchQuote();
   }
   xml='<INVENTORY>\n'+rows.map(r=>`  <ITEM><ITEMTYPE>P</ITEMTYPE><ITEMID>${r.no}</ITEMID><COLOR>${COLORS[r.color].bl}</COLOR><MINQTY>${r.q}</MINQTY></ITEM>`).join('\n')+'\n</INVENTORY>';
@@ -468,7 +468,7 @@ $('stress').onchange=e=>{ stress=e.target.checked; applyState(); };
 let curDesign=null;
 function esc(t){ return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function showDesign(d){
-  curDesign=d; R=compile(d); lifted=0; $('lift').hidden=!(R.stats.liftoff&&R.stats.liftoff.length); $('lift').textContent=liftLabel(); $('lift').setAttribute('aria-pressed','false'); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,1,PLATE/32); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
+  curDesign=d; R=compile(d); lifted=0; $('lift').hidden=!(R.stats.liftoff&&R.stats.liftoff.length); $('lift').textContent=liftLabel(); $('lift').setAttribute('aria-pressed','false'); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,1,PLATE/32); base.material.color.copy(lin(COLORS[R.stats.baseColor||'Green'].hex)); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
   buildScene(); renderReport(); renderParts(); renderStep(); frame();
   $('title').textContent=d.name||'Brick house'; document.title=(d.name||'Brick house')+', brick model';
   $('subline').textContent=(d.place?d.place+'. ':'')+(d.unit?`Unit ${d.unit}, cut from its building. `:'')+'A closing-gift brick model with a full build manual.';

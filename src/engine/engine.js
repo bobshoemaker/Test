@@ -60,6 +60,8 @@ const SPECIAL = {
   sidetile2:{no:'3069b', name:'Tile 1 x 2 (on side studs)', w:2,d:1,h:3, studs:false, shape:'box', cost:0.06}
 };
 // Baseplates by size: a design sets "plate": 48 for the larger one (default 32).
+// neutral baseplate colors, most preferred first, for when the green one can't be had
+const BASE_NEUTRAL = ['Dark Bluish Gray','Light Bluish Gray','Tan','Dark Tan','Dark Brown','Reddish Brown','Black','White'];
 const GLASS_COST = 0.10, BASEPLATES = {32:{no:'3811', name:'Baseplate 32 x 32', color:'Green', cost:12}, 48:{no:'4186', name:'Baseplate 48 x 48', color:'Green', cost:25}};
 // Plant library for the "plant" op: sub-builds checked to stand on their own, placed by kind.
 // Offsets are from the plant's corner stud; "bloom" parts take the op's bloom color.
@@ -120,9 +122,9 @@ const PLANTS = {
 
 // Lawn textures for the "lawn" op: patches (plates) around scattered seeds, then tufts and flowers.
 const LAWN = {
-  lawn:{seeds:0.05, patch:['Bright Green','Dark Green'], tufts:0.05, tuft:['Green','Bright Green','Dark Green'], flowers:0.012, bloom:['White','Yellow']},
-  meadow:{seeds:0.05, patch:['Bright Green','Lime','Green'], tufts:0.09, tuft:['Green','Bright Green','Lime'], flowers:0.05, bloom:['White','Yellow','Medium Lavender','Coral']},
-  dry:{seeds:0.07, patch:['Tan','Dark Tan','Olive Green'], tufts:0.05, tuft:['Olive Green','Yellowish Green'], flowers:0.01, bloom:['Yellow','White']},
+  lawn:{ground:'Green', seeds:0.05, patch:['Bright Green','Dark Green'], tufts:0.05, tuft:['Green','Bright Green','Dark Green'], flowers:0.012, bloom:['White','Yellow']},
+  meadow:{ground:'Green', seeds:0.05, patch:['Bright Green','Lime','Green'], tufts:0.09, tuft:['Green','Bright Green','Lime'], flowers:0.05, bloom:['White','Yellow','Medium Lavender','Coral']},
+  dry:{ground:'Tan', seeds:0.07, patch:['Tan','Dark Tan','Olive Green'], tufts:0.05, tuft:['Olive Green','Yellowish Green'], flowers:0.01, bloom:['Yellow','White']},
 };
 
 // Roof and yard fixtures for the "fixture" op, placed like plants (on studs, from the corner stud).
@@ -217,6 +219,9 @@ function compile(design){
   // the parts this design may use: what its supplier makes, or else LEGO parts that are easy to get
   const SUP=design.supplier!=null&&SUPPLY?SUPPLY[design.supplier]||null:null;
   const canBuy=SUP?(no,color)=>supplies(SUP,no,color):easyToGet;
+  // the baseplate: green, or, held to a supplier that doesn't sell a green one, a neutral color it does sell,
+  // so the whole kit comes from one place (the lawn op then lays the grass over it)
+  const baseColor=SUP?[BASEPLATE.color,...BASE_NEUTRAL].find(c=>supplies(SUP,BASEPLATE.no,c))||BASEPLATE.color:BASEPLATE.color;
   if(!BASEPLATES[BASE]) errors.push({msg:`plate must be 32 or 48 (got ${design.plate})`, op:null});
   if(design.property!=null&&!PROPERTY_TYPES.includes(design.property)) errors.push({msg:`property must be one of ${PROPERTY_TYPES.join(', ')} (got ${design.property})`, op:null});
   const phases=design.phases||[]; const phaseIdx=new Map(phases.map((p,i)=>[p,i]));
@@ -638,6 +643,8 @@ function compile(design){
           // an irregular blob: the seed and its neighbours, then a ragged edge further out
           for(let dx=-r-1;dx<=r+1;dx++) for(let dz=-r-1;dz<=r+1;dz++){ const k=(x+dx)+','+(z+dz), dd=Math.abs(dx)+Math.abs(dz);
             if(!inArea.has(k)||level.has(k)||dd>r+1) continue; if(dd<=1||hash(x+dx,z+dz,7)<(dd<=r?0.7:0.25)) level.set(k,col); } }
+        // on a baseplate that isn't the grass's color, the grass is a full layer of plates, the patches within it
+        if(baseColor!==T.ground) for(const [x,z] of area){ const k=x+','+z; if(!level.has(k)) level.set(k,T.ground); }
         pack(level,'plate',0,meta);
         // tufts and flowers, on a patch or on the baseplate
         for(const [x,z] of area){ const u=hash(x,z,4), y=occ.has(K3(x,z,0))?1:0;
@@ -900,7 +907,7 @@ function compile(design){
 
   // ---------- inventory ----------
   const lots=new Map(); const add=(no,name,color,cost,kind)=>{ const k=no+'|'+color; const e=lots.get(k)||{no,name,color,q:0,cost,kind}; e.q++; lots.set(k,e); };
-  add(BASEPLATE.no,BASEPLATE.name,BASEPLATE.color,BASEPLATE.cost,'baseplate');
+  add(BASEPLATE.no,BASEPLATE.name,baseColor,BASEPLATE.cost,'baseplate');
   let glassN=0;
   for(const p of parts){ add(p.no,p.name,p.color,p.cost,p.kind); if(p.glass){ add(p.glass.no,p.glass.name,'Trans-Clear',GLASS_COST,'glass'); glassN++; } }
   const inventory=[...lots.values()];
@@ -925,6 +932,6 @@ function compile(design){
   const pages=1+Math.ceil(inventory.length/24)+steps.length;
   const ms=clock.now()-t0;
   return {parts,steps,subs,errors,warnings,hints,joints,jn,inventory,occ,
-    stats:{liftoff:(()=>{ const lo=new Map(); for(const p of parts) if(p.liftoff) lo.set(p.liftoff,Math.min(lo.has(p.liftoff)?lo.get(p.liftoff):1e9,p.y)); return [...lo].sort((a,b)=>b[1]-a[1]).map(e=>e[0]); })(),pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32}};
+    stats:{liftoff:(()=>{ const lo=new Map(); for(const p of parts) if(p.liftoff) lo.set(p.liftoff,Math.min(lo.has(p.liftoff)?lo.get(p.liftoff):1e9,p.y)); return [...lo].sort((a,b)=>b[1]-a[1]).map(e=>e[0]); })(),pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32,baseColor}};
 }
 if(typeof module!=='undefined') module.exports={BASEPLATES,SUPPLY,supplies,supplierNo,easyToGet,availOf,easyColors,AVAIL_SETS,AVAIL_YEAR,compile,COLORS,SPECIAL,SIZE_PARTS,PLANTS,FIXTURES};
