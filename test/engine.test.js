@@ -480,13 +480,39 @@ test('a roof beside a window keeps below its sill: slopes there become flat tile
   assert.match(blocked.warnings.map((w) => w.msg).join(' '), /stands in front of the w window at \(8, 10\)/);
 });
 
-test('a design held to GoBricks warns about parts and colors GoBricks does not make, and passes otherwise', () => {
-  const { SUPPLY } = engine;
-  assert.ok(SUPPLY.gobricks.parts['3001'] && SUPPLY.gobricks.colors.includes('Tan'));
+test('a lift-off hip roof over an L holds together at its inside corners, whatever sizes the packer has', () => {
+  // the next course puts a slope, not a plate, over a cell whose only outside neighbour is diagonal, so
+  // that cell doesn't tie its piece to the course above (GoBricks' 1 x 3 plates once stranded a corner here)
+  const walls = { op: 'walls', phase: 'walls', color: 'Tan', courses: [10, 14], base: 2, liftoff: 'Top floor', seat: true,
+    slab: { color: 'Tan', rects: [[13, 14, 33, 23], [14, 22, 33, 39], [16, 37, 31, 43], [14, 13, 24, 13]] },
+    segments: [[19, 15, 25, 15], [16, 16, 19, 16], [25, 16, 28, 16], [28, 20, 30, 20], [15, 26, 16, 26], [15, 36, 16, 36], [16, 39, 22, 39], [22, 41, 30, 41],
+      [15, 26, 15, 36], [16, 16, 16, 26], [16, 36, 16, 39], [19, 15, 19, 16], [22, 39, 22, 41], [25, 15, 25, 16], [28, 16, 28, 20], [30, 20, 30, 41]] };
+  const roof = { op: 'roof', phase: 'roof', rects: [[22, 20, 30, 41], [16, 16, 28, 39], [15, 26, 16, 36], [19, 15, 25, 16]], base: 18,
+    color: 'Dark Orange', fascia: 'Dark Brown', liftoff: 'Roof' };
+  for (const supplier of [undefined, 'gobricks']) {
+    const r = compile({ name: 'L', plate: 48, supplier, phases: ['walls', 'roof'], ops: [walls, roof] });
+    assert.deepEqual(r.errors, [], supplier || 'LEGO');
+  }
+});
+
+test('a design held to GoBricks uses exactly the parts and colors GoBricks makes, and warns about any other', () => {
+  const { SUPPLY, supplies, supplierNo, easyToGet } = engine, G = SUPPLY.gobricks;
+  assert.ok(G.made['3001'].Tan > 0 && supplies(G, '3001', 'Tan') && !supplies(G, '3001', 'Light Gray'));
+  assert.equal(supplierNo(G, '3008', 'Tan'), 'GDS-536-031');
   const plants = (kind) => compile({ name: 'g', supplier: 'gobricks', plate: 48, phases: ['p'], ops: [{ op: 'plant', phase: 'p', kind, at: [[20, 0, 20]] }] });
   assert.deepEqual(plants('shade tree').warnings, []);
-  assert.match(plants('palm').warnings.map((w) => w.msg).join(' '), /isn't made by GoBricks: use another part \(the palm plant uses it; pick another plant\)/);
-  const coral = compile({ name: 'c', supplier: 'gobricks', phases: ['p'], ops: [{ op: 'place', phase: 'p', part: 'flower1', color: 'Coral', at: [4, 0, 4] }] });
-  assert.match(coral.warnings[0].msg, /GoBricks doesn't make Coral/);
+  assert.deepEqual(plants('palm').warnings, []);
+  // GoBricks has no lavender: the checker names the colors it does make the part in
+  assert.match(plants('jacaranda').warnings.map((w) => w.msg).join(' '), /GoBricks doesn't make Plant leaves 6 x 5 in Lavender \(2\): use a color it makes \(Green, Dark Brown.*\) or another part \(the jacaranda plant uses it: pick another plant\)/);
+  // the packer keeps to the sizes GoBricks makes in a color: no 1 x 8 or 1 x 6 plates in Coral
+  const coral = compile({ name: 'c', supplier: 'gobricks', phases: ['p'], ops: [{ op: 'fill', phase: 'p', kind: 'plate', color: 'Coral', rects: [[2, 2, 17, 3]], y: 0 }] });
+  assert.deepEqual(coral.warnings, []);
+  assert.ok(coral.parts.every((q) => supplies(G, q.no, q.color)) && !coral.parts.some((q) => q.no === '3460' || q.no === '3666'));
+  // a part LEGO sets rarely include but GoBricks makes: fine with GoBricks, flagged for LEGO
+  const pick = Object.entries(G.made).flatMap(([no, m]) => Object.keys(m).map((c) => [no, c])).find(([no, c]) => /^30(0[1-9]|10)$/.test(no) && !easyToGet(no, c));
+  const size = Object.entries(engine.SIZE_PARTS.brick).find(([, no]) => no === pick[0])[0];
+  const one = (d) => compile({ name: 'o', phases: ['p'], ...d, ops: [{ op: 'place', phase: 'p', part: 'brick:' + size, color: pick[1], at: [4, 0, 4] }] });
+  assert.deepEqual(one({ supplier: 'gobricks' }).warnings, []);
+  assert.match(one({}).warnings.map((w) => w.msg).join(' '), /hard to get/);
   assert.match(compile({ name: 'x', supplier: 'acme', phases: ['p'], ops: [] }).errors[0].msg, /Unknown supplier "acme"; known: gobricks/);
 });

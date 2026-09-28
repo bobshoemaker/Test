@@ -18,6 +18,8 @@ the Node server (it calls Claude and renders drafts in headless Chromium).
      first with a test key (`sk_test_...`) and Stripe's test card 4242 4242 4242 4242.
    - `BRICKHOUSE_DESIGN_FEE_CENTS`: the fee in cents (1500 = $15), credited toward the kit if you like.
    - `MAPILLARY_TOKEN`: optional, for street photos from the address box.
+   - `BRICKHOUSE_GOBRICKS_QUOTES`: set to `0` to turn off live GoBricks quotes on the Parts tab (on by default).
+   - `BRICKHOUSE_CNY_PER_USD`: optional, the yuan-to-dollar rate for the approximate dollar price (default 7.2).
 4. Apply. The first build takes a few minutes (the image includes Chromium). The site is then at
    `https://brickhouse-XXXX.onrender.com`; share that and the password.
 

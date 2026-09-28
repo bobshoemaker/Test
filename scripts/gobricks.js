@@ -1,47 +1,63 @@
 #!/usr/bin/env node
-// Builds src/engine/suppliers.js: for the GoBricks (GDS) compatible-brick line, the GDS number of each
-// part the engine uses and the colors GoBricks makes, from the public-domain (CC0) conversion table at
-// github.com/mnemocron/GoBricksPart-API. The engine uses it for designs with "supplier": "gobricks";
-// the viewer shows GDS numbers. GoBricks' own upload tool (webrick.com) has the final word on stock.
-//   node scripts/gobricks.js           (downloads to .gobricks-cache/ on first run)
+// Builds src/engine/suppliers.js: exactly which parts GoBricks (GDS compatible bricks) makes in which of
+// the engine's colors, with its GDS number and catalog price. It asks GoBricks' part-list matcher once
+// about every part the engine uses in every palette color (src/server/gobricks.js; ten requests, a
+// pause between them). Stock changes daily, so it isn't stored; the server asks for live stock and
+// prices per design (/api/quote).
+//   node scripts/gobricks.js           (replies cached in .gobricks-cache/; delete it to ask again)
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
+const { match, readReply, testList, LDRAW_COLOR } = require('../src/server/gobricks.js');
 
 const ROOT = path.resolve(__dirname, '..');
 const CACHE = path.join(ROOT, '.gobricks-cache');
 const OUT = path.join(ROOT, 'src/engine/suppliers.js');
-const RAW = 'https://raw.githubusercontent.com/mnemocron/GoBricksPart-API/main/';
-// BrickLink numbers the table lists under an older or newer mold number
-const ALIAS = { '3070b': ['3070'], '3069b': ['3069'], '3068b': ['3068'], '3062b': ['3062'], 4073: ['6141'], 4032: ['4032a', '4032b'] };
-
-async function get(name) {
-  const file = path.join(CACHE, name);
-  if (!fs.existsSync(file)) {
-    const res = await fetch(RAW + name);
-    if (!res.ok) throw new Error(`Download failed: ${name} (${res.status})`);
-    fs.mkdirSync(CACHE, { recursive: true }); fs.writeFileSync(file, await res.text());
-  }
-  return fs.readFileSync(file, 'utf8').replace(/^﻿/, '').trim().split(/\r?\n/).map((l) => l.split(','));
+const BATCH = 200;
+// one matcher request for a batch of lots, cached by the request itself
+let sent = 0;
+async function matched(lots) {
+  const key = crypto.createHash('sha1').update(JSON.stringify(testList(lots))).digest('hex').slice(0, 12);
+  const file = path.join(CACHE, `match-${key}.json`);
+  if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (sent++) await new Promise((r) => setTimeout(r, 3000));
+  const reply = await match(lots);
+  fs.mkdirSync(CACHE, { recursive: true }); fs.writeFileSync(file, JSON.stringify(reply));
+  return reply;
 }
 
 (async () => {
   const { SIZE_PARTS, SPECIAL, COLORS } = require('../src/engine/engine.js');
-  const gds = new Map((await get('gobrick_conversion_table.csv')).map(([lego, g]) => [lego, g]));
-  const colorRows = (await get('color_table.csv')).slice(1); // LEGO, BrickLink, Gobricks, LDD name, name
   const ours = new Set();
   for (const kind of Object.values(SIZE_PARTS)) for (const no of Object.values(kind)) ours.add(no);
   for (const s of Object.values(SPECIAL)) { ours.add(s.no); if (s.glass) ours.add(s.glass); }
-  for (const b of ['3811', '4186']) ours.add(b); // baseplates
-  const parts = {};
-  for (const no of ours) { const g = gds.get(no) || (ALIAS[no] || []).map((a) => gds.get(a)).find(Boolean); if (g) parts[no] = g; }
-  const blColors = new Set(colorRows.map((r) => r[1]));
-  const colors = Object.keys(COLORS).filter((c) => blColors.has(String(COLORS[c].bl)));
-  const missing = [...ours].filter((no) => !parts[no]);
+  const colors = Object.keys(COLORS).filter((c) => LDRAW_COLOR[c] !== undefined);
+  const lots = [...ours].flatMap((no) => colors.map((color) => ({ no, color, q: 1 })));
+  // made: part -> color -> catalog price; a GDS number is the part's number and the color's code
+  // (GDS-536 in Tan, 031, is GDS-536-031). Out of stock today still counts as made.
+  const made = {}, gdsOf = {}, colorCode = {};
+  let asked = 0;
+  for (let k = 0; k * BATCH < lots.length; k++) {
+    const batch = lots.slice(k * BATCH, (k + 1) * BATCH), r = readReply(await matched(batch), batch);
+    asked += batch.length;
+    for (const i of [...r.made, ...r.outOfStock]) { const m = /^(GDS-\d+)-(\d+)$/.exec(i.gds || ''); if (!m || !i.color) continue;
+      (made[i.no] = made[i.no] || {})[i.color] = i.price;
+      gdsOf[i.no] = gdsOf[i.no] || m[1]; colorCode[i.color] = colorCode[i.color] || m[2]; }
+    process.stdout.write(`\r${asked} of ${lots.length} asked`);
+  }
+  console.log();
+  const parts = Object.fromEntries([...ours].filter((no) => gdsOf[no]).map((no) => [no, gdsOf[no]]));
+  const madeColors = Object.fromEntries(colors.filter((c) => colorCode[c]).map((c) => [c, colorCode[c]]));
+  const asOf = new Date().toISOString().slice(0, 10);
+  const sorted = Object.fromEntries(Object.keys(made).sort().map((no) => [no, made[no]]));
   fs.writeFileSync(OUT, `// Compatible-brick suppliers the engine can hold a design to ("supplier" on the design). GoBricks (GDS):
-// the GDS number of each part the engine uses that GoBricks makes, and the palette colors it makes,
-// from the CC0 table at github.com/mnemocron/GoBricksPart-API. Generated by scripts/gobricks.js.
-const SUPPLIERS = ${JSON.stringify({ gobricks: { name: 'GoBricks', order: 'https://www.webrick.com/part-list-upload-tool', parts, colors } })};
+// made[part][color] = catalog price in yuan, for every part and palette color GoBricks makes, from its
+// part-list matcher on ${asOf}. A GDS number is parts[part] + '-' + colors[color] (GDS-536-031: 1 x 8 brick, Tan).
+// Generated by scripts/gobricks.js; don't edit.
+const SUPPLIERS = ${JSON.stringify({ gobricks: { name: 'GoBricks', asOf, currency: 'CNY', order: 'https://www.webrick.com/part-list-upload-tool', parts, colors: madeColors, made: sorted } })};
 if (typeof module !== 'undefined') module.exports = { SUPPLIERS };
 `);
-  console.log(`Wrote ${path.relative(ROOT, OUT)}: ${Object.keys(parts).length} of ${ours.size} parts, ${colors.length} of ${Object.keys(COLORS).length} colors. Not at GoBricks: ${missing.join(', ') || 'none'}; colors: ${Object.keys(COLORS).filter((c) => !colors.includes(c)).join(', ')}`);
+  const n = Object.values(made).reduce((t, m) => t + Object.keys(m).length, 0);
+  console.log(`Wrote ${path.relative(ROOT, OUT)} (${Math.round(fs.statSync(OUT).size / 1024)} KB): ${n} of ${lots.length} part-colors made, ${Object.keys(made).length} of ${ours.size} parts in some color.`);
+  console.log(`Not made in any palette color: ${[...ours].filter((no) => !made[no]).join(', ') || 'none'}`);
 })().catch((e) => { console.error(e.message); process.exit(1); });

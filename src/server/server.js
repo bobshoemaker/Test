@@ -12,6 +12,7 @@ const { prepareDesign } = require('./pipeline');
 const { createJobs } = require('./jobs');
 const { makeStripe } = require('./payments');
 const { anthropicKey, makeAnthropicClient } = require('./client');
+const { makeQuoter, cleanLots } = require('./gobricks');
 
 const ROOT = path.resolve(__dirname, '../..');
 loadDotEnv(path.join(ROOT, '.env'));
@@ -208,6 +209,22 @@ async function handleLookup(req, res) {
   } catch (e) { send(res, 502, { error: e.message }); }
 }
 
+// GoBricks quotes come from its part-list matcher, which isn't a documented API (see gobricks.js):
+// BRICKHOUSE_GOBRICKS_QUOTES=0 turns them off. BRICKHOUSE_CNY_PER_USD sets the rate the viewer uses
+// for its approximate dollar figure.
+const QUOTER = process.env.BRICKHOUSE_GOBRICKS_QUOTES === '0' ? null : makeQuoter();
+const CNY_PER_USD = Number(process.env.BRICKHOUSE_CNY_PER_USD) || null;
+
+// POST /api/quote {lots: [{no, color, q}]}: today's GoBricks price and stock for a parts list
+async function handleQuote(req, res) {
+  if (!QUOTER) return send(res, 503, { error: 'GoBricks quotes are off on this server.' });
+  let lots;
+  try { lots = cleanLots(JSON.parse(await readBody(req)).lots); } catch (e) { return send(res, 400, { error: e.message }); }
+  if (!lots) return send(res, 400, { error: 'Send the parts list as {lots: [{no, color, q}]}, at most 600 lots.' });
+  if (!QUOTER.cached(lots) && limited(req, 'quote', 30)) return send(res, 429, { error: 'Too many quotes from here; try again in an hour.' });
+  try { send(res, 200, await QUOTER.quote(lots)); } catch (e) { send(res, 502, { error: e.message }); }
+}
+
 async function handlePhoto(res, id) {
   if (!process.env.MAPILLARY_TOKEN) return send(res, 503, { error: 'Set MAPILLARY_TOKEN in .env.' });
   try {
@@ -240,7 +257,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, fs.readFileSync(path.join(ROOT, file)), type);
     }
     if (req.method === 'GET' && url.pathname === '/api/health') {
-      return send(res, 200, { ok: true, model: FAKE ? 'fake' : MODEL, effort: EFFORT, ready: FAKE || !!anthropicKey(), fee: JOBS.fee, maxPhotos: MAX_PHOTOS, streetPhotos: !!process.env.MAPILLARY_TOKEN });
+      return send(res, 200, { ok: true, model: FAKE ? 'fake' : MODEL, effort: EFFORT, ready: FAKE || !!anthropicKey(), fee: JOBS.fee, maxPhotos: MAX_PHOTOS, streetPhotos: !!process.env.MAPILLARY_TOKEN, quote: !!QUOTER, cnyPerUsd: CNY_PER_USD });
     }
     if (req.method === 'GET' && url.pathname === '/api/designs') return send(res, 200, listDesigns());
     const m = /^\/designs\/((?:generated\/)?[a-z0-9._-]+)\.json$/i.exec(url.pathname);
@@ -255,6 +272,7 @@ const server = http.createServer(async (req, res) => {
       return handleSurvey(req, res);
     }
     if (req.method === 'POST' && url.pathname === '/api/lookup') return handleLookup(req, res);
+    if (req.method === 'POST' && url.pathname === '/api/quote') return handleQuote(req, res);
     const ph = /^\/api\/photo\/(\d{1,20})$/.exec(url.pathname);
     if (req.method === 'GET' && ph) return handlePhoto(res, ph[1]);
     send(res, 404, { error: 'Not found' });

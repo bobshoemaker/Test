@@ -390,16 +390,50 @@ $('play').onclick=()=>{
 
 // ---------- parts ----------
 let xml='';
+// GoBricks (compatible bricks): the engine's catalog snapshot gives each lot's GDS number and a catalog
+// price; on the server, a quote (/api/quote) adds today's price and stock, asked for when the Parts tab shows
+const GB=typeof SUPPLIERS!=='undefined'&&SUPPLIERS.gobricks;
+let gq={key:null,q:null,busy:false,err:null};
+const gdsLots=()=>R.inventory.filter(e=>e.kind!=='baseplate').map(e=>({no:e.no,color:e.color,q:e.q,name:e.name}));
+const lotsKey=lots=>JSON.stringify(lots.map(l=>[l.no,l.color,l.q]));
+const yuan=v=>'¥'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+const usd=v=>'$'+Math.round(v/((health&&health.cnyPerUsd)||7.2)).toLocaleString();
+async function fetchQuote(){
+  if(!GB||!health||!health.quote||!R) return;
+  const lots=gdsLots(), key=lotsKey(lots); if(!lots.length||(gq.key===key&&(gq.q||gq.busy||gq.err))) return;
+  gq={key,q:null,busy:true,err:null}; renderParts();
+  try{ const r=await fetch('/api/quote',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({lots})}), j=await r.json();
+    if(!r.ok) throw new Error(j.error||('HTTP '+r.status)); if(gq.key===key) gq.q=j; }
+  catch(e){ if(gq.key===key) gq.err=e.message; }
+  if(gq.key===key){ gq.busy=false; renderParts(); } }
 function renderParts(){
   const rows=R.inventory.slice().sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true})||b.q-a.q);
   $('pLots').textContent=rows.length; $('pPieces').textContent=R.stats.pieces.toLocaleString(); $('pCost').textContent='$'+Math.round(R.stats.cost);
-  // GoBricks (compatible bricks): its part number, or a dash where it doesn't make the part or color
-  const G=typeof SUPPLIERS!=='undefined'&&SUPPLIERS.gobricks, gds=r=>r.kind==='baseplate'?'any':(G&&G.parts[r.no]&&G.colors.includes(r.color)?G.parts[r.no]:'—');
-  $('partsBody').innerHTML=rows.map(r=>`<tr><td><span class="sw" style="background:${COLORS[r.color].hex}"></span></td><td>${r.name}</td><td>${r.no}</td><td>${G?gds(r):''}</td><td>${r.color}</td><td class="n">${r.q}</td></tr>`).join('');
-  const gap=G?rows.filter(r=>gds(r)==='—'):[], gp=gap.reduce((n,r)=>n+r.q,0);
-  $('gdsOrder').hidden=!G;
-  $('gdsNote').hidden=!G; if(G) $('gdsNote').innerHTML=`GoBricks makes compatible bricks at a fraction of the price. <b>Order from GoBricks</b> saves this list as a BrickLink XML file: upload it to their <a href="${G.order}" target="_blank" rel="noopener">part list tool</a>, which matches each part and offers substitutes for anything out of stock. `+
-    (gap.length?`It doesn't make ${gap.length} of these lots (${gp} piece${gp===1?'':'s'}: ${gap.slice(0,4).map(r=>r.name+' in '+r.color).join(', ')}${gap.length>4?', …':''}); get those from BrickLink.`:'It makes every part here.')+` The baseplate can be any compatible one. Check colors against a sample before a big order.`;
+  const live=GB&&gq.q&&gq.key===lotsKey(gdsLots())?gq.q:null, K=r=>r.no+'|'+r.color;
+  const livePrice=new Map(live?live.items.map(i=>[K(i),i.price]):[]), oos=new Set(live?live.outOfStock.map(K):[]);
+  const each=r=>live?(livePrice.has(K(r))?livePrice.get(K(r)):null):(GB&&GB.made[r.no]?GB.made[r.no][r.color]:null);
+  const gdsNo=r=>r.kind==='baseplate'?'any':(supplierNo(GB,r.no,r.color)||'—');
+  const priceCell=r=>{ if(r.kind==='baseplate') return ''; const p=each(r); if(p!=null) return `<span title="${yuan(p)} each">${yuan(p*r.q)}</span>`;
+    return oos.has(K(r))?'out of stock':'—'; };
+  $('gdsHead').hidden=!GB;
+  $('partsBody').innerHTML=rows.map(r=>`<tr><td><span class="sw" style="background:${COLORS[r.color].hex}"></span></td><td>${r.name}</td><td>${r.no}${GB?`<small class="gds" title="GoBricks part number">${gdsNo(r)}</small>`:''}</td><td>${r.color}</td><td class="n">${r.q}</td>${GB?`<td class="yuan">${priceCell(r)}</td>`:''}</tr>`).join('');
+  $('gdsOrder').hidden=!GB; $('gdsNote').hidden=!GB; $('pGdsBox').hidden=!GB;
+  if(GB){
+    const gap=rows.filter(r=>r.kind!=='baseplate'&&!supplierNo(GB,r.no,r.color)), gp=gap.reduce((n,r)=>n+r.q,0);
+    const est=rows.reduce((s,r)=>s+(r.kind!=='baseplate'&&GB.made[r.no]&&GB.made[r.no][r.color]!=null?r.q*GB.made[r.no][r.color]:0),0);
+    const total=live?live.total:est;
+    $('pGds').textContent=yuan(total);
+    $('pGdsLabel').textContent=live?`GoBricks today, about ${usd(total)}`:gq.busy?`GoBricks, checking today's price…`:`GoBricks catalog, about ${usd(total)}`;
+    const list=(a,f)=>a.slice(0,4).map(f).join(', ')+(a.length>4?', …':'');
+    const says=live?`GoBricks quoted ${yuan(live.total)} (about ${usd(live.total)}) for the ${live.pieces.toLocaleString()} pieces it has in stock today, before shipping.`+
+        (live.outOfStock.length?` Out of stock right now: ${list(live.outOfStock,i=>esc(`${i.name} in ${i.color} (${i.q})`))}; their tool offers substitutes.`:'')+
+        (live.notMade.length?` It doesn't make ${list(live.notMade,i=>esc(`${i.name} in ${i.color} (${i.q})`))}.`:'')
+      :`At GoBricks' catalog prices on ${GB.asOf} these parts come to about ${yuan(est)} (about ${usd(est)}) before shipping; `+
+        (gq.err?`today's quote didn't come back (${esc(gq.err)}).`:health&&health.quote?`checking today's price and stock…`:`the Brickhouse server checks today's price and stock.`)+
+        (gap.length?` It doesn't make ${gap.length} of these lots (${gp} piece${gp===1?'':'s'}: ${list(gap,r=>r.name+' in '+r.color)}); get those from BrickLink, or hold the design to GoBricks ("supplier": "gobricks") and it uses only what GoBricks makes.`:' It makes every part here.');
+    $('gdsNote').innerHTML=`GoBricks makes compatible bricks at a fraction of the price. ${says} <b>Order from GoBricks</b> saves this list as a BrickLink XML file for their <a href="${GB.order}" target="_blank" rel="noopener">part list tool</a>. The baseplate can be any compatible one. Check colors against a sample before a big order.`;
+    if(!$('pane-parts').hidden) fetchQuote();
+  }
   xml='<INVENTORY>\n'+rows.map(r=>`  <ITEM><ITEMTYPE>P</ITEMTYPE><ITEMID>${r.no}</ITEMID><COLOR>${COLORS[r.color].bl}</COLOR><MINQTY>${r.q}</MINQTY></ITEM>`).join('\n')+'\n</INVENTORY>';
   $('xmlOut').hidden=true;
 }
@@ -621,6 +655,7 @@ async function loadDesignList(selected){
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));
   ['model','manual','parts','design'].forEach(t=>$('pane-'+t).hidden=t!==b.dataset.tab);
+  if(b.dataset.tab==='parts') fetchQuote();
 });
 function applyTheme(){ const c=getComputedStyle(document.documentElement).getPropertyValue('--stage').trim()||'#D9E2EB'; stageLin=lin(c); scene.background=new THREE.Color(c); if(R) applyState(); dirty=true; }
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme);

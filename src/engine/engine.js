@@ -136,6 +136,7 @@ const FIXTURES = {
 };
 
 const N4 = [[1,0],[-1,0],[0,1],[0,-1]];
+const N8 = [...N4,[1,1],[1,-1],[-1,1],[-1,-1]];
 const DOOR_KINDS = ['door','garage door'];
 // what the model shows: a whole house, or one unit of a larger building cut from its neighbours
 const PROPERTY_TYPES = ['house','townhouse','condo'];
@@ -155,10 +156,14 @@ const K3 = (x,z,p)=>x+','+z+','+p;
 const AVAIL=(typeof PART_AVAILABILITY!=='undefined')?PART_AVAILABILITY
   :(typeof require==='function'?(()=>{ try{ return require('./parts-availability.js').PART_AVAILABILITY; }catch(e){ return null; } })():null);
 const AVAIL_SETS=6, AVAIL_YEAR=2018;
-// Compatible-brick suppliers (src/engine/suppliers.js): a design with "supplier": "gobricks" is held to the
-// parts and colors that supplier makes (the baseplate may come from anywhere).
+// Compatible-brick suppliers (src/engine/suppliers.js): a design with "supplier": "gobricks" is held to
+// exactly the parts and colors that supplier makes, in place of LEGO availability (the baseplate may come
+// from anywhere): the packer, mixes and texture use only those, and the checker warns about any other.
 const SUPPLY=(typeof SUPPLIERS!=='undefined')?SUPPLIERS
   :(typeof require==='function'?(()=>{ try{ return require('./suppliers.js').SUPPLIERS; }catch(e){ return null; } })():null);
+const supplies=(S,no,color)=>!!(S&&S.made&&S.made[no]&&S.made[no][color]!=null);
+// a supplier's part number for a part in a color (GDS-536-031), or null where it doesn't make it
+const supplierNo=(S,no,color)=>supplies(S,no,color)?S.parts[no]+'-'+S.colors[color]:null;
 const availOf=(no,color)=>{ const t=AVAIL&&AVAIL.parts[no]; if(!t) return null; const a=t[color]; return {sets:a?a[0]:0,last:a?a[1]:0}; };
 const easyToGet=(no,color)=>{ const a=availOf(no,color); return !a||(a.sets>=AVAIL_SETS&&a.last>=AVAIL_YEAR); };
 // the colors a part is easy to get in, most common first
@@ -209,6 +214,9 @@ function compile(design){
   const clock=(typeof performance!=='undefined')?performance:Date;
   const t0=clock.now();
   const errors=[], warnings=[], parts=[], occ=new Map(), subs=[], lawned=new Set();
+  // the parts this design may use: what its supplier makes, or else LEGO parts that are easy to get
+  const SUP=design.supplier!=null&&SUPPLY?SUPPLY[design.supplier]||null:null;
+  const canBuy=SUP?(no,color)=>supplies(SUP,no,color):easyToGet;
   if(!BASEPLATES[BASE]) errors.push({msg:`plate must be 32 or 48 (got ${design.plate})`, op:null});
   if(design.property!=null&&!PROPERTY_TYPES.includes(design.property)) errors.push({msg:`property must be one of ${PROPERTY_TYPES.join(', ')} (got ${design.property})`, op:null});
   const phases=design.phases||[]; const phaseIdx=new Map(phases.map((p,i)=>[p,i]));
@@ -236,8 +244,8 @@ function compile(design){
   // the sizes of a kind that are easy to get in a color (a 1 x 1 at worst, which the checker then flags)
   const sizeMemo=new Map();
   function easySizes(kind,color,sizes){ const k=kind+'|'+color+'|'+sizes.length; if(sizeMemo.has(k)) return sizeMemo.get(k);
-    const ok=sizes.filter(([a,b])=>easyToGet(SIZE_PARTS[kind][Math.min(a,b)+'x'+Math.max(a,b)],color)); const r=ok.length?ok:[[1,1]]; sizeMemo.set(k,r); return r; }
-  const easyLen=(kind,len,color)=>easyToGet(SIZE_PARTS[kind]['1x'+len],color);
+    const ok=sizes.filter(([a,b])=>canBuy(SIZE_PARTS[kind][Math.min(a,b)+'x'+Math.max(a,b)],color)); const r=ok.length?ok:[[1,1]]; sizeMemo.set(k,r); return r; }
+  const easyLen=(kind,len,color)=>canBuy(SIZE_PARTS[kind]['1x'+len],color);
   function pack(level,kind,y,meta,sizesFor){
     const h=H[kind], cells=[], lenOk=LEN_OK[kind];
     // a lift-off roof is built on its own, so its pieces needn't sit on studs below (it rests on tiles)
@@ -251,14 +259,16 @@ function compile(design){
     const rests=(x,z)=>supportAt(x,z,y)!==undefined||(floating&&y>0&&occ.has(K3(x,z,y-1)));
     for(const c of cells){ c.sup=rests(c.x,c.z); let n=0; for(const [dx,dz] of N4) if(rests(c.x+dx,c.z+dz)) n++; c.nsup=n; }
     // a layer built on its own holds together through the layer above, which covers its inside cells
-    // (every neighbour in the layer or enclosed by it), not its outer edge: each piece should reach an
-    // inside cell, so the cells farthest from one are packed first, and pieces reaching one score higher
+    // (every neighbour in the layer or enclosed by it, diagonals too: at an inside corner a hip roof's
+    // next course puts a slope over a cell whose only outside neighbour is diagonal), not its outer
+    // edge: each piece should reach an inside cell, so the cells farthest from one are packed first,
+    // and pieces reaching one score higher
     const anchor=new Set();
     // (only for plates and tiles in a ring around a hole, like a hip roof's courses: a full layer ties
     // itself by running bond, and walls by their courses)
     const within=floating&&kind!=='brick'?enclosed(new Set(avail.keys())):null;
     if(within&&within.size>avail.size){
-      for(const c of cells) if(N4.every(([dx,dz])=>within.has((c.x+dx)+','+(c.z+dz)))) anchor.add(c.k);
+      for(const c of cells) if(N8.every(([dx,dz])=>within.has((c.x+dx)+','+(c.z+dz)))) anchor.add(c.k);
       const dist=new Map([...anchor].map(k=>[k,0])), q=[...anchor];
       for(let h=0;h<q.length;h++){ const [x,z]=q[h].split(',').map(Number); for(const [dx,dz] of N4){ const k=(x+dx)+','+(z+dz); if(avail.has(k)&&!dist.has(k)){ dist.set(k,dist.get(q[h])+1); q.push(k); } } }
       for(const c of cells) c.far=anchor.size?(dist.has(c.k)?dist.get(c.k):99):0; }
@@ -361,7 +371,7 @@ function compile(design){
     for(const id of ids){ const p=parts[id-1]; if(p.kind!=='tile') continue;
       const worn=h(Math.floor(p.x/4),Math.floor(p.z/4),1)<0.4; if(h(p.x,p.z,2)>=f*(worn?2.2:0.3)) continue;
       const key='plate:'+p.w+'x'+p.d; let def; try{ def=resolvePart(key); }catch(e){ continue; }
-      if(!easyToGet(def.no,p.color)) continue;
+      if(!canBuy(def.no,p.color)) continue;
       const q=makePart(def,p.x,p.y,p.z,0,p.color,{op:p.op,phase:p.phase}); q.id=p.id; parts[id-1]=q; } }
 
   // A roof's slope on (x, z) at height y, unless it would stand in front of a window: within WINDOW_CLEAR
@@ -372,7 +382,7 @@ function compile(design){
     ?(wx===x&&Math.abs(wz-z)>=1&&Math.abs(wz-z)<=WINDOW_CLEAR):(wz===z&&Math.abs(wx-x)>=1&&Math.abs(wx-x)<=WINDOW_CLEAR)));
   function eaveSlope(x,y,z,color,meta){
     if(!inFront(x,z,y,y+SPECIAL.cheese.h)) return place('cheese',x,y,z,0,color,meta,false);
-    if(!inFront(x,z,y,y+1)&&easyToGet(SIZE_PARTS.tile['1x1'],color)) place('tile:1x1',x,y,z,0,color,meta,false);
+    if(!inFront(x,z,y,y+1)&&canBuy(SIZE_PARTS.tile['1x1'],color)) place('tile:1x1',x,y,z,0,color,meta,false);
     return null; }
 
   // "mix" on a fill or walls op: after packing, recolor a scattered few whole pieces of the op's main
@@ -388,7 +398,7 @@ function compile(design){
     if(!Array.isArray(mix)||mix.some(m=>!Array.isArray(m)||!COLORS[m[0]]||!(m[1]>=0))){ errors.push({msg:'"mix" must be [[color, fraction], ...] with known colors', op:i}); return; }
     for(const id of ids){ const p=parts[id-1]; if(p.color!==main) continue;
       let u=((((p.x*73856093)^(p.z*19349663)^(p.y*83492791)^(i*2654435761))>>>0)%1000)/1000;
-      for(const [mc,fr] of mix){ if(u<fr){ if(easyToGet(p.no,mc)) p.color=mc; break; } u-=fr; } }
+      for(const [mc,fr] of mix){ if(u<fr){ if(canBuy(p.no,mc)) p.color=mc; break; } u-=fr; } }
   }
 
   // A hip roof over the union of several rectangles (an L or T): each plate course steps in one stud
@@ -427,7 +437,7 @@ function compile(design){
         let best=null; for(const [dn,dx,dz] of [['S',0,1],['N',0,-1],['E',1,0],['W',-1,0]]){ const v=dep(x+dx,z+dz); if(!best||v<best[1]) best=[dn,v]; }
         let cc=op.cap||op.color;
         const rmix=mixOf(op); if(rmix&&rmix.length){ const hsh=((x*73856093)^(z*19349663)^(top*83492791))>>>0; let u=(hsh%1000)/1000;
-          for(const [mc,fr] of rmix){ if(u<fr){ if(easyToGet(SPECIAL.cheese.no,mc)) cc=mc; break; } u-=fr; } }
+          for(const [mc,fr] of rmix){ if(u<fr){ if(canBuy(SPECIAL.cheese.no,mc)) cc=mc; break; } u-=fr; } }
         const qq=eaveSlope(x,top,z,cc,meta); if(qq) qq.dir=best[0]; } }
   }
 
@@ -593,7 +603,7 @@ function compile(design){
             let best=c[0]; for(const q of c) if(q[1]<best[1]) best=q;
             let cc=op.cap||op.color;
             const rmix=mixOf(op); if(rmix&&rmix.length){ const hsh=((x*73856093)^(z*19349663)^(top*83492791))>>>0; let u=(hsh%1000)/1000;
-              for(const [mc,fr] of rmix){ if(u<fr){ if(easyToGet(SPECIAL.cheese.no,mc)) cc=mc; break; } u-=fr; } }
+              for(const [mc,fr] of rmix){ if(u<fr){ if(canBuy(SPECIAL.cheese.no,mc)) cc=mc; break; } u-=fr; } }
             const q=eaveSlope(x,top,z,cc,meta); if(q) q.dir=best[0]; } }
         break; }
       case 'band': {
@@ -894,16 +904,19 @@ function compile(design){
   let glassN=0;
   for(const p of parts){ add(p.no,p.name,p.color,p.cost,p.kind); if(p.glass){ add(p.glass.no,p.glass.name,'Trans-Clear',GLASS_COST,'glass'); glassN++; } }
   const inventory=[...lots.values()];
-  // a compatible-brick supplier: every part and color must be one it makes
-  if(design.supplier!=null){ const S=SUPPLY&&SUPPLY[design.supplier];
-    if(!S) errors.push({msg:`Unknown supplier "${design.supplier}"${SUPPLY?`; known: ${Object.keys(SUPPLY).join(', ')}`:''}`, op:null});
-    else for(const e of inventory){ if(e.kind==='baseplate') continue;
-      const noPart=!S.parts[e.no], noColor=!S.colors.includes(e.color); if(!noPart&&!noColor) continue;
-      const first=parts.find(p=>p.no===e.no&&p.color===e.color);
-      warnings.push({msg:noPart?`${e.name} (${e.no}) isn't made by ${S.name}: use another part${first&&(design.ops[first.op]||{}).op==='plant'?` (the ${(design.ops[first.op]||{}).kind} plant uses it; pick another plant)`:''}`
-        :`${S.name} doesn't make ${e.color}: use another color for ${e.name}`, op:first?first.op:null, part:first?first.id:undefined}); } }
-  // parts that are hard to get in their color: few sets have included them, or none lately
-  for(const e of inventory){ if(easyToGet(e.no,e.color)) continue;
+  // a compatible-brick supplier: every part must be one it makes in that color (the baseplate can be any)
+  if(design.supplier!=null&&!SUP) errors.push({msg:`Unknown supplier "${design.supplier}"${SUPPLY?`; known: ${Object.keys(SUPPLY).join(', ')}`:''}`, op:null});
+  if(SUP) for(const e of inventory){ if(e.kind==='baseplate'||supplies(SUP,e.no,e.color)) continue;
+    const first=parts.find(p=>p.no===e.no&&p.color===e.color), fop=first?design.ops[first.op]||{}:{};
+    // the colors it does make the part in, those this design already uses first
+    const used=new Set(inventory.map(x=>x.color)), all=Object.keys((SUP.made&&SUP.made[e.no])||{}).sort((a,b)=>used.has(b)-used.has(a));
+    // a plant's colors come from the library (all but a bloom color), so the fix there is another plant
+    const plant=fop.op==='plant'?` (the ${fop.kind} plant uses it: pick another plant${fop.bloom!==undefined?' or bloom color':''})`:'';
+    e.hard=true;
+    warnings.push({msg:all.length?`${SUP.name} doesn't make ${e.name} in ${e.color} (${e.q}): use a color it makes (${all.slice(0,6).join(', ')}${all.length>6?`, or ${all.length-6} more`:''}) or another part${plant}`
+      :`${e.name} (${e.no}) isn't made by ${SUP.name}: use another part${plant}`, op:first?first.op:null, part:first?first.id:undefined}); }
+  // parts that are hard to get in their color: few sets have included them, or none lately (LEGO parts only)
+  if(!SUP) for(const e of inventory){ if(easyToGet(e.no,e.color)) continue;
     const a=availOf(e.no,e.color), alt=easyColors(e.no).slice(0,6), first=parts.find(p=>p.no===e.no&&p.color===e.color);
     e.hard=true;
     warnings.push({msg:`${e.name} in ${e.color} (${e.q}) is hard to get: ${a.sets?`${a.sets} LEGO set${a.sets===1?' has':'s have'} included it, the latest in ${a.last}`:'LEGO has not made it in that color'}. Use a color it's easy to get in${alt.length?` (${alt.join(', ')})`:''} or another part`, op:first?first.op:null, part:first?first.id:undefined}); }
@@ -914,4 +927,4 @@ function compile(design){
   return {parts,steps,subs,errors,warnings,hints,joints,jn,inventory,occ,
     stats:{liftoff:(()=>{ const lo=new Map(); for(const p of parts) if(p.liftoff) lo.set(p.liftoff,Math.min(lo.has(p.liftoff)?lo.get(p.liftoff):1e9,p.y)); return [...lo].sort((a,b)=>b[1]-a[1]).map(e=>e[0]); })(),pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32}};
 }
-if(typeof module!=='undefined') module.exports={SUPPLY,easyToGet,availOf,easyColors,AVAIL_SETS,AVAIL_YEAR,compile,COLORS,SPECIAL,SIZE_PARTS,PLANTS,FIXTURES};
+if(typeof module!=='undefined') module.exports={SUPPLY,supplies,supplierNo,easyToGet,availOf,easyColors,AVAIL_SETS,AVAIL_YEAR,compile,COLORS,SPECIAL,SIZE_PARTS,PLANTS,FIXTURES};

@@ -39,9 +39,13 @@ closing gift that realtors give clients: a brick model of the house they just bo
   color and when; a part in a color is easy to get with 6+ sets, the latest 2018 or later. The packer
   only uses such sizes, mixes only recolor into such colors, and the checker warns about any other
   part (naming colors it does come in). The plant and fixture libraries are held to it by tests.
-  A design with `"supplier": "gobricks"` is held to what GoBricks (compatible bricks) makes, from
-  `src/engine/suppliers.js` (built by `scripts/gobricks.js` from a CC0 LEGO-to-GDS table); the Parts
-  tab shows GDS numbers and saves the list for GoBricks' upload tool (webrick.com), which takes BrickLink XML.
+  A design with `"supplier": "gobricks"` is held to exactly what GoBricks (compatible bricks) makes, in place
+  of LEGO availability (packer, mixes, texture and checker alike): `src/engine/suppliers.js` lists every
+  part and palette color GoBricks makes with its catalog price, built by `scripts/gobricks.js`, which asks
+  GoBricks' part-list matcher once about every engine part in every color (`src/server/gobricks.js`; the
+  matcher takes LEGO design numbers, so the cone goes as 59900). The Parts tab shows GDS numbers and a price
+  per lot, the total at catalog prices, and on the server today's price and stock (`POST /api/quote`); it
+  saves the list for GoBricks' upload tool (webrick.com), which takes BrickLink XML.
   Dependency-free; runs in the browser (globals) and in Node (require).
 - `src/server/prompt.js`: `SPEC`, the design language written for Claude. It is the source of
   truth for what a design may contain. When you add an op, part or field to the engine,
@@ -103,7 +107,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   runs it only once Stripe confirms that job's session is paid, and only once; `GET
   /api/jobs/<id>?after=&have=` is its progress, polled by the viewer; `POST /api/jobs/<id>/fix`
   gives a finished job up to two more rounds. Jobs run server-side and are saved to
-  `designs/generated/jobs/`; results to `designs/generated/`. There is no unpaid design endpoint. `POST /api/lookup {address}` returns the place and ranked candidate
+  `designs/generated/jobs/`; results to `designs/generated/`. There is no unpaid design endpoint. `POST /api/quote {lots}` returns GoBricks' price and stock
+  for a parts list today (cached a day per list; `BRICKHOUSE_GOBRICKS_QUOTES=0` turns it off, `BRICKHOUSE_CNY_PER_USD`
+  sets the viewer's dollar rate). `POST /api/lookup {address}` returns the place and ranked candidate
   photos; `GET /api/photo/<mapillary id>` proxies one image.
 - `src/viewer/`: single-page three.js (r128, CDN) viewer: model, manual (sub-builds shown on
   their own), parts and BrickLink XML, design editor, photo upload, and "Lift roof" for designs
@@ -120,7 +126,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
 - `scripts/`: `compile.js` (check a design), `design.js` (photos to design from the CLI),
   `bundle.js` (single-file HTML for sharing or publishing as a Claude artifact), `ldraw.js`,
   `availability.js` (rebuild the availability table; rerun now and then as LEGO releases sets),
-  `gobricks.js` (rebuild the GoBricks table).
+  `gobricks.js` (rebuild the GoBricks table: ten matcher requests, replies cached in `.gobricks-cache/`).
 
 ## Commands
 
@@ -174,6 +180,10 @@ before changing API parameters.
   scripts/availability.js). LDraw lists 2566 palm top and 6064 plant bush as obsolete molds, though
   sets still include both; costs are placeholder
   per-piece prices. Check before any real order.
+- GoBricks quotes and the catalog snapshot use the part-list matcher gobricks.cn's own site calls, not a
+  documented API: ask GoBricks (support@webrick.com) before customers rely on it. Prices come back in
+  yuan (the reply names no currency), before shipping; the dollar figure uses a fixed rate. Under a
+  supplier the engine warns about what it can't get; Claude, not the engine, swaps the part or color.
 - Plain bricks, plates and tiles are drawn as boxes with studs (no underside or logo). Sideways building is limited to side-stud bricks
   in wall openings with a few details hung on them (lantern, house number, plaque, vent); mounted
   parts are drawn as small blocks.
