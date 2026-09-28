@@ -97,8 +97,11 @@ closing gift that realtors give clients: a brick model of the house they just bo
   bricks straight up, layer by layer, and putting back lowers them (skipped with reduced motion).
 - `designs/`: hand-built reference designs. `634-unit-a.json` was built by hand from three
   listing photos; use it as the quality bar for photo-generated designs.
+- `src/viewer/ldraw-parts.js`: real part geometry from the LDraw Parts Library (CC BY 4.0, credited in
+  the viewer and file header) for the plant parts; `scripts/ldraw.js` regenerates it (`--lowres` uses
+  8-sided round primitives). The engine's stud layouts for those parts follow the LDraw files.
 - `scripts/`: `compile.js` (check a design), `design.js` (photos to design from the CLI),
-  `bundle.js` (single-file HTML for sharing or publishing as a Claude artifact).
+  `bundle.js` (single-file HTML for sharing or publishing as a Claude artifact), `ldraw.js`.
 
 ## Commands
 
@@ -147,8 +150,8 @@ before changing API parameters.
 
 ## Known gaps
 
-- BrickLink part numbers and color availability are unverified (the plant parts' shapes were checked
-  against BrickLink's catalog images; their stud layouts are approximate); costs are placeholder
+- BrickLink part numbers and color availability are unverified (the plant parts' shapes and stud
+  layouts come from LDraw; LDraw lists 2566 palm top and 6064 plant bush as obsolete molds); costs are placeholder
   per-piece prices. Check before any real order.
 - Part geometry is simplified in the renderer. Sideways building is limited to side-stud bricks
   in wall openings with a few details hung on them (lantern, house number, plaque, vent); mounted

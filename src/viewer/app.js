@@ -57,6 +57,21 @@ function almondGeo(len,wid,rise,droop,segs=6,full=0.75){ const v=[], pt=(t,side)
     v.push(...La,...A,...Lb, ...A,...B,...Lb, ...A,...Ra,...B, ...Ra,...Rb,...B); }
   const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(v,3)); g.computeVertexNormals(); return g; }
 const place3=(g,x,y,z,ry)=>{ if(ry) g.rotateY(ry); g.translate(x,y,z); return g; };
+// Real part shapes from the LDraw library (src/viewer/ldraw-parts.js, CC BY 4.0), when it's loaded:
+// LDraw units are 1/20 stud with y down, so a part's geometry is scaled by 1/20 and flipped.
+const ldrawCache={};
+function ldrawGeo(no){ if(typeof LDRAW_PARTS==='undefined'||!LDRAW_PARTS.parts[no]) return null; if(ldrawCache[no]) return ldrawCache[no];
+  const bin=atob(LDRAW_PARTS.parts[no].tris), u8=new Uint8Array(bin.length); for(let k=0;k<bin.length;k++) u8[k]=bin.charCodeAt(k);
+  const q=new Int16Array(u8.buffer), f=new Float32Array(q.length), s=1/(20*LDRAW_PARTS.q);
+  for(let k=0;k<q.length;k+=3){ f[k]=q[k]*s; f[k+1]=-q[k+1]*s; f[k+2]=q[k+2]*s; }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(f,3)); g.computeVertexNormals(); return ldrawCache[no]=g; }
+// Where a part's LDraw origin sits, and which way it turns: [x, y, z, quarter turns]
+function ldrawPose(p){ const def=SPECIAL[p.key]||{};
+  if(p.shape==='swordleaf'){ // clipped on one corner bar of the palm top, fanning out toward dir
+    const r={N:0,E:1,S:2,W:3}[p.dir||'N'], c=[[p.x+2.5,p.z+6],[p.x,p.z+2.5],[p.x+2.5,p.z],[p.x+6,p.z+2.5]][r], bar=[[0.5,0],[0,0.5],[-0.5,0],[0,-0.5]][r];
+    return [c[0]+bar[0]-OFF,(p.y+0.5)*PH,c[1]+bar[1]-OFF,r]; }
+  if(p.shape==='palm'||p.key==='bush224') return [p.x+p.w/2-OFF,p.y*PH,p.z+p.d/2-OFF,0];
+  const a=def.at?turnCell(def,def.at,p.rot):[0,0]; return [p.x+a[0]+0.5-OFF,(p.y+1)*PH,p.z+a[1]+0.5-OFF,p.rot||0]; }
 const folCache={};
 function foliageGeo(p){ const key=`${p.shape}|${p.key}|${p.w}x${p.d}|${p.dir||''}`; if(folCache[key]) return folCache[key];
   const items=[], H=PH*0.9, def=SPECIAL[p.key]||{};
@@ -116,6 +131,9 @@ function buildScene(){
     } else if(p.shape==='cheese'){
       tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,{S:0,N:Math.PI,E:Math.PI/2,W:-Math.PI/2}[p.dir]||0,0);
       tmp.updateMatrix(); const r={p,m:tmp.matrix.clone()}; ch.push(r); inst.push(r); recOf.set(p.id,r);
+    } else if(ldrawGeo(p.no)){
+      const [lx,ly,lz,r]=ldrawPose(p); tmp.position.set(lx,ly,lz); tmp.scale.set(1,1,1); tmp.rotation.set(0,-r*Math.PI/2,0); tmp.updateMatrix();
+      const geo=ldrawGeo(p.no), rec={p,m:tmp.matrix.clone()}; if(!fol.has(geo)) fol.set(geo,[]); fol.get(geo).push(rec); inst.push(rec); recOf.set(p.id,rec);
     } else if(p.shape==='leaves'||p.shape==='sprig'||p.shape==='flower'||p.shape==='swordleaf'){
       tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,0,0); tmp.updateMatrix();
       const geo=foliageGeo(p), r={p,m:tmp.matrix.clone()}; if(!fol.has(geo)) fol.set(geo,[]); fol.get(geo).push(r); inst.push(r); recOf.set(p.id,r);
@@ -124,7 +142,7 @@ function buildScene(){
   makeInstanced(boxGeo,matO,boxO,true); makeInstanced(boxGeo,matT,boxT,false); makeInstanced(cheeseGeo,matW,ch,true); makeInstanced(cylGeo,matO,cyl,true);
   for(const [geo,list] of fol) makeInstanced(geo,matW,list,true);
   // studs
-  for(const p of R.parts) for(const [x,z] of p.studs){ const top=p.y+p.h; const cov=R.occ.get(x+','+z+','+top); studRecs.push({p,x,z,top,cov}); }
+  for(const p of R.parts) if(!ldrawGeo(p.no)) for(const [x,z] of p.studs){ const top=p.y+p.h; const cov=R.occ.get(x+','+z+','+top); studRecs.push({p,x,z,top,cov}); }
   for(let x=0;x<PLATE;x++) for(let z=0;z<PLATE;z++){ const cov=R.occ.get(x+','+z+',0'); studRecs.push({p:null,x,z,top:0,cov}); }
   studs=new THREE.InstancedMesh(studGeo,matO,studRecs.length); studs.instanceMatrix.setUsage(THREE.DynamicDrawUsage); studs.receiveShadow=true;
   studRecs.forEach((s,i)=>{ tmp.rotation.set(0,0,0); tmp.scale.set(1,1,1); tmp.position.set(s.x+0.5-OFF,s.top*PH+0.085,s.z+0.5-OFF); tmp.updateMatrix(); s.m=tmp.matrix.clone();

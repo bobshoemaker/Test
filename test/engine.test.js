@@ -109,11 +109,16 @@ test('a roof leaning on a taller building rises into its wall there and has an e
 test('every plant in the library stands on its own, and an unknown kind is named', () => {
   const { PLANTS } = require('../src/engine/engine.js');
   for (const kind of Object.keys(PLANTS)) {
-    const r = compile({ name: kind, phases: ['p'], ops: [{ op: 'plant', phase: 'p', kind, at: [[10, 0, 10], [20, 0, 20]], bloom: 'Red' }] });
+    const r = compile({ name: kind, plate: 48, phases: ['p'], ops: [{ op: 'plant', phase: 'p', kind, at: [[10, 0, 10], [30, 0, 30]], bloom: 'Red' }] });
     assert.deepEqual([kind, r.errors.length, r.warnings.length, r.subs[0].copies], [kind, 0, 0, 2]);
   }
   const bad = compile({ name: 'x', phases: ['p'], ops: [{ op: 'plant', phase: 'p', kind: 'baobab', at: [[5, 0, 5]] }] });
-  assert.match(bad.errors[0].msg, /Unknown plant "baobab"; the library has olive tree, yucca/);
+  assert.match(bad.errors[0].msg, /Unknown plant "baobab"; the library has shade tree, jacaranda/);
+  // plant leaves grip and carry studs where the real part has them (LDraw): a 4 x 3 branch pressed on at
+  // its stem end reaches three studs out and carries five tip studs; turned a quarter it points +x
+  const leaf = (rot) => compile({ name: 'l', phases: ['p'], ops: [{ op: 'place', phase: 'p', part: 'leaves43', at: [10, 0, 10], rot, color: 'Green' }] }).parts[0];
+  assert.deepEqual([leaf(0).w, leaf(0).d, leaf(0).sockets, leaf(0).studs.length], [3, 4, [[11, 13]], 6]);
+  assert.deepEqual([leaf(1).w, leaf(1).d, leaf(1).sockets], [4, 3, [[10, 11]]]);
 });
 
 test('wall details hang on side-stud bricks set in the wall, and need them', () => {

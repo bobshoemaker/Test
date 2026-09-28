@@ -44,6 +44,7 @@ const STATIC = {
   '/': ['src/viewer/index.html', 'text/html; charset=utf-8'],
   '/index.html': ['src/viewer/index.html', 'text/html; charset=utf-8'],
   '/viewer/app.js': ['src/viewer/app.js', 'text/javascript; charset=utf-8'],
+  '/viewer/ldraw-parts.js': ['src/viewer/ldraw-parts.js', 'text/javascript; charset=utf-8'],
   '/engine.js': ['src/engine/engine.js', 'text/javascript; charset=utf-8'],
 };
 

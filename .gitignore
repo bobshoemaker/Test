@@ -5,3 +5,4 @@ designs/generated/*.json
 designs/generated/*.png
 photos/
 designs/generated/jobs/
+.ldraw-cache/
