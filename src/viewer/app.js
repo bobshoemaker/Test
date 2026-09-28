@@ -189,10 +189,9 @@ function loop(){ requestAnimationFrame(loop);
   if(moving||dirty){ placeCam(); renderer.render(scene,camera); dirty=false; } }
 
 // ---------- bricks in motion ----------
-// Play build drops each step's bricks into place one after another; lifting a roof or floor sends its
-// bricks flying off one by one, top first, and putting it back flies them home, bottom first.
+// Play build drops each step's bricks straight down into place one after another; lifting a roof or floor
+// raises its bricks straight up one by one, top first, and putting it back lowers them, bottom first.
 const m4=new THREE.Matrix4(), m4b=new THREE.Matrix4(), eul=new THREE.Euler(), v3=new THREE.Vector3();
-const rnd=(id,k)=>(((id*2654435761)^(k*40503))>>>0)%1000/1000; // steady per brick, so a replay looks the same
 const easeIn=t=>t*t, easeOut=t=>1-(1-t)*(1-t);
 function centerOf(p){ return v3.set(p.x+p.w/2-OFF,(p.y+p.h/2)*PH,p.z+p.d/2-OFF); }
 function animFrame(now){
@@ -219,19 +218,16 @@ function animate(list,make){ if(reduceMotion||!root) return; const now=performan
 function dropStep(s){
   const ps=s.parts.map(id=>R.parts[id-1]).sort((a,b)=>a.y-b.y||a.id-b.id), whole=s.kind==='attach';
   const gap=whole?0:Math.min(30,260/Math.max(1,ps.length)), h=whole?9:6;
-  animate(ps,(p,k,now)=>({t0:now+k*gap,dur:whole?520:340,from:[0,h+rnd(p.id,1)*2,0],to:[0,0,0],spin:[0,0,0],ease:easeIn,hideBefore:true}));
+  animate(ps,(p,k,now)=>({t0:now+k*gap,dur:whole?520:340,from:[0,h,0],to:[0,0,0],spin:[0,0,0],ease:easeIn,hideBefore:true}));
 }
-// a lift-off group's bricks fly up and out from its middle, one by one, top first (or home, bottom first)
+// a lift-off group's bricks rise straight up, one by one in order: the top layer first, each layer swept
+// front to back (putting back brings them straight down, bottom layer first)
 function flyGroups(names,home){
   const ps=R.parts.filter(p=>names.includes(p.liftoff)); if(!ps.length) return;
-  let cx=0,cz=0; ps.forEach(p=>{ cx+=p.x+p.w/2; cz+=p.z+p.d/2; }); cx/=ps.length; cz/=ps.length;
-  ps.sort((a,b)=>home?(a.y-b.y||a.id-b.id):(b.y-a.y||a.id-b.id));
-  const gap=Math.min(14,1100/ps.length);
-  animate(ps,(p,k,now)=>{ let dx=p.x+p.w/2-cx, dz=p.z+p.d/2-cz; const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L;
-    const out=8+rnd(p.id,2)*10, up=16+rnd(p.id,3)*14, far=[dx*out+(rnd(p.id,4)-0.5)*4,up,dz*out+(rnd(p.id,5)-0.5)*4];
-    const spin=[(rnd(p.id,6)-0.5)*5,(rnd(p.id,7)-0.5)*5,(rnd(p.id,8)-0.5)*5];
-    return home?{t0:now+k*gap,dur:620,from:far,to:[0,0,0],spin:spin.map(x=>-x),ease:easeOut,hideBefore:true}
-      :{t0:now+k*gap,dur:700,from:[0,0,0],to:far,spin,ease:easeIn,hideBefore:false,shrink:true}; });
+  ps.sort((a,b)=>home?(a.y-b.y||a.z-b.z||a.x-b.x):(b.y-a.y||b.z-a.z||a.x-b.x));
+  const gap=Math.min(14,1100/ps.length), rise=[0,55,0];
+  animate(ps,(p,k,now)=>home?{t0:now+k*gap,dur:560,from:rise,to:[0,0,0],spin:[0,0,0],ease:easeOut,hideBefore:true}
+    :{t0:now+k*gap,dur:640,from:[0,0,0],to:rise,spin:[0,0,0],ease:easeIn,hideBefore:false});
 }
 
 // ---------- manual ----------
