@@ -45,7 +45,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
   GoBricks' part-list matcher once about every engine part in every color (`src/server/gobricks.js`; the
   matcher takes LEGO design numbers, so the cone goes as 59900). The Parts tab shows GDS numbers and a price
   per lot, the total at catalog prices, and on the server today's price and stock (`POST /api/quote`); it
-  saves the list for GoBricks' upload tool (webrick.com), which takes BrickLink XML.
+  saves the list for the part-list upload at Brickwith (brickwith.com), GoBricks' own store, which replaced Webrick.
   Dependency-free; runs in the browser (globals) and in Node (require).
 - `src/server/prompt.js`: `SPEC`, the design language written for Claude. It is the source of
   truth for what a design may contain. When you add an op, part or field to the engine,
