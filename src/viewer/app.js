@@ -405,6 +405,8 @@ function renderParts(){
 }
 $('gdsOrder').onclick=()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([xml],{type:'application/xml'}));
   a.download=((curDesign&&curDesign.name)||'brickhouse').replace(/[^\w.-]+/g,'-')+'-parts.xml'; document.body.appendChild(a); a.click(); a.remove();
+  // (where a page can't save files, as in some embedded previews, the list is on the clipboard too)
+  navigator.clipboard&&navigator.clipboard.writeText(xml).then(()=>{ $('gdsOrder').textContent='Saved (and copied) the parts list'; setTimeout(()=>$('gdsOrder').textContent='Order from GoBricks',2400); },()=>{});
   window.open(SUPPLIERS.gobricks.order,'_blank','noopener'); };
 $('copyXml').onclick=async()=>{ const b=$('copyXml');
   try{ await navigator.clipboard.writeText(xml); b.textContent='Copied wanted list'; setTimeout(()=>b.textContent='Copy BrickLink wanted list',1800); }
