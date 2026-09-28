@@ -657,6 +657,9 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
   ['model','manual','parts','design'].forEach(t=>$('pane-'+t).hidden=t!==b.dataset.tab);
   if(b.dataset.tab==='parts') fetchQuote();
 });
+// /app#design (the landing page's "Start a design") opens on the Design tab
+if(location.hash==='#design'){ document.querySelector('.tabs button[data-tab="design"]').click();
+  if(innerWidth<960) requestAnimationFrame(()=>document.querySelector('.panel').scrollIntoView()); }
 function applyTheme(){ const c=getComputedStyle(document.documentElement).getPropertyValue('--stage').trim()||'#D9E2EB'; stageLin=lin(c); scene.background=new THREE.Color(c); if(R) applyState(); dirty=true; }
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme);
 
@@ -669,7 +672,7 @@ async function boot(){
   }catch(e){ DESIGN_TEXT='{"name":"No design loaded","phases":[],"ops":[]}'; }
   $('designSrc').value=DESIGN_TEXT; run(DESIGN_TEXT); $('compileOut').innerHTML='';
   resize(); goal.radius=fitRadius(); radius=goal.radius*1.25; loop();
-  if(embedded){ $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }
+  if(embedded){ $('homeLink').hidden=true; $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }
   try{ health=await (await fetch('/api/health')).json(); }catch(e){ health=null; }
   loadDesignList();
   if(!health){ $('photoIntro').textContent='Start the server with npm start to design from photos.'; return; }
@@ -680,7 +683,7 @@ async function boot(){
   // Back from Stripe (?job=…&session=…): confirm the payment and start the design; ?job=… alone
   // picks up a design in progress or finished.
   const q=new URLSearchParams(location.search), qj=q.get('job');
-  if(qj&&q.get('canceled')){ status('Payment canceled; nothing was charged. Your photos are still here if you want to try again.'); try{ history.replaceState(null,'','/'); }catch(e){} }
+  if(qj&&q.get('canceled')){ status('Payment canceled; nothing was charged. Your photos are still here if you want to try again.'); try{ history.replaceState(null,'','/app'); }catch(e){} }
   else if(qj&&q.get('session')){ status('Confirming the payment…');
     const r=await fetch(`/api/jobs/${qj}/start`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({session:q.get('session')})}), j=await r.json();
     if(!r.ok) status(esc(j.error||'The payment could not be confirmed.'),true); else watchJob(qj,false); }

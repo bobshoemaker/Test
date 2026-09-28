@@ -49,7 +49,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       jobs.set(j.id, j);
       if (!feeOn) { save(j); launch(j, run); return { id: j.id }; }
       const s = await stripe.createCheckout({ jobId: j.id, amountCents: feeCents, currency, name: 'Brick model design fee',
-        successUrl: `${origin}/?job=${j.id}&session={CHECKOUT_SESSION_ID}`, cancelUrl: `${origin}/?job=${j.id}&canceled=1` });
+        successUrl: `${origin}/app?job=${j.id}&session={CHECKOUT_SESSION_ID}`, cancelUrl: `${origin}/app?job=${j.id}&canceled=1` });
       j.sessionId = s.id; save(j);
       return { id: j.id, checkout: s.url };
     },

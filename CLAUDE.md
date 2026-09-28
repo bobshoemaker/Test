@@ -111,7 +111,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   for a parts list today (cached a day per list; `BRICKHOUSE_GOBRICKS_QUOTES=0` turns it off, `BRICKHOUSE_CNY_PER_USD`
   sets the viewer's dollar rate). `POST /api/lookup {address}` returns the place and ranked candidate
   photos; `GET /api/photo/<mapillary id>` proxies one image.
-- `src/viewer/`: single-page three.js (r128, CDN) viewer: model, manual (sub-builds shown on
+- `src/viewer/landing.html`: the home page at `/` (what it is, how it works, the sample models, for realtors),
+  with renders of the samples in `src/viewer/img/` made by `scripts/landing.js`; "Start a design" goes to `/app#design`.
+- `src/viewer/`: single-page three.js (r128, CDN) viewer, at `/app`: model, manual (sub-builds shown on
   their own), parts and BrickLink XML, design editor, photo upload, and "Lift roof" for designs
   whose roof ops carry `"liftoff"` (floors show underneath; the rooms too when there was a plan).
   Play build drops each step's bricks straight down into place; lifting raises a roof's or floor's
@@ -126,7 +128,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
 - `scripts/`: `compile.js` (check a design), `design.js` (photos to design from the CLI),
   `bundle.js` (single-file HTML for sharing or publishing as a Claude artifact), `ldraw.js`,
   `availability.js` (rebuild the availability table; rerun now and then as LEGO releases sets),
-  `gobricks.js` (rebuild the GoBricks table: ten matcher requests, replies cached in `.gobricks-cache/`).
+  `landing.js` (re-render the landing page's sample pictures), `gobricks.js` (rebuild the GoBricks table: ten matcher requests, replies cached in `.gobricks-cache/`).
 
 ## Commands
 
