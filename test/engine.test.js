@@ -385,6 +385,13 @@ test('an upper story with "slab" stands on its own floor, jutting out past the w
   assert.match(compile(d(6)).warnings.map((w) => w.msg).join(' '), /hangs 6 studs out/);
   const posted = compile(d(6, [...post(21, 4), ...post(21, 15)]));
   assert.deepEqual([posted.errors.map((e) => e.msg), posted.warnings.map((w) => w.msg)], [[], []]);
+  // set back from the story below: the slab covers that story too, so it rests on its walls
+  const back = d(0); back.ops[2].segments = ring(7, 7, 12, 12);
+  const rb = compile(back);
+  assert.deepEqual([rb.errors.map((e) => e.msg), rb.warnings.map((w) => w.msg)], [[], []]);
+  assert.equal(rb.parts.filter((p) => p.op === 2 && p.y < 14).reduce((n, p) => n + p.w * p.d, 0), 2 * 12 * 12);
+  back.ops[2].slab = { cover: false };
+  assert.match(compile(back).errors.map((e) => e.msg).join(' '), /u floor/, 'on its own it has nothing to rest on');
   // the story below must end under the slab
   const clash = d(3); clash.ops[2].base = 13;
   assert.match(compile(clash).errors.map((e) => e.msg).join(' '), /runs into what's already there/);

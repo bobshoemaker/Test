@@ -339,6 +339,16 @@ function compile(design){
         if(op.slab){ const sl=op.slab===true?{}:op.slab, scol=sl.color||op.color;
           const area=enclosed(new Set(cellSet.keys()));
           for(const r of sl.rects||[]) for(const [x,z] of rectCells(r)) area.add(x+','+z);
+          // the outline of the story below (its walls' tops and what they enclose), for the cover and the overhang
+          const under=new Set(); if(wbase>=3) for(let x=0;x<BASE;x++) for(let z=0;z<BASE;z++) if(occ.has(K3(x,z,wbase-3))) under.add(x+','+z);
+          const below=enclosed(under);
+          // a story set back from the one below still needs something to rest on: by default the slab covers
+          // the story below it too (each piece of that outline it overlaps), which then shows as a terrace
+          // or carries a skirt roof. "cover": false keeps it to the story's own walls.
+          if(sl.cover!==false){ const seen=new Set();
+            for(const k of [...area]) if(below.has(k)&&!seen.has(k)){ const q=[k]; seen.add(k);
+              while(q.length){ const c=q.pop(); area.add(c); const [x,z]=c.split(',').map(Number);
+                for(const [dx,dz] of N4){ const n=(x+dx)+','+(z+dz); if(below.has(n)&&!seen.has(n)){ seen.add(n); q.push(n); } } } } }
           if(!COLORS[scol]) errors.push({msg:'Unknown color "'+scol+'"', op:i});
           else if(wbase<2) errors.push({msg:`A slab goes under the walls, so its walls need a base of at least 2 (got ${wbase})`, op:i});
           else {
@@ -351,8 +361,7 @@ function compile(design){
               for(const y of [wbase-2,wbase-1]) pack(lv,'plate',y,smeta);
               // how far it hangs out: steps from each stud outside the outline of what's under it (a room
               // below counts as under it; the slab spans that) to the nearest stud inside it
-              const under=new Set(); for(let x=0;x<BASE;x++) for(let z=0;z<BASE;z++) if(occ.has(K3(x,z,wbase-3))) under.add(x+','+z);
-              const below=enclosed(under), hold=new Set([...area].filter(k=>below.has(k)));
+              const hold=new Set([...area].filter(k=>below.has(k)));
               // a stretch of slab between two held studs (a post and a wall) spans; only what reaches past them hangs
               for(let grew=true;grew;){ grew=false;
                 for(const [ax,az] of [[1,0],[0,1]]) for(const k of area){ const [x,z]=k.split(',').map(Number);
