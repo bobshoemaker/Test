@@ -118,8 +118,18 @@ function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap 
     return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[0], b[0]), Math.max(a[1], b[1])];
   };
 
+  // Plans that draw each floor side by side: blocks name their floor (1 = ground), and anchors give the
+  // same point that stacks straight up (a stair corner, an outside corner) on each floor's drawing, so
+  // the upper floors are moved onto the ground floor's position before laying out.
+  const anchor = (f) => (fp.anchors || []).find((a) => Number(a.floor) === f && Array.isArray(a.atPx) && a.atPx.length === 2);
+  const shiftOf = (f) => { if (f === 1) return [0, 0]; const a = anchor(f), g = anchor(1);
+    if (!a || !g) { problems.push(`Floor ${f} has blocks but no anchor on floor ${f} and floor 1; give the same stacked point on both.`); return [0, 0]; }
+    return [g.atPx[0] - a.atPx[0], g.atPx[1] - a.atPx[1]]; };
+  const floorOf = (b) => Math.max(1, Math.round(Number(b.floor) || 1));
+  const moved = (r, [dx, dy]) => [r[0] + dx, r[1] + dy, r[2] + dx, r[3] + dy];
   const blocks = (fp.blocks || []).filter((b) => Array.isArray(b.rectsPx) && b.rectsPx.length)
-    .map((b) => ({ name: b.name, levels: Math.max(1, Math.round(b.levels || 1)), rects: b.rectsPx.map(rotRect), dz: 0 }));
+    .map((b) => { const f = floorOf(b), sh = shiftOf(f);
+      return { name: b.name, floor: f, shift: sh, levels: Math.max(1, Math.round(b.levels || 1)), rects: b.rectsPx.map((r) => rotRect(moved(r, sh))), dz: 0 }; });
   if (!blocks.length) return { problems: [...problems, 'No blocks with rectsPx came through.'], blocks: [] };
   let minX = Infinity, minY = Infinity;
   for (const b of blocks) for (const r of b.rects) { minX = Math.min(minX, r[0]); minY = Math.min(minY, r[1]); }
@@ -180,9 +190,11 @@ function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap 
 
   // Each wall cell belongs to one block: the first listed (tallest) wins, and a later block's
   // outline inside an earlier block is dropped.
-  const claimed = new Map(), insideEarlier = [];
+  // (per floor: an upper story's walls stand over the floor below and don't compete with its walls)
+  const claimedBy = new Map(), insideBy = new Map();
   for (const b of blocks) {
-    const o = outline(b.cellRects);
+    if (!claimedBy.has(b.floor)) { claimedBy.set(b.floor, new Map()); insideBy.set(b.floor, []); }
+    const claimed = claimedBy.get(b.floor), insideEarlier = insideBy.get(b.floor), o = outline(b.cellRects);
     b.cells = o.cells.filter(([x, z]) => !claimed.has(key(x, z)) && !insideEarlier.some((s) => s.has(key(x, z))));
     for (const [x, z] of b.cells) claimed.set(key(x, z), b.name);
     insideEarlier.push(o.inside);
@@ -190,7 +202,7 @@ function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap 
   }
 
   const place = (px, b) => {
-    const [X, Y] = rot(px), [sx, sz] = toS(X, Y);
+    const [X, Y] = rot([px[0] + b.shift[0], px[1] + b.shift[1]]), [sx, sz] = toS(X, Y);
     return [sx + offX, sz + b.dz + offZ];
   };
   for (const o of fp.openings || []) {
@@ -212,7 +224,7 @@ function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap 
     if (best.d > 2) problems.push(`The ${o.kind} at [${o.atPx.map(Math.round)}] is ${best.d.toFixed(1)} studs from the nearest wall of ${b.name}; put atPx on the wall line.`);
     const horiz = best.side === 'N' || best.side === 'S';
     const cells = horiz ? [start, best.fixed, start + w - 1, best.fixed] : [best.fixed, start, best.fixed, start + w - 1];
-    const owner = new Set(lineCells(cells).map(([x, z]) => claimed.get(key(x, z))));
+    const owner = new Set(lineCells(cells).map(([x, z]) => claimedBy.get(b.floor).get(key(x, z))));
     if (owner.size !== 1 || owner.has(undefined)) { problems.push(`The ${o.kind} on ${b.name}'s ${best.side} wall falls where walls of different blocks meet; move atPx along the wall.`); continue; }
     const target = blocks.find((x) => x.name === [...owner][0]);
     target.openings.push({ kind: o.kind, side: best.side, cells, ...(o.note ? { note: o.note } : {}) });
@@ -229,7 +241,7 @@ function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap 
   return {
     scale: { pxPerFt: Number(cal.pxPerFt.toFixed(3)), ftPerStud, ...(cal.estimated ? { estimated: 'from standard lengths; the plan has no size labels' } : {}), rooms: cal.rooms.map((r) => ({ name: r.name, pxPerFt: Number(r.pxPerFt.toFixed(2)) })) },
     street,
-    blocks: blocks.map((b) => ({ name: b.name, levels: b.levels, cellRects: b.cellRects, cells: b.cells, openings: b.openings, pulledForward: b.dz })),
+    blocks: blocks.map((b) => ({ name: b.name, ...(b.floor > 1 ? { floor: b.floor } : {}), levels: b.levels, cellRects: b.cellRects, cells: b.cells, openings: b.openings, pulledForward: b.dz })),
     stairs, map, problems, source: 'plan', size,
     sideStreet: side === 'left' || side === 'right' ? { planSide: fp.sideStreet, side, columns: side === 'left' ? [0, streetRows - 1] : [size - streetRows, size - 1] } : null,
   };
@@ -290,8 +302,11 @@ function footprintFromOutline({ buildings, toStreet, sideStreet = null, ftPerStu
 // Courses per story: about 9 ft at the layout's scale (4 at 2 ft per stud, 5 at 1.5).
 const storyCourses = (locked) => Math.max(3, Math.round(9 / (1.2 * ((locked.scale && locked.scale.ftPerStud) || 2))));
 function skeletonOps(locked) {
+  const sc = storyCourses(locked);
   return locked.blocks.filter((b) => b.cells.length).map((b) => ({
-    op: 'walls', phase: b.name, block: b.name, color: 'White', courses: [0, storyCourses(locked) * b.levels - 1], base: 0,
+    op: 'walls', phase: b.name, block: b.name, color: 'White',
+    // an upper floor starts a story per floor up; the design sets its real base on its slab
+    courses: [((b.floor || 1) - 1) * sc, ((b.floor || 1) - 1) * sc + sc * b.levels - 1], base: ((b.floor || 1) - 1) * sc * 3,
     segments: segmentsFromCells(b.cells),
     openings: b.openings.map((o) => ({ cells: o.cells, ...(DEFAULT_FILL[o.kind] || DEFAULT_FILL.door), kind: o.kind === 'garage door' ? 'garage door' : 'door', note: `${o.kind} from the floor plan${o.note ? ': ' + o.note : ''}` })),
   }));
@@ -331,7 +346,7 @@ function checkFootprint(design, locked) {
 function describeLayout(locked) {
   return JSON.stringify({
     scale: locked.scale, street: locked.street,
-    blocks: locked.blocks.map((b) => ({ name: b.name, levels: b.levels, studRects: b.cellRects, wallCells: b.cells.length, pulledForward: b.pulledForward || undefined,
+    blocks: locked.blocks.map((b) => ({ name: b.name, ...(b.floor ? { floor: b.floor } : {}), levels: b.levels, studRects: b.cellRects, wallCells: b.cells.length, pulledForward: b.pulledForward || undefined,
       openings: b.openings.map((o) => `${o.kind} on the ${o.side} wall at cells [${o.cells.join(', ')}]`) })),
     stairs: locked.stairs, sideStreet: locked.sideStreet || undefined, problems: locked.problems,
   });

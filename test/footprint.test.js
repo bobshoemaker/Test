@@ -132,3 +132,23 @@ test('a plan with no size labels is scaled from standard lengths, flagged as an 
   assert.match(L.scale.estimated, /no size labels/);
   assert.match(layoutFootprint({ ...noSizes, lengths: [] }).problems[0], /standard things/);
 });
+
+test('upper floors drawn beside the ground floor are moved onto it by their anchors and locked a story up', () => {
+  // Ground floor 20 x 30 ft; the second floor is drawn 300 px to the right and juts 4 ft further east.
+  const plan = { street: 'S', rooms: PLAN.rooms,
+    blocks: [{ name: 'House', levels: 1, rectsPx: [[0, 0, 200, 300]] }, { name: 'Upper', floor: 2, levels: 1, rectsPx: [[300, 0, 540, 200]] }],
+    anchors: [{ floor: 1, atPx: [0, 0] }, { floor: 2, atPx: [300, 0] }], openings: [], stairs: [] };
+  const L = layoutFootprint(plan);
+  assert.deepEqual(L.problems, []);
+  const house = L.blocks.find((b) => b.name === 'House'), up = L.blocks.find((b) => b.name === 'Upper');
+  assert.equal(up.floor, 2);
+  assert.equal(up.cellRects[0][0], house.cellRects[0][0], 'the west walls stack');
+  assert.equal(up.cellRects[0][1], house.cellRects[0][1], 'the back walls stack');
+  assert.equal(up.cellRects[0][2] - house.cellRects[0][2], 2, 'the upper floor juts 4 ft (2 studs) east');
+  // The upper floor's walls overlap the ground floor's in plan but belong to their own floor.
+  assert.ok(up.cells.some(([x, z]) => x === house.cellRects[0][0] && z === house.cellRects[0][1]));
+  const op = skeletonOps(L).find((o) => o.block === 'Upper');
+  assert.deepEqual([op.courses, op.base], [[4, 7], 12]);
+  const noAnchor = layoutFootprint({ ...plan, anchors: [] });
+  assert.match(noAnchor.problems.join(' '), /Floor 2 has blocks but no anchor/);
+});
