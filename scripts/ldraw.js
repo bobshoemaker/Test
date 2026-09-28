@@ -12,7 +12,10 @@ const CACHE = path.join(ROOT, '.ldraw-cache');
 const BASE = 'https://library.ldraw.org/library/official/';
 const OUT = path.join(ROOT, 'src/viewer/ldraw-parts.js');
 // part number -> the engine part it draws
-const PARTS = { 2417: 'leaves65', 2423: 'leaves43', 32607: 'sprig1', 33291: 'flower1', 2566: 'palmtop', 30239: 'swordleaf', 6064: 'bush224' };
+const PARTS = { 2417: 'leaves65', 2423: 'leaves43', 32607: 'sprig1', 33291: 'flower1', 2566: 'palmtop', 30239: 'swordleaf', 6064: 'bush224',
+  // specialty parts: slopes, rounds, windows and their glass, arches, fence, brackets
+  54200: 'cheese', '3062b': 'round1', 4073: 'roundplate1', 4032: 'roundplate2', 3941: 'roundbrick2', 4589: 'cone1', 36840: 'bracket11', 87087: 'snot',
+  60592: 'win22', 60593: 'win23', 60594: 'win43', 60601: 'glass22', 60602: 'glass23', 60603: 'glass43', 6182: 'arch42', 3659: 'arch41', 3633: 'fence4' };
 const Q = 16; // quantization: 1/16 LDU
 
 // Round primitives also come in 8-segment versions (p/8/); --lowres uses those, a fraction of the triangles.
@@ -26,8 +29,13 @@ async function fetchRaw(name, dirs) {
   const file = path.join(CACHE, n.replace(/\//g, '__'));
   if (fs.existsSync(file)) return fs.readFileSync(file, 'utf8');
   for (const dir of dirs) {
-    const res = await fetch(BASE + dir + n);
-    if (res.ok) { const t = await res.text(); fs.mkdirSync(CACHE, { recursive: true }); fs.writeFileSync(file, t); return t; }
+    // a 404 means not here; anything else (rate limiting, a dropped connection) is retried
+    for (let attempt = 0; attempt < 4; attempt++) {
+      let res = null; try { res = await fetch(BASE + dir + n); } catch { /* network error: retry */ }
+      if (res && res.ok) { const t = await res.text(); fs.mkdirSync(CACHE, { recursive: true }); fs.writeFileSync(file, t); return t; }
+      if (res && res.status === 404) break;
+      await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+    }
   }
   throw new Error(`LDraw file not found: ${name}`);
 }

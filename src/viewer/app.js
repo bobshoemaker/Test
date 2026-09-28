@@ -60,7 +60,9 @@ const place3=(g,x,y,z,ry)=>{ if(ry) g.rotateY(ry); g.translate(x,y,z); return g;
 // Real part shapes from the LDraw library (src/viewer/ldraw-parts.js, CC BY 4.0), when it's loaded:
 // LDraw units are 1/20 stud with y down, so a part's geometry is scaled by 1/20 and flipped.
 const ldrawCache={};
-function ldrawGeo(no){ if(typeof LDRAW_PARTS==='undefined'||!LDRAW_PARTS.parts[no]) return null; if(ldrawCache[no]) return ldrawCache[no];
+// ?ldraw=0 in the address draws the simple shapes instead, to compare looks and speed
+const USE_LDRAW=!(typeof location!=='undefined'&&/[?&]ldraw=0\b/.test(location.search));
+function ldrawGeo(no){ if(!USE_LDRAW||typeof LDRAW_PARTS==='undefined'||!LDRAW_PARTS.parts[no]) return null; if(ldrawCache[no]) return ldrawCache[no];
   const bin=atob(LDRAW_PARTS.parts[no].tris), u8=new Uint8Array(bin.length); for(let k=0;k<bin.length;k++) u8[k]=bin.charCodeAt(k);
   const q=new Int16Array(u8.buffer), f=new Float32Array(q.length), s=1/(20*LDRAW_PARTS.q);
   for(let k=0;k<q.length;k+=3){ f[k]=q[k]*s; f[k+1]=-q[k+1]*s; f[k+2]=q[k+2]*s; }
@@ -71,7 +73,14 @@ function ldrawPose(p){ const def=SPECIAL[p.key]||{};
     const r={N:0,E:1,S:2,W:3}[p.dir||'N'], c=[[p.x+2.5,p.z+6],[p.x,p.z+2.5],[p.x+2.5,p.z],[p.x+6,p.z+2.5]][r], bar=[[0.5,0],[0,0.5],[-0.5,0],[0,-0.5]][r];
     return [c[0]+bar[0]-OFF,(p.y+0.5)*PH,c[1]+bar[1]-OFF,r]; }
   if(p.shape==='palm'||p.key==='bush224') return [p.x+p.w/2-OFF,p.y*PH,p.z+p.d/2-OFF,0];
-  const a=def.at?turnCell(def,def.at,p.rot):[0,0]; return [p.x+a[0]+0.5-OFF,(p.y+1)*PH,p.z+a[1]+0.5-OFF,p.rot||0]; }
+  if(def.at){ const a=turnCell(def,def.at,p.rot); return [p.x+a[0]+0.5-OFF,(p.y+1)*PH,p.z+a[1]+0.5-OFF,p.rot||0]; }
+  // a standard part: LDraw's origin is the middle of the top of its body; a quarter turn per "rot" (the
+  // long side of windows, arches and fences runs along x at rot 0), and slopes and side studs by "dir"/"face"
+  const turn=LDRAW_TURN[p.key], d=p.dir||p.face;
+  const r=turn&&d?turn[d]:(p.rot||0)%2;
+  return [p.x+p.w/2-OFF,(p.y+p.h)*PH,p.z+p.d/2-OFF,r]; }
+// quarter turns for parts that face a way: the slope's low side, the side stud, the bracket's plate
+const LDRAW_TURN={ cheese:{S:0,W:1,N:2,E:3}, snot:{S:0,W:1,N:2,E:3}, bracket11:{S:0,W:1,N:2,E:3} };
 const folCache={};
 function foliageGeo(p){ const key=`${p.shape}|${p.key}|${p.w}x${p.d}|${p.dir||''}`; if(folCache[key]) return folCache[key];
   const items=[], H=PH*0.9, def=SPECIAL[p.key]||{};
@@ -97,6 +106,7 @@ function foliageGeo(p){ const key=`${p.shape}|${p.key}|${p.w}x${p.d}|${p.dir||''
 
 const matO=new THREE.MeshLambertMaterial({color:0xffffff});
 const matT=new THREE.MeshLambertMaterial({color:0xffffff,transparent:true,opacity:0.62,depthWrite:false});
+const matTW=new THREE.MeshLambertMaterial({color:0xffffff,transparent:true,opacity:0.45,depthWrite:false,side:THREE.DoubleSide});
 const matW=new THREE.MeshLambertMaterial({color:0xffffff,side:THREE.DoubleSide});
 const glassMat=()=>new THREE.MeshLambertMaterial({color:lin('#BFE3F5'),transparent:true,opacity:0.42,depthWrite:false});
 
@@ -124,23 +134,25 @@ function buildScene(){
   const boxO=[], boxT=[], ch=[], cyl=[], fol=new Map();
   for(const p of R.parts){
     const cx=p.x+p.w/2-OFF, cz=p.z+p.d/2-OFF, y0=p.y*PH, hh=p.h*PH;
-    if(p.shape==='box'||p.shape==='cyl'){
+    if(ldrawGeo(p.no)){
+      const [lx,ly,lz,r]=ldrawPose(p); tmp.position.set(lx,ly,lz); tmp.scale.set(1,1,1); tmp.rotation.set(0,-r*Math.PI/2,0); tmp.updateMatrix();
+      const geo=ldrawGeo(p.no), rec={p,m:tmp.matrix.clone()}, key=p.color.startsWith('Trans-')?'T':'O';
+      if(!fol.has(geo)) fol.set(geo,{O:[],T:[]}); fol.get(geo)[key].push(rec); inst.push(rec); recOf.set(p.id,rec);
+      const gg=p.glass&&ldrawGeo(p.glass.no); if(gg){ const g={p,m:rec.m.clone(),glass:true}; if(!fol.has(gg)) fol.set(gg,{O:[],T:[]}); fol.get(gg).T.push(g); inst.push(g); rec.extra=[g]; }
+    } else if(p.shape==='box'||p.shape==='cyl'){
       tmp.rotation.set(0,0,0); tmp.position.set(cx,y0+hh/2,cz);
       if(p.shape==='box') tmp.scale.set(p.w-0.035,hh-0.018,p.d-0.035); else tmp.scale.set(p.diam,hh-0.018,p.diam);
       tmp.updateMatrix(); const r={p,m:tmp.matrix.clone()}; (p.shape==='cyl'?cyl:(p.color.startsWith('Trans-')?boxT:boxO)).push(r); inst.push(r); recOf.set(p.id,r);
     } else if(p.shape==='cheese'){
       tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,{S:0,N:Math.PI,E:Math.PI/2,W:-Math.PI/2}[p.dir]||0,0);
       tmp.updateMatrix(); const r={p,m:tmp.matrix.clone()}; ch.push(r); inst.push(r); recOf.set(p.id,r);
-    } else if(ldrawGeo(p.no)){
-      const [lx,ly,lz,r]=ldrawPose(p); tmp.position.set(lx,ly,lz); tmp.scale.set(1,1,1); tmp.rotation.set(0,-r*Math.PI/2,0); tmp.updateMatrix();
-      const geo=ldrawGeo(p.no), rec={p,m:tmp.matrix.clone()}; if(!fol.has(geo)) fol.set(geo,[]); fol.get(geo).push(rec); inst.push(rec); recOf.set(p.id,rec);
     } else if(p.shape==='leaves'||p.shape==='sprig'||p.shape==='flower'||p.shape==='swordleaf'){
       tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,0,0); tmp.updateMatrix();
-      const geo=foliageGeo(p), r={p,m:tmp.matrix.clone()}; if(!fol.has(geo)) fol.set(geo,[]); fol.get(geo).push(r); inst.push(r); recOf.set(p.id,r);
+      const geo=foliageGeo(p), r={p,m:tmp.matrix.clone()}; if(!fol.has(geo)) fol.set(geo,{O:[],T:[]}); fol.get(geo).O.push(r); inst.push(r); recOf.set(p.id,r);
     } else { const sp=makeSpecial(p); sp.pos0=sp.obj.position.clone(); sp.rot0=sp.obj.rotation.y; specials.push(sp); recOf.set(p.id,sp); }
   }
   makeInstanced(boxGeo,matO,boxO,true); makeInstanced(boxGeo,matT,boxT,false); makeInstanced(cheeseGeo,matW,ch,true); makeInstanced(cylGeo,matO,cyl,true);
-  for(const [geo,list] of fol) makeInstanced(geo,matW,list,true);
+  for(const [geo,{O,T}] of fol){ if(O.length) makeInstanced(geo,matW,O,true); if(T.length) makeInstanced(geo,matTW,T,false); }
   // studs
   for(const p of R.parts) if(!ldrawGeo(p.no)) for(const [x,z] of p.studs){ const top=p.y+p.h; const cov=R.occ.get(x+','+z+','+top); studRecs.push({p,x,z,top,cov}); }
   for(let x=0;x<PLATE;x++) for(let z=0;z<PLATE;z++){ const cov=R.occ.get(x+','+z+',0'); studRecs.push({p:null,x,z,top:0,cov}); }
@@ -198,7 +210,7 @@ function applyState(){
   if(!R) return;
   mode=(!showAll&&R.steps[stepIdx].kind==='sub')?'sub':'main';
   for(const p of R.parts){ const [v,c]=partState(p); p._v=v||anims.has(p.id); p._c=c; }
-  for(const r of inst){ r.mesh.setMatrixAt(r.i,r.p._v?r.m:ZERO); r.mesh.setColorAt(r.i,colorFor(r.p,r.p._c)); }
+  for(const r of inst){ r.mesh.setMatrixAt(r.i,r.p._v?r.m:ZERO); r.mesh.setColorAt(r.i,r.glass?col.copy(lin(COLORS['Trans-Clear'].hex)):colorFor(r.p,r.p._c)); }
   for(const m of meshes){ m.instanceMatrix.needsUpdate=true; if(m.instanceColor) m.instanceColor.needsUpdate=true; }
   for(const s of specials){ s.obj.visible=s.p._v; s.obj.position.copy(s.pos0); s.obj.rotation.set(0,s.rot0,0); s.obj.scale.setScalar(1); for(const o of s.mats){ if(o.glass) continue; o.mat.color.copy(colorFor(s.p,s.p._c)); } }
   const baseHex=COLORS['Green'].hex;
@@ -279,6 +291,7 @@ function animFrame(now){
     const c=centerOf(p); eul.set(a.spin[0]*e,a.spin[1]*e,a.spin[2]*e);
     m4.makeTranslation(c.x+off[0],c.y+off[1],c.z+off[2]).multiply(m4b.makeRotationFromEuler(eul)).multiply(m4b.makeScale(sc,sc,sc)).multiply(m4b.makeTranslation(-c.x,-c.y,-c.z));
     r.mesh.setMatrixAt(r.i,hide?ZERO:m4b.copy(m4).multiply(r.m)); r.mesh.instanceMatrix.needsUpdate=true;
+    for(const e of r.extra||[]){ e.mesh.setMatrixAt(e.i,hide?ZERO:m4b.copy(m4).multiply(e.m)); e.mesh.instanceMatrix.needsUpdate=true; }
     for(const si of studsOf.get(id)||[]){ const sr=studRecs[si]; if(sr.slot<0) continue; studs.setMatrixAt(sr.slot,hide?ZERO:m4b.copy(m4).multiply(sr.m)); touched=true; }
   }
   if(touched) studs.instanceMatrix.needsUpdate=true;
@@ -292,6 +305,7 @@ let shadowTick=0;
 function settle(p,r){ const v=partState(p)[0]; p._v=v;
   if(r.obj){ r.obj.visible=v; r.obj.position.copy(r.pos0); r.obj.rotation.set(0,r.rot0,0); r.obj.scale.setScalar(1); return; }
   r.mesh.setMatrixAt(r.i,v?r.m:ZERO); r.mesh.instanceMatrix.needsUpdate=true;
+  for(const e of r.extra||[]){ e.mesh.setMatrixAt(e.i,v?e.m:ZERO); e.mesh.instanceMatrix.needsUpdate=true; }
   for(const si of studsOf.get(p.id)||[]){ const sr=studRecs[si]; if(sr.slot>=0) studs.setMatrixAt(sr.slot,v?sr.m:ZERO); }
   studs.instanceMatrix.needsUpdate=true; }
 function animate(list,make){ if(reduceMotion||!root) return; const now=performance.now(); list.forEach((p,k)=>anims.set(p.id,make(p,k,now))); dirty=true; }
