@@ -396,3 +396,15 @@ test('an upper story with "slab" stands on its own floor, jutting out past the w
   const clash = d(3); clash.ops[2].base = 13;
   assert.match(compile(clash).errors.map((e) => e.msg).join(' '), /runs into what's already there/);
 });
+
+test('a "mix" recoloring more than 10 percent is warned about once, on walls and roofs alike', () => {
+  const seg = [[4, 4, 12, 4], [4, 12, 12, 12], [4, 5, 4, 11], [12, 5, 12, 11]];
+  const d = (mix) => ({ name: 'm', phases: ['g', 'r'], ops: [
+    { op: 'walls', phase: 'g', color: 'Tan', courses: [0, 3], base: 0, segments: seg, mix },
+    { op: 'floor', phase: 'g', color: 'Tan' },
+    { op: 'roof', phase: 'r', rect: [4, 4, 12, 12], base: 12, color: 'Dark Orange', mix }] });
+  assert.deepEqual(compile(d([['Light Nougat', 0.06]])).warnings, []);
+  const busy = compile(d([['Reddish Brown', 0.1], ['Medium Nougat', 0.05]])).warnings.map((w) => w.msg);
+  assert.equal(busy.length, 2);
+  assert.ok(busy.every((m) => /15 percent/.test(m)));
+});

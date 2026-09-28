@@ -94,10 +94,10 @@
 
     {"op":"roof", "phase":"Front gable roof", "note":"Front-facing gable over the arched window",
      "rect":[5,20,12,22], "base":12, "abut":["N"], "gable":["S"], "gableColor":"White",
-     "color":"Dark Orange", "fascia":"Dark Green", "mix":[["Reddish Brown",0.10],["Medium Nougat",0.05]]},
+     "color":"Dark Orange", "fascia":"Dark Green", "mix":[["Reddish Brown",0.08]]},
     {"op":"roof", "phase":"Main roof", "note":"Main hip roof",
      "rect":[5,2,18,19], "base":25,
-     "color":"Dark Orange", "fascia":"Dark Green", "mix":[["Reddish Brown",0.10],["Medium Nougat",0.05]]},
+     "color":"Dark Orange", "fascia":"Dark Green", "mix":[["Reddish Brown",0.08]]},
 
     {"op":"places", "phase":"Street, driveway and walks", "note":"Bollards", "part":"round1", "color":"Light Bluish Gray",
      "at":[[19,0,22],[19,0,25],[17,0,25]]},

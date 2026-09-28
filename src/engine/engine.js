@@ -243,7 +243,11 @@ function compile(design){
   // "mix" on a fill or walls op: after packing, recolor a scattered few whole pieces of the op's main
   // color (a weathered roof, varied pavers or stucco). Whole pieces, so the structure doesn't change.
   // an op's own mix, or the design's default variation for its color (not for context stubs or seats)
-  const mixOf=op=>op.mix!==undefined?op.mix:(design.variation==='subtle'&&!op.context?SUBTLE_MIX[op.color]||null:null);
+  const mixWarned=new Set();
+  const mixOf=op=>{ const i=design.ops.indexOf(op);
+    if(Array.isArray(op.mix)&&!mixWarned.has(i)){ mixWarned.add(i); const total=op.mix.reduce((a,m)=>a+(Array.isArray(m)&&m[1]>0?m[1]:0),0);
+      if(total>0.1+1e-9) warnings.push({msg:`"mix" on ${op.phase} recolors ${Math.round(total*100)} percent of its pieces, which reads as noise: leave it off (the design's subtle variation covers it) or use one close color at 4 to 8 percent`, op:i}); }
+    return op.mix!==undefined?op.mix:(design.variation==='subtle'&&!op.context?SUBTLE_MIX[op.color]||null:null); };
   function mixColors(ids,op,main,i){
     const mix=mixOf(op); if(!mix||!mix.length) return;
     if(!Array.isArray(mix)||mix.some(m=>!Array.isArray(m)||!COLORS[m[0]]||!(m[1]>=0))){ errors.push({msg:'"mix" must be [[color, fraction], ...] with known colors', op:i}); return; }
