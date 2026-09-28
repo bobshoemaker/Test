@@ -290,3 +290,18 @@ test('a unit cut from its building: context stubs are exempt from room and door 
   assert.ok(r.parts.filter((p) => p.op === 1).every((p) => p.context));
   assert.match(compile({ ...d, property: 'castle' }).errors[0].msg, /property must be one of house, townhouse, condo/);
 });
+
+test('a floor slab over a wide room is an assembly: built on its own, then walls stand on it', () => {
+  const seg = [[2, 2, 27, 2], [2, 27, 27, 27], [2, 3, 2, 26], [27, 3, 27, 26]];
+  const slab = (asm) => [
+    { op: 'fill', phase: 's', kind: 'plate', color: 'White', rects: [[2, 2, 27, 27]], y: 12, ...(asm ? { assembly: 'Second floor' } : {}) },
+    { op: 'fill', phase: 's', kind: 'plate', color: 'White', rects: [[2, 2, 27, 27]], y: 13, ...(asm ? { assembly: 'Second floor' } : {}) }];
+  const d = (asm) => ({ name: 'a', phases: ['a', 's', 'b'], ops: [
+    { op: 'walls', phase: 'a', color: 'White', courses: [0, 3], base: 0, segments: seg }, ...slab(asm),
+    { op: 'walls', phase: 'b', color: 'White', courses: [5, 8], base: 14, segments: seg }, { op: 'floor', phase: 'a', color: 'Tan' }] });
+  const plain = compile(d(false)), asm = compile(d(true));
+  assert.match(plain.errors.map((e) => e.msg).join(' '), /has nothing to hold on to/, 'plates over a 24-stud room hang in mid-air');
+  assert.deepEqual(asm.errors.map((e) => e.msg), []);
+  assert.ok(asm.subs.some((s) => s.assembly && s.name === 'Second floor'));
+  assert.ok(asm.steps.some((s) => s.kind === 'attach' && s.title === 'Place the second floor'));
+});

@@ -151,7 +151,7 @@ function compile(design){
   function pack(level,kind,y,meta,sizesFor){
     const h=H[kind], cells=[], lenOk=LEN_OK[kind];
     // a lift-off roof is built on its own, so its pieces needn't sit on studs below (it rests on tiles)
-    const floating=!!(meta&&design.ops&&design.ops[meta.op]&&design.ops[meta.op].liftoff);
+    const floating=!!(meta&&design.ops&&design.ops[meta.op]&&(design.ops[meta.op].liftoff||design.ops[meta.op].assembly));
     for(const [k,color] of level){ const [x,z]=k.split(',').map(Number);
       let ok=x>=0&&z>=0&&x<BASE&&z<BASE; for(let q=0;q<h&&ok;q++) if(occ.has(K3(x,z,y+q))) ok=false;
       if(ok) cells.push({x,z,color,k}); }
@@ -446,12 +446,16 @@ function compile(design){
   // Lift-off roofs: ops sharing a "liftoff" name are built on their own, like a sub-build, and set
   // on the house as one piece (the manual shows them that way). They rest on the walls, gripping only
   // a few locating studs, so their plates needn't sit on studs as the house goes up.
-  const liftGroups=new Map();
-  for(const p of parts){ const op=design.ops[p.op]; if(op&&op.liftoff&&p.sub===undefined){ const n=String(op.liftoff); if(!liftGroups.has(n)) liftGroups.set(n,[]); liftGroups.get(n).push(p); } }
-  for(const [name,ps] of liftGroups){
+  // "assembly" is the same idea for a piece that stays put, like a floor slab over a wide room: built on
+  // its own, set on the walls, and other things may stand on it.
+  const liftGroups=new Map(), asmGroups=new Map();
+  for(const p of parts){ const op=design.ops[p.op]; if(!op||p.sub!==undefined) continue;
+    const [G,n]=op.liftoff?[liftGroups,String(op.liftoff)]:op.assembly?[asmGroups,String(op.assembly)]:[null];
+    if(G){ if(!G.has(n)) G.set(n,[]); G.get(n).push(p); } }
+  for(const [G,kind] of [[liftGroups,'liftoff'],[asmGroups,'assembly']]) for(const [name,ps] of G){
     const last=ps.reduce((a,b)=>phaseIdx.get(b.phase)>phaseIdx.get(a.phase)?b:a), si=subs.length;
-    ps.sort((a,b)=>a.y-b.y||a.id-b.id).forEach((p,k)=>{ p.liftoff=name; p.sub=si; p.copy=0; p.tpl=k; });
-    subs.push({name, phase:last.phase, copies:1, op:last.op, partIds:ps.map(p=>p.id), liftoff:true});
+    ps.sort((a,b)=>a.y-b.y||a.id-b.id).forEach((p,k)=>{ p[kind]=name; p.sub=si; p.copy=0; p.tpl=k; });
+    subs.push({name, phase:last.phase, copies:1, op:last.op, partIds:ps.map(p=>p.id), [kind]:true});
   }
   // plants and fixtures whose op names a lift-off roof stand on it and come off with it
   const riders=new Map();
@@ -500,7 +504,7 @@ function compile(design){
     }
   }
   subs.forEach((s,si)=>{
-    if(s.liftoff) return; // checked as a whole below
+    if(s.liftoff||s.assembly) return; // checked as a whole below
     for(let ci=0;ci<s.copies;ci++){
       const cp=s.partIds.map(id=>parts[id-1]).filter(p=>p.copy===ci).sort((a,b)=>a.y-b.y||a.id-b.id);
       const inCopy=new Set(cp.map(p=>p.id)), before=new Set(); let attach=0;
@@ -577,6 +581,15 @@ function compile(design){
       if(onTop.size){ const p=parts[[...onTop][0]-1]; errors.push({msg:`${p.name} #${p.id} at (${p.x}, ${p.y}, ${p.z}) sits on lift-off roof "${name}" but isn't part of it, so the roof can't lift off; add "liftoff": "${name}" to its op or move it`, op:p.op, part:p.id}); }
       if(held<2) errors.push({msg:`Lift-off roof "${name}" is held on by ${held} stud${held===1?'':'s'}; leave at least two locating studs (at the corners) in the tiles it rests on`, op:null});
       else if(held>GRIP_MAX) warnings.push({msg:`Lift-off roof "${name}" grips the house with ${held} studs, too many to lift off by hand: tile the wall tops under it and leave only a few locating studs (2 to ${GRIP_MAX}, at the corners)`, op:null});
+    }
+    for(const [name,ps] of asmGroups){ const ids=new Set(ps.map(p=>p.id));
+      const gp=new Map([...ids].map(id=>[id,id])), gf=a=>{ while(gp.get(a)!==a){ gp.set(a,gp.get(gp.get(a))); a=gp.get(a);} return a; };
+      let held=0;
+      for(const [a,b] of joints){ const ia=ids.has(a), ib=b!=='base'&&ids.has(b);
+        if(ia&&ib){ const ra=gf(a), rb=gf(b); if(ra!==rb) gp.set(ra,rb); } else if(ia&&!ib) held++; }
+      const comps=new Set([...ids].map(gf)).size;
+      if(comps>1) errors.push({msg:`Assembly "${name}" comes apart into ${comps} pieces; lay a second layer across its seams so it holds together on its own`, op:null});
+      if(held<2) errors.push({msg:`Assembly "${name}" is held on by ${held} stud${held===1?'':'s'}; it must press onto at least two studs of what it rests on`, op:null});
     } }
   // stacked seams
   const heights=[...wallCourses].sort((a,b)=>a-b);
