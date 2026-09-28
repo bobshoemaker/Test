@@ -77,7 +77,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   Mapillary street photos aimed at the house (`rankPhotos`, pure and tested), and fetches a
   chosen photo by numeric id only. Each photo carries credit and license; the server stores
   them on the design as `photoCredits` and the viewer shows them.
-- `src/server/server.js`: zero-dependency HTTP server. Serves the viewer and designs. A design is a
+- `src/server/server.js`: zero-dependency HTTP server. Serves the viewer and designs; takes up to 12
+  photos a design (`MAX_PHOTOS`; the design loop's 90-image budget keeps the rest for renders). A design is a
   job (`src/server/jobs.js`): `POST /api/jobs {photos, notes, address?, plan?, plate?, choices?}`
   saves it and, when `STRIPE_SECRET_KEY` is set, returns a Stripe Checkout link for the design fee
   (`BRICKHOUSE_DESIGN_FEE_CENTS`, `src/server/payments.js`); `POST /api/jobs/<id>/start {session}`

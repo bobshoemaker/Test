@@ -292,7 +292,8 @@ function setBusy(b){ $('planBtn').disabled=b; $('surveyBtn').disabled=b; $('desi
 function renderThumbs(){
   photoUrls.forEach(u=>URL.revokeObjectURL(u)); photoUrls=photos.map(f=>URL.createObjectURL(f));
   const html=photoUrls.map((u,i)=>`<img src="${u}" alt="House photo ${i+1}">`).join('');
-  $('thumbs').innerHTML=html; $('refPhotos').innerHTML=html; $('refWrap').hidden=!photos.length;
+  $('thumbs').innerHTML=photoUrls.map((u,i)=>`<img src="${u}" alt="House photo ${i+1}" title="Click to remove" data-i="${i}" style="cursor:pointer">`).join('');
+  $('refPhotos').innerHTML=html; $('refWrap').hidden=!photos.length;
   $('designBtn').textContent=(photos.length?`Design from ${photos.length} photo${photos.length>1?'s':''}`:'Design from description')+feeText();
   $('surveyBtn').hidden=!photos.length; if(survey){ survey=null; $('survey').hidden=true; $('survey').innerHTML=''; } // new photos: ask again
 }
@@ -313,8 +314,13 @@ $('planInput').onchange=e=>{ planFile=e.target.files[0]||null; e.target.value=''
   $('planStatus').textContent=planFile?`Floor plan: ${planFile.name}. The walls will follow it.`:''; $('planBtn').textContent=planFile?'Change floor plan':'Add floor plan'; };
 let lookedUp=''; // the address the last lookup found; the server adds its building, street and slope facts
 $('photoInput').accept='image/jpeg,image/png,image/webp';
-$('photoInput').onchange=e=>{ const max=(health&&health.maxPhotos)||6; photos=[...photos.filter(f=>photoCredit.has(f)),...e.target.files].slice(0,max); renderThumbs();
-  status(photos.length>=max?`Using the first ${max} photos.`:''); e.target.value=''; };
+// photos add up across picks (the same file twice counts once); click a thumbnail to remove it
+$('photoInput').onchange=e=>{ const max=(health&&health.maxPhotos)||12, same=(a,b)=>a.name===b.name&&a.size===b.size;
+  const add=[...e.target.files].filter(f=>!photos.some(p=>same(p,f))), room=max-photos.length;
+  photos=[...photos,...add.slice(0,Math.max(0,room))]; renderThumbs();
+  status(add.length>room?`Up to ${max} photos; ${add.length-Math.max(0,room)} left out. Click a photo to remove it.`:''); e.target.value=''; };
+$('thumbs').onclick=e=>{ const i=e.target&&e.target.dataset&&e.target.dataset.i; if(i===undefined||busyCtl) return;
+  photos.splice(Number(i),1); renderThumbs(); status(''); };
 
 // ---------- address lookup: POST /api/lookup, then pick candidate street photos ----------
 let cands=[];
@@ -337,7 +343,7 @@ $('addrForm').onsubmit=async e=>{
   finally{ $('addrBtn').disabled=false; }
 };
 $('useCands').onclick=async()=>{
-  const pick=cands.filter(c=>c.on), max=(health&&health.maxPhotos)||6;
+  const pick=cands.filter(c=>c.on), max=(health&&health.maxPhotos)||12;
   if(!pick.length){ addrStatus('Tap one or more photos first.',true); return; }
   $('useCands').disabled=true;
   try{
@@ -467,7 +473,7 @@ async function boot(){
   if(!health){ $('photoIntro').textContent='Start the server with npm start to design from photos.'; return; }
   if(!health.ready){ $('photoIntro').textContent='Add BRICKHOUSE_ANTHROPIC_API_KEY to .env and restart the server to design from photos (or run with BRICKHOUSE_FAKE=1 to try the flow).'; return; }
   $('photoControls').hidden=false;
-  $('photoIntro').textContent=`Enter the address to find street photos${health.streetPhotos?'':' (needs MAPILLARY_TOKEN)'}, or pick up to ${health.maxPhotos} exterior photos, front first. Claude (${health.model}) studies them, writes a design, compiles it here, fixes what the checker flags, and saves it.`;
+  $('photoIntro').textContent=`Enter the address to find street photos${health.streetPhotos?'':' (needs MAPILLARY_TOKEN)'}, or pick up to ${health.maxPhotos} exterior photos, front first, then each side, the back, the garage and any yard or patio: Claude builds only what a photo, the floor plan or your notes show, so a side no photo shows gets guessed. Claude (${health.model}) studies them, writes a design, compiles it here, fixes what the checker flags, and saves it.`;
   renderThumbs();
   // Back from Stripe (?job=…&session=…): confirm the payment and start the design; ?job=… alone
   // picks up a design in progress or finished.

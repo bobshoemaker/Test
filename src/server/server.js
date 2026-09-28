@@ -25,7 +25,7 @@ const SURVEY_MODEL = process.env.BRICKHOUSE_SURVEY_MODEL || MODEL;
 const SURVEY_EFFORT = process.env.BRICKHOUSE_SURVEY_EFFORT || 'low';
 const FAKE = process.env.BRICKHOUSE_FAKE === '1';
 const MAX_BODY = 40 * 1024 * 1024;
-const MAX_PHOTOS = 6;
+const MAX_PHOTOS = 12; // the API takes up to 100 images a request; the design loop keeps the rest of its 90 for renders
 
 function loadDotEnv(file) {
   if (!fs.existsSync(file)) return;
