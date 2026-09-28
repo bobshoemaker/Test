@@ -3,7 +3,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { compile } = require('../src/engine/engine.js');
+const engine = require('../src/engine/engine.js');
+// most tests build a house alone on an empty plate, not a whole lot, so skip the bare-ground check
+const compile = (d, ...a) => engine.compile({ lot: false, ...d }, ...a);
 
 const load = (name) => JSON.parse(fs.readFileSync(path.join(__dirname, '../designs', name + '.json'), 'utf8'));
 const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -426,4 +428,21 @@ test('designs keep to parts that are easy to buy: the packer picks sizes made in
   assert.match(w, /Arch 1 x 4 in Dark Green \(1\) is hard to get: LEGO has not made it in that color\. Use a color it's easy to get in \(White/);
   // old Light Gray (last made 2004) is flagged even though many sets had it
   assert.match(compile({ name: 'c', phases: ['p'], ops: [{ op: 'place', phase: 'p', part: 'brick:2x4', color: 'Light Gray', at: [4, 0, 4] }] }).warnings[0].msg, /the latest in 2004/);
+});
+
+test('bare baseplate around a house is flagged, and a lawn op listed last finishes it with patches, tufts and flowers', () => {
+  const house = [{ op: 'walls', phase: 'h', color: 'White', courses: [0, 3], base: 0, segments: [[10, 10, 20, 10], [10, 20, 20, 20], [10, 11, 10, 19], [20, 11, 20, 19]] },
+    { op: 'floor', phase: 'h', color: 'Tan' }];
+  const bare = engine.compile({ name: 'b', phases: ['h', 'g'], ops: house });
+  assert.match(bare.warnings.map((w) => w.msg).join(' '), /The baseplate is bare in an open \d+ x \d+ stretch/);
+  for (const texture of ['lawn', 'meadow', 'dry']) {
+    const r = engine.compile({ name: 'l', phases: ['h', 'g'], ops: [...house, { op: 'lawn', phase: 'g', texture }] });
+    assert.deepEqual([texture, r.errors.map((e) => e.msg), r.warnings.map((w) => w.msg)], [texture, [], []]);
+    const lawn = r.parts.filter((p) => p.op === 2);
+    assert.ok(lawn.some((p) => p.key.startsWith('plate:')) && lawn.some((p) => p.key === 'sprig1'), `${texture} has patches and tufts`);
+    assert.ok(lawn.every((p) => engine.easyToGet(p.no, p.color)), `${texture} uses parts that are easy to get`);
+    assert.ok(!lawn.some((p) => p.x >= 10 && p.x <= 20 && p.z >= 10 && p.z <= 20), 'nothing inside the house');
+  }
+  assert.match(engine.compile({ name: 'x', phases: ['h', 'g'], ops: [...house, { op: 'lawn', phase: 'g', texture: 'astroturf' }] }).errors[0].msg, /Lawn texture must be one of lawn, meadow, dry/);
+  assert.deepEqual(engine.compile({ name: 'a', lot: false, phases: ['h'], ops: house }).warnings, [], 'a building alone skips the check');
 });

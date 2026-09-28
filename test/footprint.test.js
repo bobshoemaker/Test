@@ -2,7 +2,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { layoutFootprint, footprintFromOutline, skeletonOps, checkFootprint, calibrate, segmentsFromCells } = require('../src/server/footprint');
-const { compile } = require('../src/engine/engine.js');
+const engine = require('../src/engine/engine.js');
+// most tests build a house alone on an empty plate, not a whole lot, so skip the bare-ground check
+const compile = (d, ...a) => engine.compile({ lot: false, ...d }, ...a);
 
 // 10 px per ft: a 20 x 30 ft house (two blocks sharing a wall) with a detached 20 x 10 ft garage behind it.
 const PLAN = {

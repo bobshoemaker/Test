@@ -24,7 +24,10 @@ closing gift that realtors give clients: a brick model of the house they just bo
   which the design loop sets, recolors a few pieces of each material), a plant library built from
   real LEGO foliage (branching "plant leaves" 4 x 3 and 6 x 5 with studs on their tips, stacked into
   canopies with fruit or flowers on the tips; leafy and flower-edged round plates; a palm top with
-  swordleaf fronds clipped to its bars) in colors true to each plant, hints (never
+  swordleaf fronds clipped to its bars) in colors true to each plant, a `lawn` op that
+  finishes bare ground (irregular patches of lighter and darker plates, grass tufts, a few flowers;
+  textures lawn, meadow, dry) and a warning for a big open stretch of bare baseplate (about 12 ft
+  square; `"lot": false` for a building alone, as most unit tests are), hints (never
   blocking) for big open stretches of plain tile, a fixture library for roofs (skylight, HVAC unit,
   vents, solar panel, hatch, chimney), manual step grouping, and the inventory.
   Parts must be easy to buy: `src/engine/parts-availability.js` (built by `scripts/availability.js`

@@ -118,6 +118,13 @@ const PLANTS = {
 };
 
 
+// Lawn textures for the "lawn" op: patches (plates) around scattered seeds, then tufts and flowers.
+const LAWN = {
+  lawn:{seeds:0.05, patch:['Bright Green','Dark Green'], tufts:0.05, tuft:['Green','Bright Green','Dark Green'], flowers:0.012, bloom:['White','Yellow']},
+  meadow:{seeds:0.05, patch:['Bright Green','Lime','Green'], tufts:0.09, tuft:['Green','Bright Green','Lime'], flowers:0.05, bloom:['White','Yellow','Medium Lavender','Coral']},
+  dry:{seeds:0.07, patch:['Tan','Dark Tan','Olive Green'], tufts:0.05, tuft:['Olive Green','Yellowish Green'], flowers:0.01, bloom:['Yellow','White']},
+};
+
 // Roof and yard fixtures for the "fixture" op, placed like plants (on studs, from the corner stud).
 const FIXTURES = {
   'skylight':{name:'Skylight', parts:[P('plate:2x2','White',0,0,0),P('tile:1x2','Trans-Clear',0,1,0),P('tile:1x2','Trans-Clear',1,1,0)]},
@@ -197,7 +204,7 @@ function compile(design){
   const BASE=design&&design.plate!=null?Number(design.plate):32, BASEPLATE=BASEPLATES[BASE]||BASEPLATES[32];
   const clock=(typeof performance!=='undefined')?performance:Date;
   const t0=clock.now();
-  const errors=[], warnings=[], parts=[], occ=new Map(), subs=[];
+  const errors=[], warnings=[], parts=[], occ=new Map(), subs=[], lawned=new Set();
   if(!BASEPLATES[BASE]) errors.push({msg:`plate must be 32 or 48 (got ${design.plate})`, op:null});
   if(design.property!=null&&!PROPERTY_TYPES.includes(design.property)) errors.push({msg:`property must be one of ${PROPERTY_TYPES.join(', ')} (got ${design.property})`, op:null});
   const phases=design.phases||[]; const phaseIdx=new Map(phases.map((p,i)=>[p,i]));
@@ -576,6 +583,25 @@ function compile(design){
         for(const k of insideCells()) if(!lim||lim.has(k)) level.set(k,op.color);
         if(!level.size) warnings.push({msg:'The floor op found no studs inside walls (it floors what walls at least 4 courses tall enclose)', op:i});
         pack(level,op.kind||'tile',op.y||0,meta); break; }
+      case 'lawn': { // bare ground made into a finished lawn: patches of lighter and darker green, tufts, a few flowers
+        const T=LAWN[op.texture||'lawn']; if(!T){ errors.push({msg:`Lawn texture must be one of ${Object.keys(LAWN).join(', ')}`, op:i}); break; }
+        const inside=insideCells(), area=[];
+        for(const [x,z] of op.rects?op.rects.flatMap(r=>rectCells(r)):rectCells([0,0,BASE-1,BASE-1])){ const k=x+','+z;
+          if(x<0||z<0||x>=BASE||z>=BASE||occ.has(K3(x,z,0))||inside.has(k)) continue; area.push([x,z]); lawned.add(k); }
+        if(!area.length){ warnings.push({msg:'The lawn op found no bare baseplate to cover (list it after the paving, planting and everything else on the ground)', op:i}); break; }
+        const inArea=new Set(area.map(c=>c.join(','))), hash=(x,z,s)=>((((x*73856093)^(z*19349663)^(s*83492791)^(i*2654435761))>>>0)%10000)/10000;
+        // patches grow around scattered seeds, a stud or two across
+        const level=new Map();
+        for(const [x,z] of area) if(hash(x,z,1)<T.seeds){ const r=hash(x,z,2)<0.5?1:2, col=T.patch[Math.floor(hash(x,z,3)*T.patch.length)];
+          // an irregular blob: the seed and its neighbours, then a ragged edge further out
+          for(let dx=-r-1;dx<=r+1;dx++) for(let dz=-r-1;dz<=r+1;dz++){ const k=(x+dx)+','+(z+dz), dd=Math.abs(dx)+Math.abs(dz);
+            if(!inArea.has(k)||level.has(k)||dd>r+1) continue; if(dd<=1||hash(x+dx,z+dz,7)<(dd<=r?0.7:0.25)) level.set(k,col); } }
+        pack(level,'plate',0,meta);
+        // tufts and flowers, on a patch or on the baseplate
+        for(const [x,z] of area){ const u=hash(x,z,4), y=occ.has(K3(x,z,0))?1:0;
+          if(u<T.flowers) place('flower1',x,y,z,0,T.bloom[Math.floor(hash(x,z,5)*T.bloom.length)],meta,false);
+          else if(u<T.flowers+T.tufts) place('sprig1',x,y,z,0,T.tuft[Math.floor(hash(x,z,6)*T.tuft.length)],meta,false); }
+        break; }
       case 'place': { const q=place(op.part,op.at[0],op.at[1],op.at[2],op.rot||0,op.color,meta,true); if(q&&op.dir) q.dir=op.dir; break; }
       case 'places': for(const a of op.at){ const [x,y,z]=a.length===3?a:[a[0],op.y||0,a[1]]; const q=place(op.part,x,y,z,op.rot||0,op.color,meta,true); if(q&&op.dir) q.dir=op.dir; } break;
       case 'fence': {
@@ -754,6 +780,13 @@ function compile(design){
       }
     }
   }
+  // bare ground: a big open stretch of baseplate with nothing on it reads as unfinished
+  // (not for a model of the building alone, without its lot: "lot": false)
+  if(design.lot!==false){ const inside=insideCells(), bare=(x,z)=>!occ.has(K3(x,z,0))&&!inside.has(x+','+z)&&!lawned.has(x+','+z), side=Math.max(4,Math.round(12/((design.plate||32)>32?1.5:2)));
+    const dp=new Map(); let best=0, at=null;
+    for(let x=0;x<BASE;x++) for(let z=0;z<BASE;z++){ if(!bare(x,z)) continue;
+      const v=1+Math.min(dp.get((x-1)+','+z)||0,dp.get(x+','+(z-1))||0,dp.get((x-1)+','+(z-1))||0); dp.set(x+','+z,v); if(v>best){ best=v; at=[x-v+1,z-v+1]; } }
+    if(best>=side) warnings.push({msg:`The baseplate is bare in an open ${best} x ${best} stretch from (${at[0]}, ${at[1]}) to (${at[0]+best-1}, ${at[1]+best-1}), which looks unfinished: plant it, pave it, or add a lawn op (listed last, it covers whatever ground is left)`, op:null}); }
   // the baseplate must not show inside a building (through windows, or under a lift-off roof)
   { const bare=[...insideCells()].filter(k=>{ const [x,z]=k.split(',').map(Number); return !occ.has(K3(x,z,0)); });
     if(bare.length) warnings.push({msg:`The baseplate shows inside a building at ${bare.length} stud${bare.length===1?'':'s'}, from (${bare[0]}): cover the floors inside the walls with a floor op (tiles at y 0) so no green shows through windows or under a lift-off roof`, op:null}); }
