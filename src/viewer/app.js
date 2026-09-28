@@ -6,6 +6,7 @@ const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
 renderer.outputEncoding=THREE.sRGBEncoding;
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate=false; // redrawn when bricks change, not every frame: the sun doesn't move with the camera
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(30,1,0.5,600);
 const hemi=new THREE.HemisphereLight(0xffffff,0x8a97a8,0.62); scene.add(hemi);
@@ -17,13 +18,18 @@ scene.add(sun);
 const fill=new THREE.DirectionalLight(0xffffff,0.2); fill.position.set(-28,18,-18); scene.add(fill);
 
 const lin=hex=>new THREE.Color(hex).convertSRGBToLinear();
+// several shapes, each placed by an optional matrix, as one geometry: one draw call instead of many
+function mergeGeos(items){ const pos=[], nor=[];
+  for(const [geo,m] of items){ const g=geo.index?geo.toNonIndexed():geo.clone(); if(m) g.applyMatrix4(m);
+    pos.push(...g.attributes.position.array); nor.push(...g.attributes.normal.array); }
+  const out=new THREE.BufferGeometry(); out.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); out.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3)); return out; }
 const PH=0.4; let PLATE=32, OFF=16; // the baseplate size comes from the design ("plate": 32 or 48)
 const tmp=new THREE.Object3D(), ZERO=new THREE.Matrix4().makeScale(0,0,0), col=new THREE.Color();
 let stageLin=lin('#D9E2EB');
 
 // ---------- geometries ----------
 const boxGeo=new THREE.BoxGeometry(1,1,1);
-const studGeo=new THREE.CylinderGeometry(0.3,0.3,0.17,12);
+const studGeo=(()=>{ const g=new THREE.CylinderGeometry(0.3,0.3,0.17,10,1,true), top=new THREE.CircleGeometry(0.3,10); top.rotateX(-Math.PI/2); top.translate(0,0.085,0); return mergeGeos([[g],[top]]); })();
 const cylGeo=new THREE.CylinderGeometry(0.5,0.5,1,24);
 function wedgeGeo(){
   const a=0.485, hb=0.27, hf=0.035;
@@ -61,7 +67,7 @@ function makeInstanced(geo,mat,list,cast){ const m=new THREE.InstancedMesh(geo,m
   m.userData.recs=list; root.add(m); meshes.push(m); return m; }
 
 function buildScene(){
-  if(root){ scene.remove(root); meshes.forEach(m=>m.dispose&&m.dispose()); specials.forEach(s=>s.mats.forEach(o=>o.mat.dispose())); }
+  if(root){ scene.remove(root); meshes.forEach(m=>m.dispose&&m.dispose()); specials.forEach(s=>{ s.mats.forEach(o=>o.mat.dispose()); s.obj.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); }); }
   root=new THREE.Group(); scene.add(root); inst=[]; specials=[]; meshes=[]; studRecs=[]; anims.clear(); recOf=new Map(); studsOf=new Map();
   const boxO=[], boxT=[], ch=[], cyl=[];
   for(const p of R.parts){
@@ -88,26 +94,29 @@ function buildScene(){
 function makeSpecial(p){
   const g=new THREE.Group(), mats=[]; const main=new THREE.MeshLambertMaterial({color:lin(COLORS[p.color].hex),side:THREE.DoubleSide}); mats.push({mat:main,p});
   const add=(geo,mat,x,y,z,cast=true)=>{ const m=new THREE.Mesh(geo,mat); m.position.set(x,y,z); m.castShadow=cast; m.receiveShadow=true; g.add(m); return m; };
+  // shapes in the part's own color are merged into one mesh at the end (glass stays its own)
+  const shapes=[], put=(geo,x,y,z,rot)=>{ const o=new THREE.Object3D(); o.position.set(x,y,z); if(rot) o.rotation.copy(rot); o.updateMatrix(); shapes.push([geo,o.matrix]); };
   const H=p.h*PH;
   if(p.shape==='window'){
     const w=p.rot%2?p.d:p.w, t=0.17, dep=0.9;
-    add(new THREE.BoxGeometry(w-0.03,t,dep),main,0,H-t/2-0.01,0); add(new THREE.BoxGeometry(w-0.03,t,dep),main,0,t/2,0);
-    add(new THREE.BoxGeometry(t,H-0.02,dep),main,-w/2+t/2+0.015,H/2,0); add(new THREE.BoxGeometry(t,H-0.02,dep),main,w/2-t/2-0.015,H/2,0);
-    add(new THREE.BoxGeometry(w-2*t,0.08,0.3),main,0,H*0.55,0);
-    if(w>=4||p.h>=9) add(new THREE.BoxGeometry(0.1,H-2*t,0.3),main,0,H/2,0);
+    put(new THREE.BoxGeometry(w-0.03,t,dep),0,H-t/2-0.01,0); put(new THREE.BoxGeometry(w-0.03,t,dep),0,t/2,0);
+    put(new THREE.BoxGeometry(t,H-0.02,dep),-w/2+t/2+0.015,H/2,0); put(new THREE.BoxGeometry(t,H-0.02,dep),w/2-t/2-0.015,H/2,0);
+    put(new THREE.BoxGeometry(w-2*t,0.08,0.3),0,H*0.55,0);
+    if(w>=4||p.h>=9) put(new THREE.BoxGeometry(0.1,H-2*t,0.3),0,H/2,0);
     const gm=glassMat(); mats.push({mat:gm,p,glass:true}); add(new THREE.BoxGeometry(w-2*t,H-2*t,0.06),gm,0,H/2,0,false);
-  } else if(p.shape==='arch'){ add(archGeoFor(p.h,p.archTop||2),main,0,0,0);
+  } else if(p.shape==='arch'){ put(archGeoFor(p.h,p.archTop||2),0,0,0);
   } else if(p.shape==='fence'){
-    const w=4; add(new THREE.BoxGeometry(w-0.04,0.34,0.8),main,0,0.17,0); add(new THREE.BoxGeometry(w-0.04,0.2,0.34),main,0,1.08,0);
-    const sg=new THREE.BoxGeometry(0.22,0.8,0.16); for(let i=0;i<7;i++) add(sg,main,-w/2+0.3+i*(w-0.6)/6,0.7,0);
+    const w=4; put(new THREE.BoxGeometry(w-0.04,0.34,0.8),0,0.17,0); put(new THREE.BoxGeometry(w-0.04,0.2,0.34),0,1.08,0);
+    const sg=new THREE.BoxGeometry(0.22,0.8,0.16); for(let i=0;i<7;i++) put(sg,-w/2+0.3+i*(w-0.6)/6,0.7,0);
   } else if(p.shape==='bracket'){ // plate out from the wall, and an upright flange against the wall's side stud
     const [fx,fz]={N:[0,-1],S:[0,1],E:[1,0],W:[-1,0]}[p.face]||[0,1], t=PH*0.9;
-    add(new THREE.BoxGeometry(0.96,t,0.96),main,0,t/2,0);
-    add(new THREE.BoxGeometry(fx?t:0.96,1,fz?t:0.96),main,-fx*(0.48-t/2),0.5,-fz*(0.48-t/2));
+    put(new THREE.BoxGeometry(0.96,t,0.96),0,t/2,0);
+    put(new THREE.BoxGeometry(fx?t:0.96,1,fz?t:0.96),-fx*(0.48-t/2),0.5,-fz*(0.48-t/2));
   } else if(p.shape==='palm'){
-    add(new THREE.CylinderGeometry(0.28,0.36,0.3,10),main,0,0.15,0);
-    for(let i=0;i<7;i++){ const f=new THREE.Mesh(frondGeo,main); f.castShadow=true; f.position.y=0.28; f.rotation.set(0,i*Math.PI*2/7+0.3,-0.42-(i%2)*0.18); g.add(f); }
+    put(new THREE.CylinderGeometry(0.28,0.36,0.3,10),0,0.15,0);
+    for(let i=0;i<7;i++){ put(frondGeo,0,0.28,0,new THREE.Euler(0,i*Math.PI*2/7+0.3,-0.42-(i%2)*0.18)); }
   }
+  if(shapes.length) add(mergeGeos(shapes),main,0,0,0);
   g.position.set(p.x+p.w/2-OFF,p.y*PH,p.z+p.d/2-OFF);
   if(p.rot%2&&p.shape!=='palm') g.rotation.y=Math.PI/2;
   root.add(g); return {p,obj:g,mats};
@@ -134,13 +143,17 @@ function applyState(){
   for(const m of meshes){ m.instanceMatrix.needsUpdate=true; if(m.instanceColor) m.instanceColor.needsUpdate=true; }
   for(const s of specials){ s.obj.visible=s.p._v; s.obj.position.copy(s.pos0); s.obj.rotation.set(0,s.rot0,0); s.obj.scale.setScalar(1); for(const o of s.mats){ if(o.glass) continue; o.mat.color.copy(colorFor(s.p,s.p._c)); } }
   const baseHex=COLORS['Green'].hex;
-  studRecs.forEach((s,i)=>{
+  // only the studs that show are drawn: they're packed into the first slots and the rest skipped
+  let n=0;
+  studRecs.forEach(s=>{ s.slot=-1;
     const ownerV=s.p?s.p._v:(mode==='main'); const covered=s.cov&&R.parts[s.cov-1]._v;
-    studs.setMatrixAt(i,(ownerV&&!covered)?s.m:ZERO);
-    studs.setColorAt(i, s.p?colorFor(s.p,s.p._c):col.copy(lin(baseHex)));
+    if(!ownerV||covered) return;
+    s.slot=n; studs.setMatrixAt(n,s.m); studs.setColorAt(n, s.p?colorFor(s.p,s.p._c):col.copy(lin(baseHex))); n++;
   });
+  studs.count=n;
   studs.instanceMatrix.needsUpdate=true; if(studs.instanceColor) studs.instanceColor.needsUpdate=true;
   if(anims.size) animFrame(performance.now());
+  renderer.shadowMap.needsUpdate=true;
   base.visible=mode==='main';
   $('modebadge').style.display=mode==='sub'?'block':'none';
   if(mode==='sub'){ const s=R.steps[stepIdx], sub=R.subs[s.sub]; $('modebadge').textContent=`Sub-build: ${sub.name}`+(sub.copies>1?`, make ${sub.copies}`:''); }
@@ -198,7 +211,7 @@ function animFrame(now){
   let done=false, touched=false;
   for(const [id,a] of anims){
     const t=(now-a.t0)/a.dur, p=R.parts[id-1], r=recOf.get(id); if(!r) { anims.delete(id); continue; }
-    if(t>=1){ anims.delete(id); done=true; continue; }
+    if(t>=1){ anims.delete(id); settle(p,r); done=true; continue; }
     const e=t<0?0:a.ease(t), hide=t<0&&a.hideBefore;
     const off=[0,1,2].map(k=>a.from[k]+(a.to[k]-a.from[k])*e), sc=a.shrink&&e>0.7?Math.max(0.05,1-(e-0.7)/0.3):1;
     if(r.obj){ r.obj.visible=!hide&&p._v; r.obj.position.set(r.pos0.x+off[0],r.pos0.y+off[1],r.pos0.z+off[2]);
@@ -207,12 +220,21 @@ function animFrame(now){
     const c=centerOf(p); eul.set(a.spin[0]*e,a.spin[1]*e,a.spin[2]*e);
     m4.makeTranslation(c.x+off[0],c.y+off[1],c.z+off[2]).multiply(m4b.makeRotationFromEuler(eul)).multiply(m4b.makeScale(sc,sc,sc)).multiply(m4b.makeTranslation(-c.x,-c.y,-c.z));
     r.mesh.setMatrixAt(r.i,hide?ZERO:m4b.copy(m4).multiply(r.m)); r.mesh.instanceMatrix.needsUpdate=true;
-    for(const si of studsOf.get(id)||[]){ const sr=studRecs[si]; studs.setMatrixAt(si,hide?ZERO:m4b.copy(m4).multiply(sr.m)); touched=true; }
+    for(const si of studsOf.get(id)||[]){ const sr=studRecs[si]; if(sr.slot<0) continue; studs.setMatrixAt(sr.slot,hide?ZERO:m4b.copy(m4).multiply(sr.m)); touched=true; }
   }
   if(touched) studs.instanceMatrix.needsUpdate=true;
-  if(done) applyState(); // settled bricks go back to their resting state (or away, once lifted)
+  if(done&&!anims.size) applyState(); // all settled: one full refresh (uncovered studs, colors)
+  // shadows follow the moving bricks a few times a second, not every frame
+  if(done||++shadowTick%4===0) renderer.shadowMap.needsUpdate=true;
   dirty=true;
 }
+let shadowTick=0;
+// a brick that has finished moving goes to its resting place, or away if its group is lifted
+function settle(p,r){ const v=partState(p)[0]; p._v=v;
+  if(r.obj){ r.obj.visible=v; r.obj.position.copy(r.pos0); r.obj.rotation.set(0,r.rot0,0); r.obj.scale.setScalar(1); return; }
+  r.mesh.setMatrixAt(r.i,v?r.m:ZERO); r.mesh.instanceMatrix.needsUpdate=true;
+  for(const si of studsOf.get(p.id)||[]){ const sr=studRecs[si]; if(sr.slot>=0) studs.setMatrixAt(sr.slot,v?sr.m:ZERO); }
+  studs.instanceMatrix.needsUpdate=true; }
 function animate(list,make){ if(reduceMotion||!root) return; const now=performance.now(); list.forEach((p,k)=>anims.set(p.id,make(p,k,now))); dirty=true; }
 // a step's new bricks fall from above, one after another (a sub-build being placed comes down as one)
 function dropStep(s){
