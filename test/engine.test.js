@@ -469,8 +469,10 @@ test('a roof beside a window keeps below its sill: slopes there become flat tile
   const roof = { op: 'roof', phase: 'r', rect: [4, 11, 14, 16], base: 12, abut: ['N'], color: 'Dark Orange' };
   const r = compile({ name: 'w', phases: ['w', 'r'], ops: [tall, wing, roof, { op: 'floor', phase: 'w', color: 'Tan' }] });
   assert.deepEqual(r.warnings.filter((w) => /window/.test(w.msg)), []);
-  const beside = r.parts.filter((p) => p.op === 2 && p.x <= 9 && p.x + p.w > 8 && p.z === 11);
-  assert.ok(beside.length && beside.every((p) => p.key !== 'cheese' && p.y + p.h <= 18), 'no slope rises into the window');
+  // within two studs of the window, the roof ends in flat tiles no higher than the sill (a tile may cover the frame's foot)
+  const front = r.parts.filter((p) => p.op === 2 && p.x <= 9 && p.x + p.w > 8 && p.z >= 11 && p.z <= 12 && p.y + p.h > 17);
+  assert.ok(front.length && front.every((p) => p.key !== 'cheese' && p.y + p.h <= 19), 'no slope rises in front of the window');
+  assert.ok(front.some((p) => p.key === 'tile:1x1'), 'a flat ledge of tiles, not bare studs');
   assert.ok(r.parts.some((p) => p.op === 2 && p.key === 'cheese' && p.z === 11 && p.x === 11), 'slopes stay elsewhere along that edge');
   // a wall built across the window's height outside it is flagged
   const blocked = compile({ name: 'b', phases: ['w'], ops: [tall,

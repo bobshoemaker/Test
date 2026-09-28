@@ -360,12 +360,15 @@ function compile(design){
       if(!easyToGet(def.no,p.color)) continue;
       const q=makePart(def,p.x,p.y,p.z,0,p.color,{op:p.op,phase:p.phase}); q.id=p.id; parts[id-1]=q; } }
 
-  // A roof's slope on (x, z) at height y, unless it would rise into the glass of a window beside it: then a
-  // flat tile keeps the eave below the sill (or the plate stays bare if even a tile would reach the glass).
-  const windowBeside=(x,z,y0,y1)=>windows.some(w=>w.y0<y1&&y0<w.y1&&w.line.some(([wx,wz])=>w.along?(wx===x&&Math.abs(wz-z)===1):(wz===z&&Math.abs(wx-x)===1)));
+  // A roof's slope on (x, z) at height y, unless it would stand in front of a window: within WINDOW_CLEAR
+  // studs out from the glass, a slope rising past the sill becomes a flat tile, so every window gets the
+  // same flat ledge in front and the eave stays below it (a tile at the sill hides only the frame's foot).
+  const WINDOW_CLEAR=2;
+  const inFront=(x,z,y0,y1)=>windows.some(w=>w.y0+1<y1&&y0<w.y1&&w.line.some(([wx,wz])=>w.along
+    ?(wx===x&&Math.abs(wz-z)>=1&&Math.abs(wz-z)<=WINDOW_CLEAR):(wz===z&&Math.abs(wx-x)>=1&&Math.abs(wx-x)<=WINDOW_CLEAR)));
   function eaveSlope(x,y,z,color,meta){
-    if(!windowBeside(x,z,y,y+SPECIAL.cheese.h)) return place('cheese',x,y,z,0,color,meta,false);
-    if(!windowBeside(x,z,y,y+1)&&easyToGet(SIZE_PARTS.tile['1x1'],color)) place('tile:1x1',x,y,z,0,color,meta,false);
+    if(!inFront(x,z,y,y+SPECIAL.cheese.h)) return place('cheese',x,y,z,0,color,meta,false);
+    if(!inFront(x,z,y,y+1)&&easyToGet(SIZE_PARTS.tile['1x1'],color)) place('tile:1x1',x,y,z,0,color,meta,false);
     return null; }
 
   // "mix" on a fill or walls op: after packing, recolor a scattered few whole pieces of the op's main
@@ -780,7 +783,7 @@ function compile(design){
       for(const [x,z] of w.line){ for(const s of [-1,1]){ const nx=w.along?x:x+s, nz=w.along?z+s:z;
           for(let y=w.y0;y<w.y1&&!hit;y++){ const id=occ.get(K3(nx,nz,y)); if(!id) continue; const q=parts[id-1];
             if(q.op===w.op||q.sub!==undefined&&!q.liftoff&&!q.assembly) continue; if(!solid.has((design.ops[q.op]||{}).op)) continue;
-            if(q.h===1&&q.y+1<=w.y0+1&&q.key!=='cheese') continue; // flat paving or a plate at the sill hides only the frame's foot
+            if(q.y+q.h<=w.y0+1) continue; // reaching only a plate above the sill hides just the frame's foot
             hit=q; } }
         if(hit) break; }
       if(hit){ const k=w.op+'|'+w.line[0].join(); if(seen.has(k)) continue; seen.add(k);
