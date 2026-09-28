@@ -46,26 +46,26 @@ function archGeoFor(h,top){ const k=h+'|'+top; if(archCache[k]) return archCache
   const g=new THREE.ExtrudeGeometry(s,{depth:0.94,bevelEnabled:false,curveSegments:18}); g.translate(-2,0,-0.47); archCache[k]=g; return g; }
 const frondGeo=(()=>{ const g=new THREE.BoxGeometry(2.3,0.07,0.5); g.translate(1.15,0,0); return g; })();
 
-// Foliage shapes, one geometry per kind (and leaf size), drawn instanced like bricks.
-// A blade is a creased diamond from the middle out to (tx, tz), its tip drooping.
-function bladeGeo(tx,tz,y0,droop,width){ const L=Math.hypot(tx,tz), ux=tx/L, uz=tz/L, px=-uz*width/2, pz=ux*width/2, m=0.42;
-  const B=[0,y0,0], T=[tx,y0-droop,tz], Lf=[tx*m+px,y0+0.02-droop*m*0.6,tz*m+pz], Rt=[tx*m-px,y0+0.02-droop*m*0.6,tz*m-pz], C=[tx*m,y0+0.07-droop*m*0.5,tz*m];
-  const v=[...B,...Lf,...C, ...C,...Lf,...T, ...B,...C,...Rt, ...C,...T,...Rt];
-  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(v,3)); g.computeVertexNormals(); return g; }
+// Foliage shapes, one geometry per kind (and leaf size), drawn instanced like bricks. LEGO leaves have
+// soft rounded lobes, so each leaf is an overlapping ring of flat oval lobes that dip a little at the tip.
+function lobeGeo(cx,cz,y,len,wid,ang,dip){ const g=new THREE.CylinderGeometry(1,1,0.1,16);
+  g.scale(len,1,wid); g.rotateZ(-dip); g.rotateY(-ang); g.translate(cx,y,cz); return g; }
 const folCache={};
 function foliageGeo(p){ const key=p.shape==='leaves'?`leaves|${p.w}x${p.d}`:p.shape; if(folCache[key]) return folCache[key];
   const items=[], H=PH*0.9;
-  if(p.shape==='leaves'){ // blades radiating to the edge of the footprint, with a hub at the middle
-    const rx=p.w/2-0.05, rz=p.d/2-0.05, n=p.w*p.d>20?14:10;
-    for(let k=0;k<n;k++){ const a=(k+0.37*(k%3))*Math.PI*2/n, c=Math.cos(a), si=Math.sin(a), L=1/Math.sqrt(c*c/(rx*rx)+si*si/(rz*rz))*(k%2?0.8:1);
-      items.push([bladeGeo(c*L,si*L,H*0.7,0.06+0.04*(k%3),0.35*L+0.3)]); }
-    const hub=new THREE.CylinderGeometry(0.34,0.38,H,10); hub.translate(0,H/2,0); items.push([hub]);
-  } else if(p.shape==='sprig'){ // a round plate with three leaves reaching out
-    const pl=new THREE.CylinderGeometry(0.42,0.44,H,10); pl.translate(0,H/2,0); items.push([pl]);
-    for(let k=0;k<3;k++){ const a=Math.PI/6+k*Math.PI*2/3; items.push([bladeGeo(Math.cos(a)*0.95,Math.sin(a)*0.95,H*0.8,-0.08,0.42)]); }
+  if(p.shape==='leaves'){ // an outer ring of lobes reaching the footprint's edge, an inner ring over it, a hub
+    const rx=p.w/2, rz=p.d/2, big=p.w*p.d>20, n=big?8:6;
+    for(let k=0;k<n;k++){ const a=(k+0.5)*Math.PI*2/n, c=Math.cos(a), si=Math.sin(a), R=1/Math.sqrt(c*c/(rx*rx)+si*si/(rz*rz));
+      const len=R*0.32, d=R-len-0.04; items.push([lobeGeo(c*d,si*d,H*0.45,len,len*0.72,a,0.16)]); }
+    for(let k=0;k<n-2;k++){ const a=k*Math.PI*2/(n-2), c=Math.cos(a), si=Math.sin(a), R=1/Math.sqrt(c*c/(rx*rx)+si*si/(rz*rz));
+      const len=R*0.28, d=R*0.34; items.push([lobeGeo(c*d,si*d,H*0.75,len,len*0.8,a,0.1)]); }
+    const hub=new THREE.CylinderGeometry(0.36,0.4,H,12); hub.translate(0,H/2,0); items.push([hub]);
+  } else if(p.shape==='sprig'){ // a round plate with three rounded leaves reaching out
+    const pl=new THREE.CylinderGeometry(0.42,0.44,H,12); pl.translate(0,H/2,0); items.push([pl]);
+    for(let k=0;k<3;k++){ const a=Math.PI/6+k*Math.PI*2/3; items.push([lobeGeo(Math.cos(a)*0.62,Math.sin(a)*0.62,H*0.85,0.36,0.24,a,-0.12)]); }
   } else if(p.shape==='flower'){ // five round petals around the middle
-    for(let k=0;k<5;k++){ const a=k*Math.PI*2/5, pt=new THREE.CylinderGeometry(0.2,0.2,H,8); pt.translate(Math.cos(a)*0.26,H/2,Math.sin(a)*0.26); items.push([pt]); }
-    const mid=new THREE.CylinderGeometry(0.2,0.2,H*1.02,8); mid.translate(0,H*0.51,0); items.push([mid]);
+    for(let k=0;k<5;k++){ const a=k*Math.PI*2/5, pt=new THREE.CylinderGeometry(0.2,0.2,H,10); pt.translate(Math.cos(a)*0.26,H/2,Math.sin(a)*0.26); items.push([pt]); }
+    const mid=new THREE.CylinderGeometry(0.2,0.2,H*1.02,10); mid.translate(0,H*0.51,0); items.push([mid]);
   }
   return folCache[key]=mergeGeos(items); }
 
