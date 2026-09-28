@@ -44,28 +44,39 @@ function archGeoFor(h,top){ const k=h+'|'+top; if(archCache[k]) return archCache
   const H=h*PH-0.02, openTop=H-top*PH, ry=Math.min(1.02,openTop*0.62), rect=Math.max(0,openTop-ry);
   const s=new THREE.Shape(); s.moveTo(0,0); s.lineTo(0.98,0); s.lineTo(0.98,rect); s.absellipse(2,rect,1.02,ry,Math.PI,0,true); s.lineTo(3.02,0); s.lineTo(4,0); s.lineTo(4,H); s.lineTo(0,H); s.lineTo(0,0);
   const g=new THREE.ExtrudeGeometry(s,{depth:0.94,bevelEnabled:false,curveSegments:18}); g.translate(-2,0,-0.47); archCache[k]=g; return g; }
-const frondGeo=(()=>{ const g=new THREE.BoxGeometry(2.3,0.07,0.5); g.translate(1.15,0,0); return g; })();
 
-// Foliage shapes, one geometry per kind (and leaf size), drawn instanced like bricks. LEGO leaves have
-// soft rounded lobes, so each leaf is an overlapping ring of flat oval lobes that dip a little at the tip.
-function lobeGeo(cx,cz,y,len,wid,ang,dip){ const g=new THREE.CylinderGeometry(1,1,0.1,16);
-  g.scale(len,1,wid); g.rotateZ(-dip); g.rotateY(-ang); g.translate(cx,y,cz); return g; }
+// Foliage shapes, drawn instanced like bricks, modelled on the real elements:
+//  2417 / 2423 "plant leaves": flat branching stems with a hollow stud boss at each tip
+//  32607: a round plate with three almond-shaped, creased leaves
+//  33291: a round plate with four round knobs around its edge
+//  30239: a clip with a fan of long, narrow pointed sword leaves
+// A leaf blade: almond outline (round sides, pointed tip), creased along its middle, arching as it goes.
+function almondGeo(len,wid,rise,droop,segs=6,full=0.75){ const v=[], pt=(t,side)=>{ const w=wid/2*Math.pow(Math.sin(Math.PI*Math.min(1,t*1.08)),full)*side;
+    return [w, rise*Math.sin(Math.PI*t*0.8)-droop*t*t+(side?0:0.05), t*len]; };
+  for(let k=0;k<segs;k++){ const a=k/segs, b=(k+1)/segs, A=pt(a,0), B=pt(b,0), La=pt(a,-1), Lb=pt(b,-1), Ra=pt(a,1), Rb=pt(b,1);
+    v.push(...La,...A,...Lb, ...A,...B,...Lb, ...A,...Ra,...B, ...Ra,...Rb,...B); }
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(v,3)); g.computeVertexNormals(); return g; }
+const place3=(g,x,y,z,ry)=>{ if(ry) g.rotateY(ry); g.translate(x,y,z); return g; };
 const folCache={};
-function foliageGeo(p){ const key=p.shape==='leaves'?`leaves|${p.w}x${p.d}`:p.shape; if(folCache[key]) return folCache[key];
-  const items=[], H=PH*0.9;
-  if(p.shape==='leaves'){ // an outer ring of lobes reaching the footprint's edge, an inner ring over it, a hub
-    const rx=p.w/2, rz=p.d/2, big=p.w*p.d>20, n=big?8:6;
-    for(let k=0;k<n;k++){ const a=(k+0.5)*Math.PI*2/n, c=Math.cos(a), si=Math.sin(a), R=1/Math.sqrt(c*c/(rx*rx)+si*si/(rz*rz));
-      const len=R*0.32, d=R-len-0.04; items.push([lobeGeo(c*d,si*d,H*0.45,len,len*0.72,a,0.16)]); }
-    for(let k=0;k<n-2;k++){ const a=k*Math.PI*2/(n-2), c=Math.cos(a), si=Math.sin(a), R=1/Math.sqrt(c*c/(rx*rx)+si*si/(rz*rz));
-      const len=R*0.28, d=R*0.34; items.push([lobeGeo(c*d,si*d,H*0.75,len,len*0.8,a,0.1)]); }
-    const hub=new THREE.CylinderGeometry(0.36,0.4,H,12); hub.translate(0,H/2,0); items.push([hub]);
-  } else if(p.shape==='sprig'){ // a round plate with three rounded leaves reaching out
-    const pl=new THREE.CylinderGeometry(0.42,0.44,H,12); pl.translate(0,H/2,0); items.push([pl]);
-    for(let k=0;k<3;k++){ const a=Math.PI/6+k*Math.PI*2/3; items.push([lobeGeo(Math.cos(a)*0.62,Math.sin(a)*0.62,H*0.85,0.36,0.24,a,-0.12)]); }
-  } else if(p.shape==='flower'){ // five round petals around the middle
-    for(let k=0;k<5;k++){ const a=k*Math.PI*2/5, pt=new THREE.CylinderGeometry(0.2,0.2,H,10); pt.translate(Math.cos(a)*0.26,H/2,Math.sin(a)*0.26); items.push([pt]); }
-    const mid=new THREE.CylinderGeometry(0.2,0.2,H*1.02,10); mid.translate(0,H*0.51,0); items.push([mid]);
+function foliageGeo(p){ const key=`${p.shape}|${p.key}|${p.w}x${p.d}|${p.dir||''}`; if(folCache[key]) return folCache[key];
+  const items=[], H=PH*0.9, def=SPECIAL[p.key]||{};
+  if(p.shape==='leaves'){ // stems between the tips, and a boss under each tip's stud
+    const tr=c=>p.w!==def.w?[c[1],c[0]]:c, at=c=>{ const [i,j]=tr(c); return [i+0.5-p.w/2,j+0.5-p.d/2]; };
+    for(const [a,b] of def.branches||[]){ const [x0,z0]=at(a), [x1,z1]=at(b), L=Math.hypot(x1-x0,z1-z0);
+      const g=new THREE.BoxGeometry(0.34,H*0.55,L); g.rotateY(Math.atan2(x1-x0,z1-z0)); g.translate((x0+x1)/2,H*0.3,(z0+z1)/2); items.push([g]); }
+    for(const c of def.tips||[]){ const [x,z]=at(c), g=new THREE.CylinderGeometry(0.34,0.34,H,12); g.translate(x,H/2,z); items.push([g]); }
+  } else if(p.shape==='sprig'){ // a round plate with three almond leaves reaching out
+    const pl=new THREE.CylinderGeometry(0.42,0.44,H,14); pl.translate(0,H/2,0); items.push([pl]);
+    for(let k=0;k<3;k++){ const a=Math.PI/6+k*Math.PI*2/3; items.push([place3(almondGeo(1.05,0.78,0.04,0.02,8,0.5),Math.sin(a)*0.15,H*0.3,Math.cos(a)*0.15,a)]); }
+  } else if(p.shape==='flower'){ // a round plate with four round knobs on its edge
+    const pl=new THREE.CylinderGeometry(0.4,0.4,H,16); pl.translate(0,H/2,0); items.push([pl]);
+    for(let k=0;k<4;k++){ const a=k*Math.PI/2+Math.PI/4, n=new THREE.CylinderGeometry(0.21,0.21,H*0.8,12); n.translate(Math.cos(a)*0.45,H*0.4,Math.sin(a)*0.45); items.push([n]); }
+  } else if(p.shape==='swordleaf'){ // a fan of sword leaves from the clip at the trunk side, out across the footprint
+    const out=Math.max(p.w,p.d), clip=out/2, ry={N:0,E:-Math.PI/2,S:Math.PI,W:Math.PI/2}[p.dir||'N'];
+    const cl=new THREE.BoxGeometry(0.5,0.5,0.5); cl.translate(0,0.25,0); items.push([cl]);
+    for(let k=0;k<6;k++){ const f=(k-2.5)/2.5*1.15, L=out*(k%2?0.84:0.98);
+      items.push([place3(almondGeo(L,0.5,0.45,0.7,8),0,0.25,0,Math.PI+f)]); }
+    const merged=mergeGeos(items); merged.translate(0,0,clip); merged.rotateY(ry); return folCache[key]=merged;
   }
   return folCache[key]=mergeGeos(items); }
 
@@ -87,6 +98,9 @@ function strengthHex(p){ const area=p.shape==='arch'?4:p.w*p.d; const r=R.jn.get
 
 function makeInstanced(geo,mat,list,cast){ const m=new THREE.InstancedMesh(geo,mat,Math.max(1,list.length)); m.castShadow=!!cast; m.receiveShadow=true;
   m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); list.forEach((r,i)=>{ r.mesh=m; r.i=i; m.setMatrixAt(i,r.m); m.setColorAt(i,col.set(0xffffff)); });
+  // an empty group still gets instance colors (meshes sharing a material share its shader, and one
+  // compiled without them draws everything white) and draws nothing
+  if(!list.length){ m.setColorAt(0,col.set(0xffffff)); m.count=0; }
   m.userData.recs=list; root.add(m); meshes.push(m); return m; }
 
 function buildScene(){
@@ -102,7 +116,7 @@ function buildScene(){
     } else if(p.shape==='cheese'){
       tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,{S:0,N:Math.PI,E:Math.PI/2,W:-Math.PI/2}[p.dir]||0,0);
       tmp.updateMatrix(); const r={p,m:tmp.matrix.clone()}; ch.push(r); inst.push(r); recOf.set(p.id,r);
-    } else if(p.shape==='leaves'||p.shape==='sprig'||p.shape==='flower'){
+    } else if(p.shape==='leaves'||p.shape==='sprig'||p.shape==='flower'||p.shape==='swordleaf'){
       tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,0,0); tmp.updateMatrix();
       const geo=foliageGeo(p), r={p,m:tmp.matrix.clone()}; if(!fol.has(geo)) fol.set(geo,[]); fol.get(geo).push(r); inst.push(r); recOf.set(p.id,r);
     } else { const sp=makeSpecial(p); sp.pos0=sp.obj.position.clone(); sp.rot0=sp.obj.rotation.y; specials.push(sp); recOf.set(p.id,sp); }
@@ -139,9 +153,9 @@ function makeSpecial(p){
     const [fx,fz]={N:[0,-1],S:[0,1],E:[1,0],W:[-1,0]}[p.face]||[0,1], t=PH*0.9;
     put(new THREE.BoxGeometry(0.96,t,0.96),0,t/2,0);
     put(new THREE.BoxGeometry(fx?t:0.96,1,fz?t:0.96),-fx*(0.48-t/2),0.5,-fz*(0.48-t/2));
-  } else if(p.shape==='palm'){
-    put(new THREE.CylinderGeometry(0.28,0.36,0.3,10),0,0.15,0);
-    for(let i=0;i<7;i++){ put(frondGeo,0,0.28,0,new THREE.Euler(0,i*Math.PI*2/7+0.3,-0.42-(i%2)*0.18)); }
+  } else if(p.shape==='palm'){ // palm top: a hub with four upright bars (fronds clip onto them)
+    put(new THREE.CylinderGeometry(0.34,0.34,PH,12),0,PH/2,0);
+    const bar=new THREE.CylinderGeometry(0.11,0.11,H-PH*0.5,8); for(const [bx,bz] of [[0.3,0.3],[-0.3,0.3],[0.3,-0.3],[-0.3,-0.3]]) put(bar,bx,PH*0.5+(H-PH*0.5)/2,bz);
   }
   if(shapes.length) add(mergeGeos(shapes),main,0,0,0);
   g.position.set(p.x+p.w/2-OFF,p.y*PH,p.z+p.d/2-OFF);

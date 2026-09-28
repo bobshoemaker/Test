@@ -22,8 +22,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   rests on its walls), so a story that juts out past the one below needs no brackets (a warning past 4 studs of overhang, unless a post or wall spans it); upper stories can lift
   off too, each resting on the one below, and the viewer lifts them top first; "variation": "subtle",
   which the design loop sets, recolors a few pieces of each material), a plant library built from
-  real LEGO foliage (leaves 4 x 3 and 6 x 5 stacked into tiered canopies, leafy and flower-edged
-  round plates) in colors true to each plant, hints (never
+  real LEGO foliage (branching "plant leaves" 4 x 3 and 6 x 5 with studs on their tips, stacked into
+  canopies with fruit or flowers on the tips; leafy and flower-edged round plates; a palm top with
+  swordleaf fronds clipped to its bars) in colors true to each plant, hints (never
   blocking) for big open stretches of plain tile, a fixture library for roofs (skylight, HVAC unit,
   vents, solar panel, hatch, chimney), manual step grouping, and the inventory.
   Dependency-free; runs in the browser (globals) and in Node (require).
@@ -146,7 +147,8 @@ before changing API parameters.
 
 ## Known gaps
 
-- BrickLink part numbers and color availability are unverified; costs are placeholder
+- BrickLink part numbers and color availability are unverified (the plant parts' shapes were checked
+  against BrickLink's catalog images; their stud layouts are approximate); costs are placeholder
   per-piece prices. Check before any real order.
 - Part geometry is simplified in the renderer. Sideways building is limited to side-stud bricks
   in wall openings with a few details hung on them (lantern, house number, plaque, vent); mounted

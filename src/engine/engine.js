@@ -39,11 +39,16 @@ const SPECIAL = {
   arch41:{no:'3659', name:'Arch 1 x 4', w:4,d:1,h:3, shape:'arch', archTop:1, cost:0.10},
   win23:{no:'60593', name:'Window 1 x 2 x 3', w:2,d:1,h:9, shape:'window', glass:'60602', glassName:'Glass for window 1 x 2 x 3', cost:0.20},
   fence4:{no:'3633', name:'Fence 1 x 4 x 1', w:4,d:1,h:3, shape:'fence', cost:0.10},
-  palmtop:{no:'2566', name:'Palm tree top', w:1,d:1,h:1, studs:false, shape:'palm', cost:0.30},
-  // foliage: leaves clip onto one stud through the hole at their middle and carry one stud there, so
-  // leaves stack into layered canopies; their blades spread over the rest of the footprint
-  leaves43:{no:'2423', name:'Plant leaves 4 x 3', w:4,d:3,h:1, shape:'leaves', at:[1,1], cost:0.08},
-  leaves65:{no:'2417', name:'Plant leaves 6 x 5', w:6,d:5,h:1, shape:'leaves', at:[2,2], cost:0.12},
+  // palm top: a hub with four upright bars; fronds clip onto the bars
+  palmtop:{no:'2566', name:'Palm tree top', w:1,d:1,h:4, studs:false, shape:'palm', cost:0.30},
+  swordleaf:{no:'30239', name:'Plant leaves 6 x 5 swordleaf with clip', w:5,d:6,h:1, clip:true, shape:'swordleaf', cost:0.15},
+  // foliage: these "leaves" are flat branching stems with a hollow stud at each tip. They press onto
+  // one stud at "at" and carry studs at "tips" (so leaves stack into canopies, and fruit or flowers can
+  // sit on the tips); "branches" are the stems between them, for drawing.
+  leaves43:{no:'2423', name:'Plant leaves 4 x 3', w:4,d:3,h:1, shape:'leaves', at:[1,1], tips:[[1,1],[0,0],[2,0],[3,1],[0,2],[3,2]],
+    branches:[[[1,1],[0,0]],[[1,1],[2,0]],[[2,0],[3,1]],[[1,1],[0,2]],[[1,1],[3,2]]], cost:0.08},
+  leaves65:{no:'2417', name:'Plant leaves 6 x 5', w:6,d:5,h:1, shape:'leaves', at:[2,2], tips:[[2,2],[1,2],[0,1],[0,3],[1,0],[3,0],[4,2],[5,1],[5,3],[3,4],[1,4]],
+    branches:[[[2,2],[1,2]],[[1,2],[0,1]],[[1,2],[0,3]],[[2,2],[1,0]],[[2,2],[3,0]],[[2,2],[4,2]],[[4,2],[5,1]],[[4,2],[5,3]],[[2,2],[3,4]],[[2,2],[1,4]]], cost:0.12},
   sprig1:{no:'32607', name:'Plant plate round 1 x 1 with 3 leaves', w:1,d:1,h:1, shape:'sprig', cost:0.05},
   flower1:{no:'33291', name:'Plate round 1 x 1 with flower edge', w:1,d:1,h:1, shape:'flower', cost:0.05},
   // Sideways building (SNOT): a brick with a stud on one side sits in a wall opening, facing out,
@@ -59,6 +64,8 @@ const GLASS_COST = 0.10, BASEPLATES = {32:{no:'3811', name:'Baseplate 32 x 32', 
 // Plant library for the "plant" op: sub-builds checked to stand on their own, placed by kind.
 // Offsets are from the plant's corner stud; "bloom" parts take the op's bloom color.
 const P=(part,color,x,y,z,dir)=>({part,color,at:[x,y,z],...(typeof dir==='number'?{rot:dir}:dir?{dir}:{})});
+// a swordleaf clipped onto the palm top at (cx, cz) (the plant's part number "on"), fanning out toward dir
+const FROND=(color,cx,y,cz,dir,on)=>{ const [x,z]={N:[cx-2,cz-6],S:[cx-2,cz+1],E:[cx+1,cz-2],W:[cx-6,cz-2]}[dir]; return {...P('swordleaf',color,x,y,z,'EW'.includes(dir)?1:0),dir,on}; };
 // a leaf clipped onto the stud at (cx, cz): its corner is placed so its middle hole lands there
 const LEAF=(part,color,cx,y,cz,rot=0)=>{ const a=SPECIAL[part].at, [ax,az]=rot%2?[a[1],a[0]]:a; return P(part,color,cx-ax,y,cz-az,rot); };
 // Colors follow the real plants: olive leaves are gray-green with silvery undersides, citrus and
@@ -66,35 +73,39 @@ const LEAF=(part,color,cx,y,cz,rot=0)=>{ const a=SPECIAL[part].at, [ax,az]=rot%2
 // mid green, bark brown or gray-tan; new growth shows as a lighter green on the tips.
 const PLANTS = {
   'olive tree':{name:'Olive tree', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Dark Brown',0,1,0),P('round1','Dark Brown',1,1,1),P('round1','Dark Brown',0,4,0),P('round1','Dark Brown',1,4,1),
-    P('plate:2x2','Olive Green',0,7,0),LEAF('leaves43','Olive Green',0,8,0),LEAF('leaves43','Sand Green',0,9,0,1),LEAF('leaves43','Olive Green',0,10,0),LEAF('leaves43','Sand Green',0,11,0,1),P('sprig1','Olive Green',0,12,0)]},
-  'yucca':{name:'Yucca', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Dark Tan',0,1,0),P('round1','Tan',0,4,0),P('sprig1','Sand Green',0,7,0),P('palmtop','Sand Green',0,8,0)]},
+    P('plate:2x2','Olive Green',0,7,0),LEAF('leaves43','Olive Green',0,8,0),LEAF('leaves43','Sand Green',0,9,0,1),LEAF('leaves43','Olive Green',0,10,0),LEAF('leaves43','Sand Green',0,11,0,1),
+    P('sprig1','Olive Green',0,12,0),P('sprig1','Sand Green',-1,12,1),P('sprig1','Olive Green',1,12,-1),P('sprig1','Sand Green',1,12,2)]},
+  'yucca':{name:'Yucca', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Dark Tan',0,1,0),P('round1','Tan',0,4,0),P('palmtop','Sand Green',0,7,0)]},
   'agave':{name:'Agave', parts:[P('roundplate2','Dark Tan',0,0,0),P('cheese','Sand Green',0,1,0,'W'),P('cheese','Sand Green',1,1,0,'N'),P('cheese','Sand Green',1,1,1,'E'),P('cheese','Sand Green',0,1,1,'S')]},
   'columnar cactus':{name:'Columnar cactus', parts:[P('plate:2x2','Dark Tan',0,0,0),P('round1','Sand Green',0,1,0),P('round1','Sand Green',0,4,0),P('round1','Sand Green',0,7,0),P('flower1','White',0,10,0),
     P('round1','Sand Green',1,1,1),P('round1','Sand Green',1,4,1),P('roundplate1','Sand Green',1,7,1)]},
   'palm':{name:'Palm tree', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Dark Tan',0,1,0),P('round1','Tan',0,4,0),P('round1','Dark Tan',0,7,0),P('round1','Tan',0,10,0),P('round1','Dark Tan',0,13,0),
-    P('roundplate1','Dark Brown',0,16,0),P('palmtop','Green',0,17,0)]},
+    P('roundplate1','Dark Brown',0,16,0),P('palmtop','Dark Tan',0,17,0),FROND('Green',0,17,0,'N',7),FROND('Dark Green',0,18,0,'E',7),FROND('Green',0,19,0,'S',7),FROND('Dark Green',0,20,0,'W',7)]},
   'cypress':{name:'Cypress', parts:[P('roundbrick2','Dark Green',0,0,0),P('roundbrick2','Dark Green',0,3,0),P('roundbrick2','Dark Green',0,6,0),P('roundbrick2','Dark Green',0,9,0),
     P('cone1','Dark Green',0,12,0),P('sprig1','Dark Green',1,12,0),P('sprig1','Green',0,12,1),P('sprig1','Dark Green',1,12,1),P('sprig1','Dark Green',0,15,0)]},
   'shade tree':{name:'Shade tree', parts:[P('roundbrick2','Reddish Brown',0,0,0),P('roundbrick2','Reddish Brown',0,3,0),P('roundplate2','Dark Green',0,6,0),
     LEAF('leaves65','Dark Green',0,7,0),LEAF('leaves65','Green',0,8,0,1),P('roundplate1','Dark Green',0,9,0),LEAF('leaves65','Green',0,10,0),LEAF('leaves43','Dark Green',0,11,0,1),
-    P('roundplate1','Green',0,12,0),LEAF('leaves43','Bright Green',0,13,0),P('sprig1','Bright Green',0,14,0)]},
-  'shrub':{name:'Shrub', parts:[P('roundbrick2','Dark Green',0,0,0),LEAF('leaves43','Green',0,3,0),LEAF('leaves43','Dark Green',0,4,0,1),P('sprig1','Bright Green',0,5,0)]},
+    P('roundplate1','Green',0,12,0),LEAF('leaves43','Bright Green',0,13,0),P('sprig1','Bright Green',0,14,0),P('sprig1','Green',1,14,-1),P('sprig1','Bright Green',-1,14,1),P('sprig1','Green',2,14,1)]},
+  'shrub':{name:'Shrub', parts:[P('roundbrick2','Dark Green',0,0,0),LEAF('leaves43','Green',0,3,0),LEAF('leaves43','Dark Green',0,4,0,1),P('sprig1','Bright Green',0,5,0),
+    P('sprig1','Green',-1,5,-1),P('sprig1','Green',1,5,2),P('sprig1','Dark Green',1,5,-1)]},
   'boxwood':{name:'Boxwood', parts:[P('roundplate2','Dark Green',0,0,0),P('sprig1','Dark Green',0,1,0),P('sprig1','Green',1,1,0),P('sprig1','Green',0,1,1),P('sprig1','Dark Green',1,1,1)]},
   'flowering shrub':{name:'Flowering shrub', parts:[P('roundbrick2','Dark Green',0,0,0),P('sprig1','Green',0,3,0),P('flower1','bloom',1,3,0),P('flower1','bloom',0,3,1),P('sprig1','Dark Green',1,3,1),
     P('flower1','bloom',0,4,0),P('flower1','bloom',1,4,1)]},
   // its color is in papery bracts, which read as magenta leaves
   'bougainvillea':{name:'Bougainvillea', parts:[P('roundbrick2','Dark Green',0,0,0),P('roundbrick2','Green',0,3,0),LEAF('leaves43','Green',0,6,0),P('flower1','Magenta',0,7,0),
-    LEAF('leaves43','Magenta',0,8,0,1),P('flower1','Dark Pink',0,9,0),LEAF('leaves43','Dark Green',0,10,0),P('flower1','Magenta',0,11,0)]},
+    LEAF('leaves43','Magenta',0,8,0,1),P('flower1','Dark Pink',0,9,0),LEAF('leaves43','Dark Green',0,10,0),P('flower1','Magenta',0,11,0),
+    P('flower1','Magenta',-1,11,-1),P('flower1','Dark Pink',1,11,-1),P('flower1','Magenta',2,11,1),P('flower1','Magenta',-1,11,1)]},
   'grasses':{name:'Grasses', parts:[P('plate:2x1','Olive Green',0,0,0),P('sprig1','Olive Green',0,1,0),P('sprig1','Tan',1,1,0),P('sprig1','Yellowish Green',0,2,0)]},
   'lavender':{name:'Lavender', parts:[P('plate:2x1','Sand Green',0,0,0),P('sprig1','Sand Green',0,1,0),P('sprig1','Sand Green',1,1,0),P('flower1','Medium Lavender',0,2,0),P('flower1','Medium Lavender',1,2,0)]},
   'succulents':{name:'Succulents', parts:[P('plate:2x2','Dark Tan',0,0,0),P('sprig1','Sand Green',0,1,0),P('cheese','Olive Green',1,1,0,'E'),P('flower1','Sand Green',0,1,1),P('sprig1','Yellowish Green',1,1,1),P('flower1','Coral',0,2,0)]},
   'flower bed':{name:'Flower bed', parts:[P('plate:4x2','Dark Brown',0,0,0),...[0,1,2,3].flatMap(x=>[0,1].map(z=>(x+z)%2?P('sprig1','Green',x,1,z):P('flower1','bloom',x,1,z))),
     ...[0,2].map(x=>P('flower1','bloom',x+1,2,0)),...[0,2].map(x=>P('flower1','bloom',x,2,1))]},
   'lemon tree':{name:'Lemon tree', parts:[P('roundplate2','Reddish Brown',0,0,0),P('round1','Reddish Brown',0,1,0),P('round1','Reddish Brown',0,4,0),P('plate:2x2','Dark Green',0,7,0),
-    LEAF('leaves43','Dark Green',0,8,0),P('roundplate1','Bright Light Yellow',0,9,0),LEAF('leaves43','Green',0,10,0,1),P('flower1','White',0,11,0),LEAF('leaves43','Dark Green',0,12,0),P('roundplate1','Bright Light Yellow',0,13,0)]},
+    LEAF('leaves43','Dark Green',0,8,0),P('roundplate1','Bright Light Yellow',0,9,0),LEAF('leaves43','Green',0,10,0,1),P('flower1','White',0,11,0),LEAF('leaves43','Dark Green',0,12,0),
+    P('roundplate1','Bright Light Yellow',0,13,0),P('roundplate1','Bright Light Yellow',1,13,-1),P('roundplate1','Bright Light Yellow',-1,13,1),P('sprig1','Green',2,13,0)]},
   'jacaranda':{name:'Jacaranda', parts:[P('roundbrick2','Dark Brown',0,0,0),P('roundbrick2','Dark Brown',0,3,0),P('roundplate2','Green',0,6,0),
     LEAF('leaves65','Green',0,7,0),LEAF('leaves65','Medium Lavender',0,8,0,1),P('flower1','Medium Lavender',0,9,0),LEAF('leaves65','Medium Lavender',0,10,0),LEAF('leaves43','Lavender',0,11,0,1),
-    P('flower1','Medium Lavender',0,12,0),LEAF('leaves43','Medium Lavender',0,13,0),P('flower1','Lavender',0,14,0)]},
+    P('flower1','Medium Lavender',0,12,0),LEAF('leaves43','Medium Lavender',0,13,0),P('flower1','Lavender',0,14,0),P('flower1','Lavender',-1,14,-1),P('flower1','Medium Lavender',2,14,1),P('flower1','Lavender',-1,14,1)]},
 };
 
 // Roof and yard fixtures for the "fixture" op, placed like plants (on studs, from the corner stud).
@@ -139,11 +150,12 @@ function makePart(def,x,y,z,rot,color,meta){
       for(let q=leg?0:def.h-def.archTop;q<def.h;q++) occ.push([cx,cz,y+q]);
       if(leg) sockets.push([cx,cz]); studs.push([cx,cz]); }
   } else {
-    const at=def.at?(rot%2?[def.at[1],def.at[0]]:def.at):null;
+    const tr=c=>rot%2?[c[1],c[0]]:c, at=def.at?tr(def.at):null, tips=def.tips?new Set(def.tips.map(c=>tr(c).join())):null;
     for(let i=0;i<sw;i++) for(let j=0;j<sd;j++){ const cx=x+i, cz=z+j;
       for(let q=0;q<def.h;q++) occ.push([cx,cz,y+q]);
-      if(at&&(i!==at[0]||j!==at[1])) continue;
-      sockets.push([cx,cz]); if(def.studs!==false) studs.push([cx,cz]); }
+      if(def.clip) continue; // held by a clip on a bar, not by studs
+      if(tips?tips.has(i+','+j):def.studs!==false&&(!at||(i===at[0]&&j===at[1]))) studs.push([cx,cz]);
+      if(!at||(i===at[0]&&j===at[1])) sockets.push([cx,cz]); }
   }
   p.occ=occ; p.sockets=sockets; p.studs=studs; p.studSet=new Set(studs.map(s=>s[0]+','+s[1]));
   return p;
@@ -518,7 +530,8 @@ function compile(design){
         const si=subs.length; subs.push({name:op.name, phase:op.phase, copies:op.copies.length, op:i, partIds:[]});
         op.copies.forEach((c,ci)=>op.parts.forEach((pp,pi)=>{
           const q=place(pp.part,c[0]+pp.at[0],c[1]+pp.at[1],c[2]+pp.at[2],pp.rot||0,pp.color,Object.assign({},meta,{sub:si,copy:ci,tpl:pi}),true);
-          if(q){ if(pp.dir) q.dir=pp.dir; subs[si].partIds.push(q.id); } }));
+          if(q){ if(pp.dir) q.dir=pp.dir; if(pp.on!==undefined){ const h=subs[si].partIds.map(id=>parts[id-1]).find(o=>o.copy===ci&&o.tpl===pp.on); if(h) q.mount=[h.id]; }
+            subs[si].partIds.push(q.id); } }));
         break; }
       case 'detail': {
         const kind=String(op.kind||'').toLowerCase(), FACE={N:[0,-1],S:[0,1],E:[1,0],W:[-1,0]};
@@ -545,7 +558,8 @@ function compile(design){
         const si=subs.length; subs.push({name:def.name, phase:op.phase, copies:op.at.length, op:i, partIds:[]});
         op.at.forEach((c,ci)=>def.parts.forEach((pp,pi)=>{
           const q=place(pp.part,c[0]+pp.at[0],c[1]+pp.at[1],c[2]+pp.at[2],pp.rot||0,pp.color==='bloom'?(op.bloom||'Bright Pink'):pp.color,Object.assign({},meta,{sub:si,copy:ci,tpl:pi}),true);
-          if(q){ if(pp.dir) q.dir=pp.dir; subs[si].partIds.push(q.id); } }));
+          if(q){ if(pp.dir) q.dir=pp.dir; if(pp.on!==undefined){ const h=subs[si].partIds.map(id=>parts[id-1]).find(o=>o.copy===ci&&o.tpl===pp.on); if(h) q.mount=[h.id]; }
+            subs[si].partIds.push(q.id); } }));
         break; }
       default: errors.push({msg:`Unknown operation "${op.op}"`, op:i});
     }
