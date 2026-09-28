@@ -393,10 +393,19 @@ let xml='';
 function renderParts(){
   const rows=R.inventory.slice().sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true})||b.q-a.q);
   $('pLots').textContent=rows.length; $('pPieces').textContent=R.stats.pieces.toLocaleString(); $('pCost').textContent='$'+Math.round(R.stats.cost);
-  $('partsBody').innerHTML=rows.map(r=>`<tr><td><span class="sw" style="background:${COLORS[r.color].hex}"></span></td><td>${r.name}</td><td>${r.no}</td><td>${r.color}</td><td class="n">${r.q}</td></tr>`).join('');
+  // GoBricks (compatible bricks): its part number, or a dash where it doesn't make the part or color
+  const G=typeof SUPPLIERS!=='undefined'&&SUPPLIERS.gobricks, gds=r=>r.kind==='baseplate'?'any':(G&&G.parts[r.no]&&G.colors.includes(r.color)?G.parts[r.no]:'—');
+  $('partsBody').innerHTML=rows.map(r=>`<tr><td><span class="sw" style="background:${COLORS[r.color].hex}"></span></td><td>${r.name}</td><td>${r.no}</td><td>${G?gds(r):''}</td><td>${r.color}</td><td class="n">${r.q}</td></tr>`).join('');
+  const gap=G?rows.filter(r=>gds(r)==='—'):[], gp=gap.reduce((n,r)=>n+r.q,0);
+  $('gdsOrder').hidden=!G;
+  $('gdsNote').hidden=!G; if(G) $('gdsNote').innerHTML=`GoBricks makes compatible bricks at a fraction of the price. <b>Order from GoBricks</b> saves this list as a BrickLink XML file: upload it to their <a href="${G.order}" target="_blank" rel="noopener">part list tool</a>, which matches each part and offers substitutes for anything out of stock. `+
+    (gap.length?`It doesn't make ${gap.length} of these lots (${gp} piece${gp===1?'':'s'}: ${gap.slice(0,4).map(r=>r.name+' in '+r.color).join(', ')}${gap.length>4?', …':''}); get those from BrickLink.`:'It makes every part here.')+` The baseplate can be any compatible one. Check colors against a sample before a big order.`;
   xml='<INVENTORY>\n'+rows.map(r=>`  <ITEM><ITEMTYPE>P</ITEMTYPE><ITEMID>${r.no}</ITEMID><COLOR>${COLORS[r.color].bl}</COLOR><MINQTY>${r.q}</MINQTY></ITEM>`).join('\n')+'\n</INVENTORY>';
   $('xmlOut').hidden=true;
 }
+$('gdsOrder').onclick=()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([xml],{type:'application/xml'}));
+  a.download=((curDesign&&curDesign.name)||'brickhouse').replace(/[^\w.-]+/g,'-')+'-parts.xml'; document.body.appendChild(a); a.click(); a.remove();
+  window.open(SUPPLIERS.gobricks.order,'_blank','noopener'); };
 $('copyXml').onclick=async()=>{ const b=$('copyXml');
   try{ await navigator.clipboard.writeText(xml); b.textContent='Copied wanted list'; setTimeout(()=>b.textContent='Copy BrickLink wanted list',1800); }
   catch(e){ const t=$('xmlOut'); t.value=xml; t.hidden=false; t.select(); b.textContent='Select and copy below'; } };

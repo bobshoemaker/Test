@@ -203,9 +203,10 @@ textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-ra
           <div><b id="pPieces">0</b><span>pieces</span></div>
           <div><b id="pCost">$0</b><span>rough parts cost</span></div>
         </div>
-        <div class="row" style="margin-top:0"><button class="btn primary" id="copyXml">Copy BrickLink wanted list</button></div>
+        <div class="row" style="margin-top:0"><button class="btn primary" id="copyXml">Copy BrickLink wanted list</button><button class="btn" id="gdsOrder">Order from GoBricks</button></div>
+        <p class="note" id="gdsNote" hidden></p>
         <textarea class="xml" id="xmlOut" hidden readonly aria-label="BrickLink wanted list XML"></textarea>
-        <div class="tablewrap"><table><thead><tr><th></th><th>Part</th><th>No.</th><th>Color</th><th style="text-align:right">Qty</th></tr></thead><tbody id="partsBody"></tbody></table></div>
+        <div class="tablewrap"><table><thead><tr><th></th><th>Part</th><th>No.</th><th>GoBricks</th><th>Color</th><th style="text-align:right">Qty</th></tr></thead><tbody id="partsBody"></tbody></table></div>
         <p class="note">Cost uses placeholder per-piece prices by part type. Paste the wanted list into BrickLink for real quotes.</p>
         <p class="note">Part shapes (plants, slopes, rounds, windows, arches, fence): <a href="https://library.ldraw.org" target="_blank" rel="noopener">LDraw Parts Library</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>; part authors are listed in ldraw-parts.js. LEGO is a trademark of the LEGO Group, which does not sponsor or endorse this site.</p>
       </section>
@@ -241,6 +242,7 @@ textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-ra
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="/parts-availability.js"></script>
+<script src="/suppliers.js"></script>
 <script src="/engine.js"></script>
 <script src="/viewer/ldraw-parts.js"></script>
 <script src="/viewer/app.js"></script>

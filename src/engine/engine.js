@@ -155,6 +155,10 @@ const K3 = (x,z,p)=>x+','+z+','+p;
 const AVAIL=(typeof PART_AVAILABILITY!=='undefined')?PART_AVAILABILITY
   :(typeof require==='function'?(()=>{ try{ return require('./parts-availability.js').PART_AVAILABILITY; }catch(e){ return null; } })():null);
 const AVAIL_SETS=6, AVAIL_YEAR=2018;
+// Compatible-brick suppliers (src/engine/suppliers.js): a design with "supplier": "gobricks" is held to the
+// parts and colors that supplier makes (the baseplate may come from anywhere).
+const SUPPLY=(typeof SUPPLIERS!=='undefined')?SUPPLIERS
+  :(typeof require==='function'?(()=>{ try{ return require('./suppliers.js').SUPPLIERS; }catch(e){ return null; } })():null);
 const availOf=(no,color)=>{ const t=AVAIL&&AVAIL.parts[no]; if(!t) return null; const a=t[color]; return {sets:a?a[0]:0,last:a?a[1]:0}; };
 const easyToGet=(no,color)=>{ const a=availOf(no,color); return !a||(a.sets>=AVAIL_SETS&&a.last>=AVAIL_YEAR); };
 // the colors a part is easy to get in, most common first
@@ -890,6 +894,14 @@ function compile(design){
   let glassN=0;
   for(const p of parts){ add(p.no,p.name,p.color,p.cost,p.kind); if(p.glass){ add(p.glass.no,p.glass.name,'Trans-Clear',GLASS_COST,'glass'); glassN++; } }
   const inventory=[...lots.values()];
+  // a compatible-brick supplier: every part and color must be one it makes
+  if(design.supplier!=null){ const S=SUPPLY&&SUPPLY[design.supplier];
+    if(!S) errors.push({msg:`Unknown supplier "${design.supplier}"${SUPPLY?`; known: ${Object.keys(SUPPLY).join(', ')}`:''}`, op:null});
+    else for(const e of inventory){ if(e.kind==='baseplate') continue;
+      const noPart=!S.parts[e.no], noColor=!S.colors.includes(e.color); if(!noPart&&!noColor) continue;
+      const first=parts.find(p=>p.no===e.no&&p.color===e.color);
+      warnings.push({msg:noPart?`${e.name} (${e.no}) isn't made by ${S.name}: use another part${first&&(design.ops[first.op]||{}).op==='plant'?` (the ${(design.ops[first.op]||{}).kind} plant uses it; pick another plant)`:''}`
+        :`${S.name} doesn't make ${e.color}: use another color for ${e.name}`, op:first?first.op:null, part:first?first.id:undefined}); } }
   // parts that are hard to get in their color: few sets have included them, or none lately
   for(const e of inventory){ if(easyToGet(e.no,e.color)) continue;
     const a=availOf(e.no,e.color), alt=easyColors(e.no).slice(0,6), first=parts.find(p=>p.no===e.no&&p.color===e.color);
@@ -902,4 +914,4 @@ function compile(design){
   return {parts,steps,subs,errors,warnings,hints,joints,jn,inventory,occ,
     stats:{liftoff:(()=>{ const lo=new Map(); for(const p of parts) if(p.liftoff) lo.set(p.liftoff,Math.min(lo.has(p.liftoff)?lo.get(p.liftoff):1e9,p.y)); return [...lo].sort((a,b)=>b[1]-a[1]).map(e=>e[0]); })(),pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32}};
 }
-if(typeof module!=='undefined') module.exports={easyToGet,availOf,easyColors,AVAIL_SETS,AVAIL_YEAR,compile,COLORS,SPECIAL,SIZE_PARTS,PLANTS,FIXTURES};
+if(typeof module!=='undefined') module.exports={SUPPLY,easyToGet,availOf,easyColors,AVAIL_SETS,AVAIL_YEAR,compile,COLORS,SPECIAL,SIZE_PARTS,PLANTS,FIXTURES};

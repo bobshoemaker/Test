@@ -479,3 +479,14 @@ test('a roof beside a window keeps below its sill: slopes there become flat tile
     { op: 'fill', phase: 'w', kind: 'brick', color: 'White', rects: [[8, 11, 9, 11]], y: 18 }] });
   assert.match(blocked.warnings.map((w) => w.msg).join(' '), /stands in front of the w window at \(8, 10\)/);
 });
+
+test('a design held to GoBricks warns about parts and colors GoBricks does not make, and passes otherwise', () => {
+  const { SUPPLY } = engine;
+  assert.ok(SUPPLY.gobricks.parts['3001'] && SUPPLY.gobricks.colors.includes('Tan'));
+  const plants = (kind) => compile({ name: 'g', supplier: 'gobricks', plate: 48, phases: ['p'], ops: [{ op: 'plant', phase: 'p', kind, at: [[20, 0, 20]] }] });
+  assert.deepEqual(plants('shade tree').warnings, []);
+  assert.match(plants('palm').warnings.map((w) => w.msg).join(' '), /isn't made by GoBricks: use another part \(the palm plant uses it; pick another plant\)/);
+  const coral = compile({ name: 'c', supplier: 'gobricks', phases: ['p'], ops: [{ op: 'place', phase: 'p', part: 'flower1', color: 'Coral', at: [4, 0, 4] }] });
+  assert.match(coral.warnings[0].msg, /GoBricks doesn't make Coral/);
+  assert.match(compile({ name: 'x', supplier: 'acme', phases: ['p'], ops: [] }).errors[0].msg, /Unknown supplier "acme"; known: gobricks/);
+});

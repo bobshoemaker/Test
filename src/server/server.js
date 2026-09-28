@@ -47,6 +47,7 @@ const STATIC = {
   '/viewer/ldraw-parts.js': ['src/viewer/ldraw-parts.js', 'text/javascript; charset=utf-8'],
   '/engine.js': ['src/engine/engine.js', 'text/javascript; charset=utf-8'],
   '/parts-availability.js': ['src/engine/parts-availability.js', 'text/javascript; charset=utf-8'],
+  '/suppliers.js': ['src/engine/suppliers.js', 'text/javascript; charset=utf-8'],
 };
 
 function send(res, code, body, type = 'application/json; charset=utf-8') {

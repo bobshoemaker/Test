@@ -39,6 +39,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   color and when; a part in a color is easy to get with 6+ sets, the latest 2018 or later. The packer
   only uses such sizes, mixes only recolor into such colors, and the checker warns about any other
   part (naming colors it does come in). The plant and fixture libraries are held to it by tests.
+  A design with `"supplier": "gobricks"` is held to what GoBricks (compatible bricks) makes, from
+  `src/engine/suppliers.js` (built by `scripts/gobricks.js` from a CC0 LEGO-to-GDS table); the Parts
+  tab shows GDS numbers and saves the list for GoBricks' upload tool (webrick.com), which takes BrickLink XML.
   Dependency-free; runs in the browser (globals) and in Node (require).
 - `src/server/prompt.js`: `SPEC`, the design language written for Claude. It is the source of
   truth for what a design may contain. When you add an op, part or field to the engine,
@@ -116,7 +119,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   8-sided round primitives). The engine's stud layouts for those parts follow the LDraw files.
 - `scripts/`: `compile.js` (check a design), `design.js` (photos to design from the CLI),
   `bundle.js` (single-file HTML for sharing or publishing as a Claude artifact), `ldraw.js`,
-  `availability.js` (rebuild the availability table; rerun now and then as LEGO releases sets).
+  `availability.js` (rebuild the availability table; rerun now and then as LEGO releases sets),
+  `gobricks.js` (rebuild the GoBricks table).
 
 ## Commands
 
