@@ -394,7 +394,7 @@ let xml='';
 // price; on the server, a quote (/api/quote) adds today's price and stock, asked for when the Parts tab shows
 const GB=typeof SUPPLIERS!=='undefined'&&SUPPLIERS.gobricks;
 let gq={key:null,q:null,busy:false,err:null};
-const gdsLots=()=>R.inventory.filter(e=>e.kind!=='baseplate').map(e=>({no:e.no,color:e.color,q:e.q,name:e.name}));
+const gdsLots=()=>R.inventory.map(e=>({no:e.no,color:e.color,q:e.q,name:e.name}));
 const lotsKey=lots=>JSON.stringify(lots.map(l=>[l.no,l.color,l.q]));
 const yuan=v=>'¥'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 const usd=v=>'$'+Math.round(v/((health&&health.cnyPerUsd)||7.2)).toLocaleString();
@@ -412,26 +412,29 @@ function renderParts(){
   const live=GB&&gq.q&&gq.key===lotsKey(gdsLots())?gq.q:null, K=r=>r.no+'|'+r.color;
   const livePrice=new Map(live?live.items.map(i=>[K(i),i.price]):[]), oos=new Set(live?live.outOfStock.map(K):[]);
   const each=r=>live?(livePrice.has(K(r))?livePrice.get(K(r)):null):(GB&&GB.made[r.no]?GB.made[r.no][r.color]:null);
-  const gdsNo=r=>r.kind==='baseplate'?'any':(supplierNo(GB,r.no,r.color)||'—');
-  const priceCell=r=>{ if(r.kind==='baseplate') return ''; const p=each(r); if(p!=null) return `<span title="${yuan(p)} each">${yuan(p*r.q)}</span>`;
-    return oos.has(K(r))?'out of stock':'—'; };
+  const gdsNo=r=>supplierNo(GB,r.no,r.color)||(r.kind==='baseplate'?'not at GoBricks':'—');
+  const priceCell=r=>{ const p=each(r); if(p!=null) return `<span title="${yuan(p)} each">${yuan(p*r.q)}</span>`;
+    return oos.has(K(r))?'out of stock':r.kind==='baseplate'?'not sold':'—'; };
   $('gdsHead').hidden=!GB;
   $('partsBody').innerHTML=rows.map(r=>`<tr><td><span class="sw" style="background:${COLORS[r.color].hex}"></span></td><td>${r.name}</td><td>${r.no}${GB?`<small class="gds" title="GoBricks part number">${gdsNo(r)}</small>`:''}</td><td>${r.color}</td><td class="n">${r.q}</td>${GB?`<td class="yuan">${priceCell(r)}</td>`:''}</tr>`).join('');
   $('gdsOrder').hidden=!GB; $('gdsNote').hidden=!GB; $('pGdsBox').hidden=!GB;
   if(GB){
     const gap=rows.filter(r=>r.kind!=='baseplate'&&!supplierNo(GB,r.no,r.color)), gp=gap.reduce((n,r)=>n+r.q,0);
-    const est=rows.reduce((s,r)=>s+(r.kind!=='baseplate'&&GB.made[r.no]&&GB.made[r.no][r.color]!=null?r.q*GB.made[r.no][r.color]:0),0);
+    const est=rows.reduce((s,r)=>s+(GB.made[r.no]&&GB.made[r.no][r.color]!=null?r.q*GB.made[r.no][r.color]:0),0);
     const total=live?live.total:est;
+    // GoBricks may not sell the baseplate (it had no green 32 x 32 or 48 x 48 on sale when last checked)
+    const plate=rows.find(r=>r.kind==='baseplate'), noPlate=plate&&each(plate)==null;
     $('pGds').textContent=yuan(total);
-    $('pGdsLabel').textContent=live?`GoBricks today, about ${usd(total)}`:gq.busy?`GoBricks, checking today's price…`:`GoBricks catalog, about ${usd(total)}`;
+    $('pGdsLabel').textContent=(live?`GoBricks today, about ${usd(total)}`:gq.busy?`GoBricks, checking today's price…`:`GoBricks catalog, about ${usd(total)}`)+(noPlate?', no baseplate':'');
     const list=(a,f)=>a.slice(0,4).map(f).join(', ')+(a.length>4?', …':'');
     const says=live?`GoBricks quoted ${yuan(live.total)} (about ${usd(live.total)}) for the ${live.pieces.toLocaleString()} pieces it has in stock today, before shipping.`+
         (live.outOfStock.length?` Out of stock right now: ${list(live.outOfStock,i=>esc(`${i.name} in ${i.color} (${i.q})`))}; their tool offers substitutes.`:'')+
-        (live.notMade.length?` It doesn't make ${list(live.notMade,i=>esc(`${i.name} in ${i.color} (${i.q})`))}.`:'')
+        (live.notMade.filter(i=>!plate||i.no!==plate.no).length?` It doesn't make ${list(live.notMade.filter(i=>!plate||i.no!==plate.no),i=>esc(`${i.name} in ${i.color} (${i.q})`))}.`:'')
       :`At GoBricks' catalog prices on ${GB.asOf} these parts come to about ${yuan(est)} (about ${usd(est)}) before shipping; `+
         (gq.err?`today's quote didn't come back (${esc(gq.err)}).`:health&&health.quote?`checking today's price and stock…`:`the Brickhouse server checks today's price and stock.`)+
         (gap.length?` It doesn't make ${gap.length} of these lots (${gp} piece${gp===1?'':'s'}: ${list(gap,r=>r.name+' in '+r.color)}); get those from BrickLink, or hold the design to GoBricks ("supplier": "gobricks") and it uses only what GoBricks makes.`:' It makes every part here.');
-    $('gdsNote').innerHTML=`GoBricks makes compatible bricks at a fraction of the price. ${says} <b>Order from GoBricks</b> saves this list as a BrickLink XML file for their <a href="${GB.order}" target="_blank" rel="noopener">part list tool</a>. The baseplate can be any compatible one. Check colors against a sample before a big order.`;
+    $('gdsNote').innerHTML=`GoBricks makes compatible bricks at a fraction of the price. ${says} <b>Order from GoBricks</b> saves this list as a BrickLink XML file for their <a href="${GB.order}" target="_blank" rel="noopener">part list tool</a>. `+
+      (noPlate?`GoBricks doesn't sell the ${plate.name.toLowerCase()} in ${plate.color} right now, so the total leaves it out: any compatible one fits, from LEGO or another brand. `:'')+`Check colors against a sample before a big order.`;
     if(!$('pane-parts').hidden) fetchQuote();
   }
   xml='<INVENTORY>\n'+rows.map(r=>`  <ITEM><ITEMTYPE>P</ITEMTYPE><ITEMID>${r.no}</ITEMID><COLOR>${COLORS[r.color].bl}</COLOR><MINQTY>${r.q}</MINQTY></ITEM>`).join('\n')+'\n</INVENTORY>';

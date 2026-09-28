@@ -25,7 +25,7 @@ test('the matcher gets LEGO design numbers and LDraw colors', () => {
 
 test('a quote maps the reply back to our parts: in stock with prices, out of stock, not made', async () => {
   const calls = [], q = await quote([...lots, { no: '3811', color: 'Green', q: 1, kind: 'baseplate' }], { fetchImpl: fakeFetch(calls) });
-  assert.equal(calls[0].testList.length, 4); // the baseplate isn't asked about
+  assert.equal(calls[0].testList.length, 5); // the baseplate is asked about too
   assert.deepEqual(q.items, [{ no: '3008', color: 'Tan', gds: 'GDS-536-031', price: 0.71, q: 62 }, { no: '4589', color: 'Sand Green', gds: 'GDS-606-048', price: 0.1, q: 6 }]);
   assert.equal(q.total, 44.62); assert.equal(q.pieces, 68); assert.equal(q.currency, 'CNY');
   assert.deepEqual(q.outOfStock, [{ no: '60603', name: 'Glass 1 x 4 x 3', color: 'Trans-Clear', q: 3, gds: 'GDS-878-180' }]);

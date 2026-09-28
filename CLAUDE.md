@@ -186,6 +186,8 @@ before changing API parameters.
   documented API: ask GoBricks (support@webrick.com) before customers rely on it. Prices come back in
   yuan (the reply names no currency), before shipping; the dollar figure uses a fixed rate. Under a
   supplier the engine warns about what it can't get; Claude, not the engine, swaps the part or color.
+  GoBricks sold no green baseplate when the table was built (its 32 x 32 was off the shelf, its 48 x 48 only
+  in other colors), so the Parts tab leaves the baseplate out of the GoBricks total and says so.
 - Plain bricks, plates and tiles are drawn as boxes with studs (no underside or logo). Sideways building is limited to side-stud bricks
   in wall openings with a few details hung on them (lantern, house number, plaque, vent); mounted
   parts are drawn as small blocks.

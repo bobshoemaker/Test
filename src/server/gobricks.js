@@ -46,7 +46,7 @@ function readReply(reply, lots) {
 
 // A quote for an engine inventory [{no, name, color, q, kind}]: what GoBricks can supply now and at what price.
 async function quote(inventory, opts = {}) {
-  const lots = inventory.filter((e) => e.kind !== 'baseplate').map((e) => ({ no: e.no, color: e.color, q: e.q, name: e.name }));
+  const lots = inventory.map((e) => ({ no: e.no, color: e.color, q: e.q, name: e.name }));
   const r = readReply(await match(lots, opts), lots);
   const cost = r.made.reduce((s, i) => s + i.q * (i.price || 0), 0), pieces = r.made.reduce((s, i) => s + i.q, 0);
   const name = (x) => (lots.find((l) => l.no === x.no && l.color === x.color) || {}).name || x.name || x.no;
@@ -55,7 +55,6 @@ async function quote(inventory, opts = {}) {
     items: r.made.map((i) => ({ no: i.no, color: i.color, gds: i.gds, price: i.price, q: i.q })),
     outOfStock: r.outOfStock.map((i) => ({ no: i.no, name: name(i), color: i.color, q: i.q, gds: i.gds })),
     notMade: r.notMade.map((i) => ({ no: i.no, name: name(i), color: i.color, q: i.q })),
-    baseplate: 'not included; any compatible baseplate',
   };
 }
 

@@ -27,23 +27,29 @@ async function matched(lots) {
 }
 
 (async () => {
-  const { SIZE_PARTS, SPECIAL, COLORS } = require('../src/engine/engine.js');
+  const { SIZE_PARTS, SPECIAL, COLORS, BASEPLATES } = require('../src/engine/engine.js');
   const ours = new Set();
   for (const kind of Object.values(SIZE_PARTS)) for (const no of Object.values(kind)) ours.add(no);
   for (const s of Object.values(SPECIAL)) { ours.add(s.no); if (s.glass) ours.add(s.glass); }
   const colors = Object.keys(COLORS).filter((c) => LDRAW_COLOR[c] !== undefined);
   const lots = [...ours].flatMap((no) => colors.map((color) => ({ no, color, q: 1 })));
+  // the baseplates, in their own color only, asked about after the parts (so earlier replies stay cached)
+  const plates = Object.values(BASEPLATES).map((b) => ({ no: b.no, color: b.color, q: 1 }));
+  for (const b of plates) ours.add(b.no);
   // made: part -> color -> catalog price; a GDS number is the part's number and the color's code
   // (GDS-536 in Tan, 031, is GDS-536-031). Out of stock today still counts as made.
   const made = {}, gdsOf = {}, colorCode = {};
   let asked = 0;
-  for (let k = 0; k * BATCH < lots.length; k++) {
-    const batch = lots.slice(k * BATCH, (k + 1) * BATCH), r = readReply(await matched(batch), batch);
+  const batches = [];
+  for (let k = 0; k * BATCH < lots.length; k++) batches.push(lots.slice(k * BATCH, (k + 1) * BATCH));
+  batches.push(plates);
+  for (const batch of batches) {
+    const r = readReply(await matched(batch), batch);
     asked += batch.length;
     for (const i of [...r.made, ...r.outOfStock]) { const m = /^(GDS-\d+)-(\d+)$/.exec(i.gds || ''); if (!m || !i.color) continue;
       (made[i.no] = made[i.no] || {})[i.color] = i.price;
       gdsOf[i.no] = gdsOf[i.no] || m[1]; colorCode[i.color] = colorCode[i.color] || m[2]; }
-    process.stdout.write(`\r${asked} of ${lots.length} asked`);
+    process.stdout.write(`\r${asked} of ${lots.length + plates.length} asked`);
   }
   console.log();
   const parts = Object.fromEntries([...ours].filter((no) => gdsOf[no]).map((no) => [no, gdsOf[no]]));
@@ -58,6 +64,6 @@ const SUPPLIERS = ${JSON.stringify({ gobricks: { name: 'GoBricks', asOf, currenc
 if (typeof module !== 'undefined') module.exports = { SUPPLIERS };
 `);
   const n = Object.values(made).reduce((t, m) => t + Object.keys(m).length, 0);
-  console.log(`Wrote ${path.relative(ROOT, OUT)} (${Math.round(fs.statSync(OUT).size / 1024)} KB): ${n} of ${lots.length} part-colors made, ${Object.keys(made).length} of ${ours.size} parts in some color.`);
+  console.log(`Wrote ${path.relative(ROOT, OUT)} (${Math.round(fs.statSync(OUT).size / 1024)} KB): ${n} of ${lots.length + plates.length} part-colors made, ${Object.keys(made).length} of ${ours.size} parts in some color.`);
   console.log(`Not made in any palette color: ${[...ours].filter((no) => !made[no]).join(', ') || 'none'}`);
 })().catch((e) => { console.error(e.message); process.exit(1); });
