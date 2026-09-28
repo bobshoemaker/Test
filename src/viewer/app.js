@@ -49,7 +49,8 @@ const base=new THREE.Mesh(new THREE.BoxGeometry(32,0.14,32),new THREE.MeshLamber
 base.position.set(0,-0.07,0); base.receiveShadow=true; scene.add(base);
 
 // ---------- state ----------
-let R=null, root=null, inst=[], specials=[], studs=null, studRecs=[], meshes=[];
+let R=null, root=null, inst=[], specials=[], studs=null, studRecs=[], meshes=[], recOf=new Map(), studsOf=new Map();
+const anims=new Map(); // part id -> {t0, dur, from, to, spin, ease, hideBefore, shrink}: bricks in motion
 let stepIdx=0, showAll=true, stress=false, mode='main', lifted=0; // lift-off groups taken off, top first
 let DESIGN_TEXT='';
 
@@ -61,25 +62,26 @@ function makeInstanced(geo,mat,list,cast){ const m=new THREE.InstancedMesh(geo,m
 
 function buildScene(){
   if(root){ scene.remove(root); meshes.forEach(m=>m.dispose&&m.dispose()); specials.forEach(s=>s.mats.forEach(o=>o.mat.dispose())); }
-  root=new THREE.Group(); scene.add(root); inst=[]; specials=[]; meshes=[]; studRecs=[];
+  root=new THREE.Group(); scene.add(root); inst=[]; specials=[]; meshes=[]; studRecs=[]; anims.clear(); recOf=new Map(); studsOf=new Map();
   const boxO=[], boxT=[], ch=[], cyl=[];
   for(const p of R.parts){
     const cx=p.x+p.w/2-OFF, cz=p.z+p.d/2-OFF, y0=p.y*PH, hh=p.h*PH;
     if(p.shape==='box'||p.shape==='cyl'){
       tmp.rotation.set(0,0,0); tmp.position.set(cx,y0+hh/2,cz);
       if(p.shape==='box') tmp.scale.set(p.w-0.035,hh-0.018,p.d-0.035); else tmp.scale.set(p.diam,hh-0.018,p.diam);
-      tmp.updateMatrix(); const r={p,m:tmp.matrix.clone()}; (p.shape==='cyl'?cyl:(p.color.startsWith('Trans-')?boxT:boxO)).push(r); inst.push(r);
+      tmp.updateMatrix(); const r={p,m:tmp.matrix.clone()}; (p.shape==='cyl'?cyl:(p.color.startsWith('Trans-')?boxT:boxO)).push(r); inst.push(r); recOf.set(p.id,r);
     } else if(p.shape==='cheese'){
       tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,{S:0,N:Math.PI,E:Math.PI/2,W:-Math.PI/2}[p.dir]||0,0);
-      tmp.updateMatrix(); const r={p,m:tmp.matrix.clone()}; ch.push(r); inst.push(r);
-    } else specials.push(makeSpecial(p));
+      tmp.updateMatrix(); const r={p,m:tmp.matrix.clone()}; ch.push(r); inst.push(r); recOf.set(p.id,r);
+    } else { const sp=makeSpecial(p); sp.pos0=sp.obj.position.clone(); sp.rot0=sp.obj.rotation.y; specials.push(sp); recOf.set(p.id,sp); }
   }
   makeInstanced(boxGeo,matO,boxO,true); makeInstanced(boxGeo,matT,boxT,false); makeInstanced(cheeseGeo,matW,ch,true); makeInstanced(cylGeo,matO,cyl,true);
   // studs
   for(const p of R.parts) for(const [x,z] of p.studs){ const top=p.y+p.h; const cov=R.occ.get(x+','+z+','+top); studRecs.push({p,x,z,top,cov}); }
   for(let x=0;x<PLATE;x++) for(let z=0;z<PLATE;z++){ const cov=R.occ.get(x+','+z+',0'); studRecs.push({p:null,x,z,top:0,cov}); }
   studs=new THREE.InstancedMesh(studGeo,matO,studRecs.length); studs.instanceMatrix.setUsage(THREE.DynamicDrawUsage); studs.receiveShadow=true;
-  studRecs.forEach((s,i)=>{ tmp.rotation.set(0,0,0); tmp.scale.set(1,1,1); tmp.position.set(s.x+0.5-OFF,s.top*PH+0.085,s.z+0.5-OFF); tmp.updateMatrix(); s.m=tmp.matrix.clone(); });
+  studRecs.forEach((s,i)=>{ tmp.rotation.set(0,0,0); tmp.scale.set(1,1,1); tmp.position.set(s.x+0.5-OFF,s.top*PH+0.085,s.z+0.5-OFF); tmp.updateMatrix(); s.m=tmp.matrix.clone();
+    if(s.p){ if(!studsOf.has(s.p.id)) studsOf.set(s.p.id,[]); studsOf.get(s.p.id).push(i); } });
   root.add(studs); meshes.push(studs);
 }
 
@@ -127,10 +129,10 @@ function colorFor(p,cur){
 function applyState(){
   if(!R) return;
   mode=(!showAll&&R.steps[stepIdx].kind==='sub')?'sub':'main';
-  for(const p of R.parts){ const [v,c]=partState(p); p._v=v; p._c=c; }
+  for(const p of R.parts){ const [v,c]=partState(p); p._v=v||anims.has(p.id); p._c=c; }
   for(const r of inst){ r.mesh.setMatrixAt(r.i,r.p._v?r.m:ZERO); r.mesh.setColorAt(r.i,colorFor(r.p,r.p._c)); }
   for(const m of meshes){ m.instanceMatrix.needsUpdate=true; if(m.instanceColor) m.instanceColor.needsUpdate=true; }
-  for(const s of specials){ s.obj.visible=s.p._v; for(const o of s.mats){ if(o.glass) continue; o.mat.color.copy(colorFor(s.p,s.p._c)); } }
+  for(const s of specials){ s.obj.visible=s.p._v; s.obj.position.copy(s.pos0); s.obj.rotation.set(0,s.rot0,0); s.obj.scale.setScalar(1); for(const o of s.mats){ if(o.glass) continue; o.mat.color.copy(colorFor(s.p,s.p._c)); } }
   const baseHex=COLORS['Green'].hex;
   studRecs.forEach((s,i)=>{
     const ownerV=s.p?s.p._v:(mode==='main'); const covered=s.cov&&R.parts[s.cov-1]._v;
@@ -138,6 +140,7 @@ function applyState(){
     studs.setColorAt(i, s.p?colorFor(s.p,s.p._c):col.copy(lin(baseHex)));
   });
   studs.instanceMatrix.needsUpdate=true; if(studs.instanceColor) studs.instanceColor.needsUpdate=true;
+  if(anims.size) animFrame(performance.now());
   base.visible=mode==='main';
   $('modebadge').style.display=mode==='sub'?'block':'none';
   if(mode==='sub'){ const s=R.steps[stepIdx], sub=R.subs[s.sub]; $('modebadge').textContent=`Sub-build: ${sub.name}`+(sub.copies>1?`, make ${sub.copies}`:''); }
@@ -180,13 +183,66 @@ function loop(){ requestAnimationFrame(loop);
   const k=reduceMotion?1:0.14; let moving=false;
   const ease=(a,b)=>{ const d=b-a; if(Math.abs(d)>1e-4){ moving=true; return a+d*k; } return b; };
   if(autoSpin){ goal.theta+=0.004; moving=true; }
+  if(anims.size){ animFrame(performance.now()); moving=true; }
   theta=ease(theta,goal.theta); phi=ease(phi,goal.phi); radius=ease(radius,goal.radius);
   const tx=ease(target.x,goal.t.x), ty=ease(target.y,goal.t.y), tz=ease(target.z,goal.t.z); target.set(tx,ty,tz);
   if(moving||dirty){ placeCam(); renderer.render(scene,camera); dirty=false; } }
 
+// ---------- bricks in motion ----------
+// Play build drops each step's bricks into place one after another; lifting a roof or floor sends its
+// bricks flying off one by one, top first, and putting it back flies them home, bottom first.
+const m4=new THREE.Matrix4(), m4b=new THREE.Matrix4(), eul=new THREE.Euler(), v3=new THREE.Vector3();
+const rnd=(id,k)=>(((id*2654435761)^(k*40503))>>>0)%1000/1000; // steady per brick, so a replay looks the same
+const easeIn=t=>t*t, easeOut=t=>1-(1-t)*(1-t);
+function centerOf(p){ return v3.set(p.x+p.w/2-OFF,(p.y+p.h/2)*PH,p.z+p.d/2-OFF); }
+function animFrame(now){
+  let done=false, touched=false;
+  for(const [id,a] of anims){
+    const t=(now-a.t0)/a.dur, p=R.parts[id-1], r=recOf.get(id); if(!r) { anims.delete(id); continue; }
+    if(t>=1){ anims.delete(id); done=true; continue; }
+    const e=t<0?0:a.ease(t), hide=t<0&&a.hideBefore;
+    const off=[0,1,2].map(k=>a.from[k]+(a.to[k]-a.from[k])*e), sc=a.shrink&&e>0.7?Math.max(0.05,1-(e-0.7)/0.3):1;
+    if(r.obj){ r.obj.visible=!hide&&p._v; r.obj.position.set(r.pos0.x+off[0],r.pos0.y+off[1],r.pos0.z+off[2]);
+      r.obj.rotation.set(a.spin[0]*e,r.rot0+a.spin[1]*e,a.spin[2]*e); r.obj.scale.setScalar(sc); continue; }
+    // rotate and shrink about the brick's own center, then move it
+    const c=centerOf(p); eul.set(a.spin[0]*e,a.spin[1]*e,a.spin[2]*e);
+    m4.makeTranslation(c.x+off[0],c.y+off[1],c.z+off[2]).multiply(m4b.makeRotationFromEuler(eul)).multiply(m4b.makeScale(sc,sc,sc)).multiply(m4b.makeTranslation(-c.x,-c.y,-c.z));
+    r.mesh.setMatrixAt(r.i,hide?ZERO:m4b.copy(m4).multiply(r.m)); r.mesh.instanceMatrix.needsUpdate=true;
+    for(const si of studsOf.get(id)||[]){ const sr=studRecs[si]; studs.setMatrixAt(si,hide?ZERO:m4b.copy(m4).multiply(sr.m)); touched=true; }
+  }
+  if(touched) studs.instanceMatrix.needsUpdate=true;
+  if(done) applyState(); // settled bricks go back to their resting state (or away, once lifted)
+  dirty=true;
+}
+function animate(list,make){ if(reduceMotion||!root) return; const now=performance.now(); list.forEach((p,k)=>anims.set(p.id,make(p,k,now))); dirty=true; }
+// a step's new bricks fall from above, one after another (a sub-build being placed comes down as one)
+function dropStep(s){
+  const ps=s.parts.map(id=>R.parts[id-1]).sort((a,b)=>a.y-b.y||a.id-b.id), whole=s.kind==='attach';
+  const gap=whole?0:Math.min(30,260/Math.max(1,ps.length)), h=whole?9:6;
+  animate(ps,(p,k,now)=>({t0:now+k*gap,dur:whole?520:340,from:[0,h+rnd(p.id,1)*2,0],to:[0,0,0],spin:[0,0,0],ease:easeIn,hideBefore:true}));
+}
+// a lift-off group's bricks fly up and out from its middle, one by one, top first (or home, bottom first)
+function flyGroups(names,home){
+  const ps=R.parts.filter(p=>names.includes(p.liftoff)); if(!ps.length) return;
+  let cx=0,cz=0; ps.forEach(p=>{ cx+=p.x+p.w/2; cz+=p.z+p.d/2; }); cx/=ps.length; cz/=ps.length;
+  ps.sort((a,b)=>home?(a.y-b.y||a.id-b.id):(b.y-a.y||a.id-b.id));
+  const gap=Math.min(14,1100/ps.length);
+  animate(ps,(p,k,now)=>{ let dx=p.x+p.w/2-cx, dz=p.z+p.d/2-cz; const L=Math.hypot(dx,dz)||1; dx/=L; dz/=L;
+    const out=8+rnd(p.id,2)*10, up=16+rnd(p.id,3)*14, far=[dx*out+(rnd(p.id,4)-0.5)*4,up,dz*out+(rnd(p.id,5)-0.5)*4];
+    const spin=[(rnd(p.id,6)-0.5)*5,(rnd(p.id,7)-0.5)*5,(rnd(p.id,8)-0.5)*5];
+    return home?{t0:now+k*gap,dur:620,from:far,to:[0,0,0],spin:spin.map(x=>-x),ease:easeOut,hideBefore:true}
+      :{t0:now+k*gap,dur:700,from:[0,0,0],to:far,spin,ease:easeIn,hideBefore:false,shrink:true}; });
+}
+
 // ---------- manual ----------
 const inventoryPages=()=>Math.ceil(R.inventory.length/24);
+let shownIdx=-1, shownAll=true;
 function renderStep(){
+  // one step on (Play skips sub-build steps: their bricks come down with the placed sub-build)
+  const forward=!showAll&&!shownAll&&stepIdx>shownIdx&&R.steps.slice(shownIdx+1,stepIdx).every(s=>s.kind==='sub'),
+    fromStart=!showAll&&shownAll&&R.steps.slice(0,stepIdx).every(s=>s.kind==='sub');
+  if(!forward&&!fromStart) anims.clear();
+  shownIdx=stepIdx; shownAll=showAll;
   const n=R.steps.length; $('slider').max=n-1; $('slider').value=showAll?n-1:stepIdx;
   const box=$('stepParts'); box.innerHTML=''; const tag=$('subTag');
   if(showAll||!n){ $('stepNum').textContent='✓'; $('stepTitle').textContent='Finished model'; $('stepOf').textContent=`${R.stats.pieces.toLocaleString()} pieces in ${n} steps`; tag.hidden=true;
@@ -203,6 +259,7 @@ function renderStep(){
         d.innerHTML=`<span class="sw" style="background:${COLORS[color].hex}"></span><span>${name}</span><span class="q">×${q}</span>`; box.appendChild(d); }); }
   }
   $('prev').disabled=!showAll&&stepIdx===0; $('next').disabled=showAll;
+  if((forward||fromStart)&&R.steps[stepIdx].kind!=='sub') dropStep(R.steps[stepIdx]);
   applyState(); updateShowLabel();
 }
 $('prev').onclick=()=>{ stopPlay(); if(showAll){ showAll=false; stepIdx=R.steps.length-1; } else stepIdx=Math.max(0,stepIdx-1); renderStep(); };
@@ -210,7 +267,10 @@ $('next').onclick=()=>{ stopPlay(); if(stepIdx>=R.steps.length-1) showAll=true; 
 $('slider').oninput=e=>{ stopPlay(); showAll=false; stepIdx=+e.target.value; renderStep(); };
 // Lift steps through the lift-off groups from the top (roof, then each floor), then puts them all back.
 function liftLabel(){ const L=R.stats.liftoff||[]; return lifted>=L.length?'Put back':`Lift ${L[lifted].toLowerCase()}`; }
-$('lift').onclick=()=>{ lifted=(lifted+1)%((R.stats.liftoff||[]).length+1); $('lift').setAttribute('aria-pressed',lifted>0); $('lift').textContent=liftLabel(); applyState(); };
+$('lift').onclick=()=>{ const L=R.stats.liftoff||[], was=lifted; lifted=(lifted+1)%(L.length+1);
+  $('lift').setAttribute('aria-pressed',lifted>0); $('lift').textContent=liftLabel();
+  if(lifted>was) flyGroups([L[was]],false); else flyGroups(L.slice(0,was),true);
+  applyState(); };
 $('startOver').onclick=()=>{ stopPlay(); showAll=false; stepIdx=0; renderStep(); };
 $('finished').onclick=()=>{ stopPlay(); showAll=true; stepIdx=R.steps.length-1; renderStep(); };
 
@@ -229,7 +289,7 @@ $('play').onclick=()=>{
   const order=R.steps.map((s,i)=>i).filter(i=>R.steps[i].kind!=='sub');
   let k=showAll?0:Math.max(0,order.findIndex(i=>i>=stepIdx)); showAll=false; $('play').textContent='Pause';
   const tick=()=>{ if(k>=order.length){ stopPlay(); showAll=true; renderStep(); return; } stepIdx=order[k++]; renderStep(); };
-  tick(); playTimer=setInterval(tick,reduceMotion?400:110);
+  tick(); playTimer=setInterval(tick,reduceMotion?400:130);
 };
 
 // ---------- parts ----------

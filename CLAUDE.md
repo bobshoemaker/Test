@@ -90,6 +90,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
 - `src/viewer/`: single-page three.js (r128, CDN) viewer: model, manual (sub-builds shown on
   their own), parts and BrickLink XML, design editor, photo upload, and "Lift roof" for designs
   whose roof ops carry `"liftoff"` (floors show underneath; the rooms too when there was a plan).
+  Play build drops each step's bricks into place; lifting sends a roof's or floor's bricks flying off
+  one by one and putting back flies them home (skipped with reduced motion).
 - `designs/`: hand-built reference designs. `634-unit-a.json` was built by hand from three
   listing photos; use it as the quality bar for photo-generated designs.
 - `scripts/`: `compile.js` (check a design), `design.js` (photos to design from the CLI),
