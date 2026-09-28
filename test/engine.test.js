@@ -350,3 +350,18 @@ test('each story lifts off the one below, top first, and subtle variation recolo
   const recolored = subtle.parts.filter((p, i) => p.color !== r.parts[i].color).length;
   assert.ok(recolored > 0 && recolored < subtle.parts.length * 0.12, `a few pieces recolored (${recolored})`);
 });
+
+test('an upper story whose walls pass over a room below still leaves that room fully floored', () => {
+  const ground = [[4, 4, 15, 4], [4, 15, 15, 15], [4, 5, 4, 14], [15, 5, 15, 14]];
+  const upper = [[4, 4, 15, 4], [4, 15, 15, 15], [4, 5, 4, 14], [15, 5, 15, 14], [10, 5, 10, 14]]; // an upstairs wall across the room below
+  const r = compile({ name: 'u', phases: ['g', 's'], ops: [
+    { op: 'walls', phase: 'g', color: 'White', courses: [0, 3], base: 0, segments: ground, seat: true },
+    { op: 'fill', phase: 's', kind: 'plate', color: 'White', rects: [[4, 4, 15, 15]], y: 13, liftoff: 'Up' },
+    { op: 'fill', phase: 's', kind: 'plate', color: 'Tan', rects: [[4, 4, 15, 15]], y: 14, liftoff: 'Up' },
+    { op: 'walls', phase: 's', color: 'White', courses: [4, 7], base: 15, segments: upper, liftoff: 'Up' },
+    { op: 'floor', phase: 'g', color: 'Tan' }] });
+  assert.deepEqual([r.errors.map((e) => e.msg), r.warnings.map((w) => w.msg)], [[], []]);
+  const floored = new Set(r.parts.filter((p) => p.op === 4).flatMap((p) => { const c = []; for (let a = 0; a < p.w; a++) for (let b = 0; b < p.d; b++) c.push(`${p.x + a},${p.z + b}`); return c; }));
+  assert.ok(floored.has('10,9'), 'the stud under the upstairs wall is floored too');
+  assert.equal(floored.size, 10 * 10);
+});

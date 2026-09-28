@@ -290,16 +290,20 @@ function compile(design){
         const qq=place('cheese',x,top,z,0,cc,meta,false); if(qq) qq.dir=best[0]; } }
   }
 
-  // inside the buildings: studs enclosed by walls ops at least a story (4 courses) tall
-  const INSIDE=(()=>{ const barrier=new Set(), inside=new Set();
+  // Inside the buildings at ground level: studs enclosed by walls (ops at least a story, 4 courses,
+  // tall) that stand on the ground, their column solid from the baseplate up to the wall (a foundation,
+  // a fill or walls below). An upper story's walls over a room below have air under them and don't
+  // count. Computed from what's placed so far: the floor op (listed last) and the final check call it.
+  function insideCells(){ const barrier=new Set(), inside=new Set();
     (design.ops||[]).forEach(op=>{ if(op.op!=='walls'||op.context||!Array.isArray(op.segments)||!op.courses||op.courses[1]-op.courses[0]<3) return;
-      try{ for(const sg of op.segments) for(const [x,z] of lineCells(sg)) barrier.add(x+','+z); }catch(e){} });
+      const base=op.base!==undefined?op.base:op.courses[0]*3;
+      try{ for(const sg of op.segments) for(const [x,z] of lineCells(sg)){ let solid=true; for(let y=0;y<base&&solid;y++) if(!occ.has(K3(x,z,y))) solid=false; if(solid) barrier.add(x+','+z); } }catch(e){} });
     if(!barrier.size) return inside;
     const seen=new Set(), q=[], inP=(x,z)=>x>=0&&z>=0&&x<BASE&&z<BASE;
     for(let t=0;t<BASE;t++) for(const [x,z] of [[t,0],[t,BASE-1],[0,t],[BASE-1,t]]){ const k=x+','+z; if(!barrier.has(k)&&!seen.has(k)){ seen.add(k); q.push([x,z]); } }
     while(q.length){ const [x,z]=q.pop(); for(const [dx,dz] of N4){ const nx=x+dx, nz=z+dz, k=nx+','+nz; if(inP(nx,nz)&&!barrier.has(k)&&!seen.has(k)){ seen.add(k); q.push([nx,nz]); } } }
     for(let x=0;x<BASE;x++) for(let z=0;z<BASE;z++){ const k=x+','+z; if(!barrier.has(k)&&!seen.has(k)) inside.add(k); }
-    return inside; })();
+    return inside; }
 
   (design.ops||[]).forEach((op,i)=>{
     const meta={op:i, phase:op.phase};
@@ -409,7 +413,7 @@ function compile(design){
         mixColors(pack(level,op.kind||'tile',op.y||0,meta),op,op.color,i); break; }
       case 'floor': { // every stud inside the buildings (within rects, if given) at height y
         const lim=op.rects?new Set(op.rects.flatMap(r=>rectCells(r)).map(([x,z])=>x+','+z)):null, level=new Map();
-        for(const k of INSIDE) if(!lim||lim.has(k)) level.set(k,op.color);
+        for(const k of insideCells()) if(!lim||lim.has(k)) level.set(k,op.color);
         if(!level.size) warnings.push({msg:'The floor op found no studs inside walls (it floors what walls at least 4 courses tall enclose)', op:i});
         pack(level,op.kind||'tile',op.y||0,meta); break; }
       case 'place': { const q=place(op.part,op.at[0],op.at[1],op.at[2],op.rot||0,op.color,meta,true); if(q&&op.dir) q.dir=op.dir; break; }
@@ -580,7 +584,7 @@ function compile(design){
     }
   }
   // the baseplate must not show inside a building (through windows, or under a lift-off roof)
-  { const bare=[...INSIDE].filter(k=>{ const [x,z]=k.split(',').map(Number); return !occ.has(K3(x,z,0)); });
+  { const bare=[...insideCells()].filter(k=>{ const [x,z]=k.split(',').map(Number); return !occ.has(K3(x,z,0)); });
     if(bare.length) warnings.push({msg:`The baseplate shows inside a building at ${bare.length} stud${bare.length===1?'':'s'}, from (${bare[0]}): cover the floors inside the walls with a floor op (tiles at y 0) so no green shows through windows or under a lift-off roof`, op:null}); }
   // lift-off roofs: ops sharing a "liftoff" name come off as one piece, so they must hold together
   // on their own and nothing else may rest on them
