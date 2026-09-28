@@ -210,7 +210,7 @@ function compile(design){
   const phases=design.phases||[]; const phaseIdx=new Map(phases.map((p,i)=>[p,i]));
   // wall bricks by cell and height (not course number: each walls op counts its courses from its own base)
   const wallCourse=new Map(); const wallPairs=new Set(); const wallCourses=new Set();
-  const abutEdges=[], doors=[];
+  const abutEdges=[], doors=[], windows=[];
 
   const commit=p=>{ p.id=parts.length+1; parts.push(p); for(const v of p.occ) occ.set(K3(v[0],v[1],v[2]),p.id); return p; };
   const blocked=p=>{ for(const v of p.occ){ if(v[0]<0||v[1]<0||v[0]>=BASE||v[1]>=BASE) return -1; const o=occ.get(K3(v[0],v[1],v[2])); if(o) return o; } return 0; };
@@ -360,6 +360,14 @@ function compile(design){
       if(!easyToGet(def.no,p.color)) continue;
       const q=makePart(def,p.x,p.y,p.z,0,p.color,{op:p.op,phase:p.phase}); q.id=p.id; parts[id-1]=q; } }
 
+  // A roof's slope on (x, z) at height y, unless it would rise into the glass of a window beside it: then a
+  // flat tile keeps the eave below the sill (or the plate stays bare if even a tile would reach the glass).
+  const windowBeside=(x,z,y0,y1)=>windows.some(w=>w.y0<y1&&y0<w.y1&&w.line.some(([wx,wz])=>w.along?(wx===x&&Math.abs(wz-z)===1):(wz===z&&Math.abs(wx-x)===1)));
+  function eaveSlope(x,y,z,color,meta){
+    if(!windowBeside(x,z,y,y+SPECIAL.cheese.h)) return place('cheese',x,y,z,0,color,meta,false);
+    if(!windowBeside(x,z,y,y+1)&&easyToGet(SIZE_PARTS.tile['1x1'],color)) place('tile:1x1',x,y,z,0,color,meta,false);
+    return null; }
+
   // "mix" on a fill or walls op: after packing, recolor a scattered few whole pieces of the op's main
   // color (a weathered roof, varied pavers or stucco). Whole pieces, so the structure doesn't change.
   // an op's own mix, or the design's default variation for its color (not for context stubs or seats)
@@ -413,7 +421,7 @@ function compile(design){
         let cc=op.cap||op.color;
         const rmix=mixOf(op); if(rmix&&rmix.length){ const hsh=((x*73856093)^(z*19349663)^(top*83492791))>>>0; let u=(hsh%1000)/1000;
           for(const [mc,fr] of rmix){ if(u<fr){ if(easyToGet(SPECIAL.cheese.no,mc)) cc=mc; break; } u-=fr; } }
-        const qq=place('cheese',x,top,z,0,cc,meta,false); if(qq) qq.dir=best[0]; } }
+        const qq=eaveSlope(x,top,z,cc,meta); if(qq) qq.dir=best[0]; } }
   }
 
   // Inside the buildings at ground level: studs enclosed by walls (ops at least a story, 4 courses,
@@ -453,6 +461,9 @@ function compile(design){
         const opens=(op.openings||[]).map(o=>{ const line=lineCells(o.cells); return Object.assign({},o,{line,set:new Set(line.map(c=>c[0]+','+c[1]))}); });
         for(const o of opens) for(const k of o.set) if(!cellSet.has(k)) errors.push({msg:`Opening cell (${k}) isn't on a wall`, op:i});
         const wbase=op.base!==undefined?op.base:op.courses[0]*3;
+        // windows (window parts or glass-colored fills), to keep roofs and walls from standing in front of them
+        for(const o of opens) if(o.kind===undefined&&((o.fill.part||'').startsWith('win')||(o.fill.color||'').startsWith('Trans-')))
+          windows.push({op:i, phase:op.phase, line:o.line, along:o.cells[1]===o.cells[3], y0:wbase+(o.courses[0]-op.courses[0])*3, y1:wbase+(o.courses[1]-op.courses[0]+1)*3});
         for(const o of opens) if(o.kind!==undefined){
           if(!DOOR_KINDS.includes(o.kind)) errors.push({msg:`Opening kind "${o.kind}" isn't one of ${DOOR_KINDS.join(', ')}`, op:i});
           else doors.push({op:i, kind:o.kind, line:o.line, along:o.cells[1]===o.cells[3], sill:wbase+(o.courses[0]-op.courses[0])*3, walls:cellSet}); }
@@ -576,7 +587,7 @@ function compile(design){
             let cc=op.cap||op.color;
             const rmix=mixOf(op); if(rmix&&rmix.length){ const hsh=((x*73856093)^(z*19349663)^(top*83492791))>>>0; let u=(hsh%1000)/1000;
               for(const [mc,fr] of rmix){ if(u<fr){ if(easyToGet(SPECIAL.cheese.no,mc)) cc=mc; break; } u-=fr; } }
-            const q=place('cheese',x,top,z,0,cc,meta,false); if(q) q.dir=best[0]; } }
+            const q=eaveSlope(x,top,z,cc,meta); if(q) q.dir=best[0]; } }
         break; }
       case 'band': {
         const [x0,z0,x1,z1]=op.rect, skip=op.skip||[];
@@ -763,6 +774,17 @@ function compile(design){
       if(bad.length) warnings.push({msg:`Roof ${e.side==='leaning'?'leans on another building':`abuts on its ${e.side} side`}, but the roof's stepped edge shows above what's beside it at ${bad.length} stud${bad.length===1?'':'s'}, from (${bad[0][0]}, ${bad[0][1]}). Give wings that meet one roof with "rects", or abut only against a wall that rises above the roof`, op:e.op});
     }
   }
+  // windows: nothing solid (a roof, its slopes, a wall, paving) stands just outside one, across its height
+  { const solid=new Set(['roof','walls','fill','band']), seen=new Set();
+    for(const w of windows){ let hit=null;
+      for(const [x,z] of w.line){ for(const s of [-1,1]){ const nx=w.along?x:x+s, nz=w.along?z+s:z;
+          for(let y=w.y0;y<w.y1&&!hit;y++){ const id=occ.get(K3(nx,nz,y)); if(!id) continue; const q=parts[id-1];
+            if(q.op===w.op||q.sub!==undefined&&!q.liftoff&&!q.assembly) continue; if(!solid.has((design.ops[q.op]||{}).op)) continue;
+            if(q.h===1&&q.y+1<=w.y0+1&&q.key!=='cheese') continue; // flat paving or a plate at the sill hides only the frame's foot
+            hit=q; } }
+        if(hit) break; }
+      if(hit){ const k=w.op+'|'+w.line[0].join(); if(seen.has(k)) continue; seen.add(k);
+        warnings.push({msg:`${hit.key==='cheese'?'A roof slope':hit.name} #${hit.id} at (${hit.x}, ${hit.y}, ${hit.z}) stands in front of the ${w.phase} window at (${w.line[0].join(', ')}), whose glass runs from height ${w.y0} to ${w.y1}: raise the window above the roof or ground beside it, or keep that below the sill`, op:w.op, part:hit.id}); } } }
   // doors: the ground outside a door meets its bottom, and a garage door has a drive to the edge of the plate
   if(doors.length){
     // ground is built of fills and walls; cars, plants and furniture stand on it, and fences block a drive

@@ -14,7 +14,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   that turns design ops into parts, the brick packer (staggers seams, repairs stacked seams),
   the checker (collisions, build-order support, sub-build attachment, connectivity to the
   baseplate, single-stud and seam warnings, doors that miss the ground in front of them and
-  garage doors with no drive to the edge of the plate, baseplate showing inside a building,
+  garage doors with no drive to the edge of the plate, a roof, wall or raised ground standing in front of a
+  window (roof slopes beside a window become flat tiles on their own, keeping the eave below the sill), baseplate showing inside a building,
   lift-off roofs that wouldn't come off in one piece or grip more than a few locating studs;
   a lift-off roof is built on its own like a sub-build and rests on tiled wall tops; an "assembly"
   such as a floor slab over a wide room is built the same way but stays put; a walls op with `"slab"`

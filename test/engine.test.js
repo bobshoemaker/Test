@@ -460,3 +460,20 @@ test('paving and floors show some stud texture: a share of the tiles become plat
   assert.equal(compile(drive({ liftoff: 'R', y: 0 })).parts.filter((p) => p.kind === 'plate').length, 0);
   assert.equal(compile(drive({ studs: 0.3 })).parts.filter((p) => p.kind === 'plate').length > plates.length, true);
 });
+
+test('a roof beside a window keeps below its sill: slopes there become flat tiles, and anything else in front is flagged', () => {
+  // a one-story wing roofed against a two-story wall whose upper window starts just above the wing's walls
+  const tall = { op: 'walls', phase: 'w', color: 'White', courses: [0, 7], base: 0, segments: [[4, 4, 14, 4], [4, 10, 14, 10], [4, 5, 4, 9], [14, 5, 14, 9]],
+    openings: [{ cells: [8, 10, 9, 10], courses: [6, 7], fill: { part: 'win22', color: 'White' } }] }; // glass from height 18, where the roof beside it tops out
+  const wing = { op: 'walls', phase: 'w', color: 'White', courses: [0, 3], base: 0, segments: [[4, 11, 14, 11], [4, 16, 14, 16], [4, 12, 4, 15], [14, 12, 14, 15]] };
+  const roof = { op: 'roof', phase: 'r', rect: [4, 11, 14, 16], base: 12, abut: ['N'], color: 'Dark Orange' };
+  const r = compile({ name: 'w', phases: ['w', 'r'], ops: [tall, wing, roof, { op: 'floor', phase: 'w', color: 'Tan' }] });
+  assert.deepEqual(r.warnings.filter((w) => /window/.test(w.msg)), []);
+  const beside = r.parts.filter((p) => p.op === 2 && p.x <= 9 && p.x + p.w > 8 && p.z === 11);
+  assert.ok(beside.length && beside.every((p) => p.key !== 'cheese' && p.y + p.h <= 18), 'no slope rises into the window');
+  assert.ok(r.parts.some((p) => p.op === 2 && p.key === 'cheese' && p.z === 11 && p.x === 11), 'slopes stay elsewhere along that edge');
+  // a wall built across the window's height outside it is flagged
+  const blocked = compile({ name: 'b', phases: ['w'], ops: [tall,
+    { op: 'fill', phase: 'w', kind: 'brick', color: 'White', rects: [[8, 11, 9, 11]], y: 18 }] });
+  assert.match(blocked.warnings.map((w) => w.msg).join(' '), /stands in front of the w window at \(8, 10\)/);
+});
