@@ -80,6 +80,8 @@ const FIXTURES = {
 
 const N4 = [[1,0],[-1,0],[0,1],[0,-1]];
 const DOOR_KINDS = ['door','garage door'];
+// what the model shows: a whole house, or one unit of a larger building cut from its neighbours
+const PROPERTY_TYPES = ['house','townhouse','condo'];
 const GRIP_MAX = 12; // studs a lift-off roof may grip: enough to locate it, few enough to lift it off
 const K3 = (x,z,p)=>x+','+z+','+p;
 
@@ -123,6 +125,7 @@ function compile(design){
   const t0=clock.now();
   const errors=[], warnings=[], parts=[], occ=new Map(), subs=[];
   if(!BASEPLATES[BASE]) errors.push({msg:`plate must be 32 or 48 (got ${design.plate})`, op:null});
+  if(design.property!=null&&!PROPERTY_TYPES.includes(design.property)) errors.push({msg:`property must be one of ${PROPERTY_TYPES.join(', ')} (got ${design.property})`, op:null});
   const phases=design.phases||[]; const phaseIdx=new Map(phases.map((p,i)=>[p,i]));
   // wall bricks by cell and height (not course number: each walls op counts its courses from its own base)
   const wallCourse=new Map(); const wallPairs=new Set(); const wallCourses=new Set();
@@ -274,7 +277,7 @@ function compile(design){
 
   // inside the buildings: studs enclosed by walls ops at least a story (4 courses) tall
   const INSIDE=(()=>{ const barrier=new Set(), inside=new Set();
-    (design.ops||[]).forEach(op=>{ if(op.op!=='walls'||!Array.isArray(op.segments)||!op.courses||op.courses[1]-op.courses[0]<3) return;
+    (design.ops||[]).forEach(op=>{ if(op.op!=='walls'||op.context||!Array.isArray(op.segments)||!op.courses||op.courses[1]-op.courses[0]<3) return;
       try{ for(const sg of op.segments) for(const [x,z] of lineCells(sg)) barrier.add(x+','+z); }catch(e){} });
     if(!barrier.size) return inside;
     const seen=new Set(), q=[], inP=(x,z)=>x>=0&&z>=0&&x<BASE&&z<BASE;
@@ -439,6 +442,7 @@ function compile(design){
     }catch(e){ errors.push({msg:e.message, op:i}); }
   });
 
+  for(const p of parts){ const op=design.ops[p.op]; if(op&&op.context) p.context=true; }
   // Lift-off roofs: ops sharing a "liftoff" name are built on their own, like a sub-build, and set
   // on the house as one piece (the manual shows them that way). They rest on the walls, gripping only
   // a few locating studs, so their plates needn't sit on studs as the house goes up.
@@ -540,7 +544,7 @@ function compile(design){
       for(let t=0;t<BASE;t++) for(const [x,z] of [[t,0],[t,BASE-1],[0,t],[BASE-1,t]]){ const k=x+','+z; if(!d.walls.has(k)&&!seen.has(k)){ seen.add(k); q.push([x,z]); } }
       while(q.length){ const [x,z]=q.pop(); for(const [dx,dz] of N4){ const nx=x+dx, nz=z+dz, k=nx+','+nz; if(inPlate(nx,nz)&&!d.walls.has(k)&&!seen.has(k)){ seen.add(k); q.push([nx,nz]); } } }
       outsides.set(d.walls,seen); return seen; };
-    for(const d of doors){
+    for(const d of doors){ if((design.ops[d.op]||{}).context) continue;
       const out=outsideOf(d), front=[];
       for(const [x,z] of d.line) for(const [dx,dz] of (d.along?[[0,1],[0,-1]]:[[1,0],[-1,0]])){ const nx=x+dx, nz=z+dz; if(out.has(nx+','+nz)) front.push([nx,nz]); }
       if(!front.length||front.length>d.line.length) continue; // a free-standing wall has no outside to check
@@ -588,7 +592,7 @@ function compile(design){
   // ---------- hints (not problems): big bare stretches of plain tile, such as a roof or patio ----------
   const hints=[];
   { const topAt=new Map(); for(const p of parts) for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++){ const k=(p.x+a)+','+(p.z+b), t=topAt.get(k); if(!t||p.y+p.h>t.y+t.h) topAt.set(k,p); }
-    const bare=k=>{ const p=topAt.get(k); return p&&p.kind==='tile'&&(p.sub===undefined||p.liftoff)?p:null; }, seen=new Set(), MIN=Math.round(BASE*BASE/16), SIDE=Math.ceil(BASE/5);
+    const bare=k=>{ const p=topAt.get(k); return p&&p.kind==='tile'&&!p.context&&(p.sub===undefined||p.liftoff)?p:null; }, seen=new Set(), MIN=Math.round(BASE*BASE/16), SIDE=Math.ceil(BASE/5);
     for(const [k0] of topAt){ if(seen.has(k0)||!bare(k0)) continue;
       const h=bare(k0).y+1, comp=[], q=[k0], colors=new Set(); let edge=false; seen.add(k0);
       while(q.length){ const k=q.pop(), [x,z]=k.split(',').map(Number); comp.push([x,z]); colors.add(bare(k).color); if(x===0||z===0||x===BASE-1||z===BASE-1) edge=true;

@@ -17,7 +17,10 @@ const SUFFIX = { blvd: 'boulevard', st: 'street', ave: 'avenue', av: 'avenue', d
 const norm = (s) => String(s || '').toLowerCase().replace(/[.,#]/g, ' ').split(/\s+/).filter(Boolean).map((w) => SUFFIX[w] || w).join(' ');
 // "3221 Griffith Park Blvd, Los Angeles, CA" -> number "3221", street "griffith park boulevard"
 const numberOf = (address) => (/^\s*(\d+[a-z]?)\s/i.exec(String(address || '')) || [])[1] || '';
-const streetOf = (address) => norm(String(address || '').split(',')[0].replace(/^\s*\d+[a-z]?\s+/i, ''));
+// A unit in the address ("#B", "Unit 5", "Apt 204", "Ste 3"): the home is likely one unit of a larger building.
+const UNIT_RE = /(?:#\s*|\b(?:unit|apt|apartment|ste|suite)\b\.?\s*#?\s*)([a-z0-9-]+)\s*$/i;
+const unitOf = (address) => (UNIT_RE.exec(String(address || '').split(',')[0].trim()) || [])[1] || '';
+const streetOf = (address) => norm(String(address || '').split(',')[0].trim().replace(UNIT_RE, '').replace(/^\s*\d+[a-z]?\s+/i, ''));
 
 // Local metres east/north of an origin, and back.
 function frame(origin) {
@@ -231,6 +234,8 @@ function terrainNote(t) {
   const b = t.building;
   // without elevations (USGS covers the US only) the note still gives the building, streets and lanes
   const parts = [`Terrain (${a ? 'USGS elevation data, public domain; ' : 'no elevation data here, so no slopes; '}streets${b ? ' and the building outline' : ''} from OpenStreetMap):`];
+  const ph = t.property;
+  if (ph && ph.multi) parts.push(`The home looks like one unit of a larger building (${ph.why.join('; ')}): model ${ph.unit ? `unit ${ph.unit}` : 'the unit'} itself and cut it cleanly from its neighbours, not the whole building; the building outline below covers every unit.`);
   if (b) parts.push(`the house's outline is about ${b.areaSqFt} sq ft${b.tags.height ? `, about ${Math.round(Number(b.tags.height) * 3.28)} ft tall` : ''}${b.tags.start_date ? `, built ${b.tags.start_date}` : ''}${b.outbuildings.length ? `, with ${b.outbuildings.length} outbuilding${b.outbuildings.length > 1 ? 's' : ''} on the lot (${b.outbuildings.map((o) => `${o.areaSqFt} sq ft`).join(', ')})` : ''}.`);
   if (s1) {
     const sideOf = (from, to) => { const { right } = streetFrame(from), d = [to.nearest[0] - from.from[0], to.nearest[1] - from.from[1]];
@@ -269,6 +274,18 @@ function terrainNote(t) {
   return parts.join(' ');
 }
 
+// Is the home one unit of a larger building? From the address's unit and the outline's tags
+// (building=apartments / terrace / semidetached_house, building:units). {unit, building, units, multi, why}
+const MULTI_TYPES = ['apartments', 'terrace', 'semidetached_house', 'residential', 'dormitory'];
+function propertyHint(address, building) {
+  const unit = unitOf(address), tags = (building && building.tags) || {}, units = Number(tags['building:units']) || null;
+  const why = [];
+  if (unit) why.push(`the address has unit ${unit}`);
+  if (MULTI_TYPES.includes(tags.building)) why.push(`OpenStreetMap tags the building "${tags.building}"`);
+  if (units > 1) why.push(`its outline has ${units} units`);
+  return { unit: unit || null, building: tags.building || null, units, multi: why.length > 0, why };
+}
+
 // Building, streets and slopes for a geocoded place. Returns {building, frontage, streets, samples, analysis, note}.
 async function lookupTerrain(place, address, { fetchImpl = fetch, plate = 32 } = {}) {
   let building = null;
@@ -276,13 +293,13 @@ async function lookupTerrain(place, address, { fetchImpl = fetch, plate = 32 } =
   const center = building ? building.center : place;
   const { streets, lanes } = await nearbyWays(center, { fetchImpl, outline: building && building.outline, outbuildings: building ? building.outbuildings : [] });
   const frontage = frontageStreets(streets, address);
-  if (!frontage.length) return { building, frontage, streets, lanes, samples: [], analysis: null, note: '' };
+  if (!frontage.length) return { building, frontage, streets, lanes, samples: [], analysis: null, note: '', property: propertyHint(address, building) };
   // ground at the house and at each outbuilding, to tell whether a garage sits lower or higher
   const { toXY } = frame(center), spots = [{ kind: 'bldg', id: 'house', xy: [0, 0] }];
   if (building) building.outbuildings.forEach((o, i) => { o.xy = toXY(o.center); spots.push({ kind: 'bldg', id: `outbuilding ${i}`, xy: o.xy }); });
   const samples = await elevations(center, [...samplePlan(frontage), ...spots], { fetchImpl });
   const groundFt = Object.fromEntries(samples.filter((p) => p.kind === 'bldg').map((p) => [p.id, p.ft]));
-  const t = { building, frontage, streets, lanes, groundFt, street: frontage[0], samples, plate, analysis: analyzeTerrain(samples, { plate }) };
+  const t = { building, frontage, streets, lanes, groundFt, street: frontage[0], samples, plate, analysis: analyzeTerrain(samples, { plate }), property: propertyHint(address, building) };
   t.note = terrainNote(t);
   return t;
 }
@@ -307,4 +324,4 @@ function outlineInput(t, { frontStreet = null } = {}) {
   };
 }
 
-module.exports = { outlineInput, lookupTerrain, findBuilding, nearbyStreets, nearbyWays, frontageStreets, pickStreet, samplePlan, analyzeTerrain, terrainNote, streetOf, numberOf, compass };
+module.exports = { propertyHint, unitOf, outlineInput, lookupTerrain, findBuilding, nearbyStreets, nearbyWays, frontageStreets, pickStreet, samplePlan, analyzeTerrain, terrainNote, streetOf, numberOf, compass };

@@ -263,7 +263,7 @@ function showDesign(d){
   curDesign=d; R=compile(d); lifted=false; $('lift').hidden=!(R.stats.liftoff&&R.stats.liftoff.length); $('lift').textContent='Lift roof'; $('lift').setAttribute('aria-pressed','false'); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,1,PLATE/32); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
   buildScene(); renderReport(); renderParts(); renderStep(); frame();
   $('title').textContent=d.name||'Brick house'; document.title=(d.name||'Brick house')+', brick model';
-  $('subline').textContent=(d.place?d.place+'. ':'')+'A closing-gift brick model with a full build manual.';
+  $('subline').textContent=(d.place?d.place+'. ':'')+(d.unit?`Unit ${d.unit}, cut from its building. `:'')+'A closing-gift brick model with a full build manual.';
   $('factsTitle').textContent=d.source==='photos'?'What the photos show':'From the listing';
   $('facts').innerHTML=(d.facts||[]).map(f=>`<li>${esc(f)}</li>`).join('');
   $('assumed').textContent=d.assumed||'';

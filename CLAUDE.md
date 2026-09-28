@@ -53,6 +53,12 @@ closing gift that realtors give clients: a brick model of the house they just bo
   plan, `footprintFromOutline` locks the walls to the house's building outline from the terrain
   lookup instead (squared to the grid, outbuildings as their own blocks, no doors). For 3221
   Griffith Park Blvd the county outline matched the plan's walls to about a stud. Pure and tested.
+- Attached homes and condos: a design sets `"property": "townhouse" | "condo"` and `"unit"`, and
+  models that unit in full, cut from its building: adjoining units are muted `"context": true` stubs
+  (exempt from the room and door checks), an upper-floor condo stands on a context plinth. The
+  terrain lookup flags a likely unit (a unit in the address, `building=apartments/terrace/...`,
+  `building:units` > 1), and then the walls are not locked to the whole building's outline; the
+  survey asks which unit it is.
 - `src/server/pipeline.js`: `prepareDesign`, the steps before Claude designs, shared by the server
   and `scripts/design.js` so the website and the CLI build every house the same way: an address
   adds the terrain facts to the notes; a floor plan locks the walls (read in the design loop);

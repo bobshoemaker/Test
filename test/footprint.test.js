@@ -124,3 +124,11 @@ test('a story is about 9 ft of courses at either scale', () => {
   assert.deepEqual(tall(), [0, 7], 'two stories of 4 courses at 2 ft per stud');
   assert.deepEqual(tall({ size: 48, ftPerStud: 1.5, frontYard: 3 }), [0, 9], 'two stories of 5 courses at 1.5 ft per stud');
 });
+
+test('a plan with no size labels is scaled from standard lengths, flagged as an estimate', () => {
+  const noSizes = { ...PLAN, rooms: PLAN.rooms.map(({ label, ...r }) => r), lengths: [{ what: 'two-car garage door', linePx: [20, 60, 180, 60], ft: 16 }, { what: 'garage depth', linePx: [0, 0, 0, 200], ft: 20 }] };
+  const L = layoutFootprint(noSizes);
+  assert.equal(L.scale.pxPerFt, 10);
+  assert.match(L.scale.estimated, /no size labels/);
+  assert.match(layoutFootprint({ ...noSizes, lengths: [] }).problems[0], /standard things/);
+});

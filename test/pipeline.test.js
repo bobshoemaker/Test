@@ -37,3 +37,19 @@ test('a failed lookup leaves the notes alone and says why', async () => {
   assert.equal(p.notes, 'n');
   assert.match(p.log.join(' '), /Address not found: nowhere/);
 });
+
+test('one unit of a larger building: not locked to the whole building outline, and the note says so', async () => {
+  const row = way({ building: 'terrace', 'building:units': '4', 'addr:housenumber': '5', 'addr:street': 'Elm Street' }, [[-20, -5], [20, -5], [20, 5], [-20, 5], [-20, -5]]);
+  const f = async (url) => {
+    if (url.includes('/api/interpreter')) {
+      const q = decodeURIComponent(new URL(url).searchParams.get('data'));
+      return { ok: true, json: async () => ({ elements: q.includes('[building]') ? [row] : [way({ name: 'Elm Street', highway: 'residential' }, [[25, -80], [25, 80]])] }) };
+    }
+    return { ok: true, json: async () => ({ value: 100 }) };
+  };
+  const p = await prepareDesign({ address: '5 Elm St #B, Springfield', geocode, fetchImpl: f });
+  assert.equal(p.locked, null);
+  assert.equal(p.terrain.property.unit, 'B');
+  assert.match(p.log.join(' '), /Walls not locked to the building outline: it looks like one unit of a larger building \(the address has unit B; OpenStreetMap tags the building "terrace"; its outline has 4 units\)/);
+  assert.match(p.notes, /model unit B itself and cut it cleanly from its neighbours/);
+});

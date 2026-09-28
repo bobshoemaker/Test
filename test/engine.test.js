@@ -278,3 +278,15 @@ test('"seat" tiles a wall top with four locating studs, so a lift-off roof one p
   const flat = compile({ name: 'f', phases: ['a', 'b'], ops: [walls('flat'), ...roof, { op: 'floor', phase: 'a', color: 'Tan' }] });
   assert.match(flat.errors.map((e) => e.msg).join(' '), /held on by 0 studs/);
 });
+
+test('a unit cut from its building: context stubs are exempt from room and door checks, and property is validated', () => {
+  const unit = { op: 'walls', phase: 'a', color: 'White', courses: [0, 3], base: 0, segments: [[10, 10, 17, 10], [10, 16, 17, 16], [10, 11, 10, 15], [17, 11, 17, 15]] };
+  const stub = { op: 'walls', phase: 'a', color: 'Light Bluish Gray', courses: [0, 3], base: 0, context: true, segments: [[18, 10, 19, 10], [18, 16, 19, 16], [19, 11, 19, 15]],
+    openings: [{ cells: [19, 12, 19, 13], courses: [0, 2], fill: { color: 'Light Bluish Gray' }, kind: 'door' }] };
+  const d = { name: 'u', property: 'townhouse', unit: 'B', phases: ['a'], ops: [unit, stub, { op: 'floor', phase: 'a', color: 'Tan' }] };
+  const r = compile(d);
+  assert.deepEqual(r.errors.map((e) => e.msg), []);
+  assert.deepEqual(r.warnings.map((w) => w.msg).filter((m) => /baseplate shows|door/.test(m)), []);
+  assert.ok(r.parts.filter((p) => p.op === 1).every((p) => p.context));
+  assert.match(compile({ ...d, property: 'castle' }).errors[0].msg, /property must be one of house, townhouse, condo/);
+});

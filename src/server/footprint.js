@@ -33,6 +33,13 @@ function calibrate(rooms) {
   return ratios.length ? { pxPerFt: median(ratios), rooms: per } : null;
 }
 
+// A plan with no size labels: the median px per ft of standard lengths (a garage door, a garage's depth).
+function calibrateLengths(lengths) {
+  const per = (lengths || []).filter((l) => Array.isArray(l.linePx) && l.linePx.length === 4 && l.ft > 0)
+    .map((l) => ({ name: l.what, pxPerFt: Math.hypot(l.linePx[2] - l.linePx[0], l.linePx[3] - l.linePx[1]) / l.ft })).filter((l) => l.pxPerFt > 0);
+  return per.length ? { pxPerFt: median(per.map((l) => l.pxPerFt)), rooms: per, estimated: true } : null;
+}
+
 const rectCells = ([x0, z0, x1, z1]) => {
   const out = [];
   for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) out.push([x, z]);
@@ -94,9 +101,10 @@ const DEFAULT_FILL = {
  */
 function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap = 2, frontYard = 0 } = {}) {
   const problems = [];
-  const cal = calibrate(fp.rooms);
-  if (!cal) return { problems: ['Give at least two rooms with size labels (like "14 x 20") and their rectPx so the plan can be scaled.'], blocks: [] };
-  if (cal.rooms.length < 2) problems.push('Only one labeled room came through; add another so the scale can be checked.');
+  // Scale from labeled rooms; failing that, from standard lengths the reader named (an estimate)
+  const cal = calibrate(fp.rooms) || calibrateLengths(fp.lengths);
+  if (!cal) return { problems: ['Give at least two rooms with size labels (like "14 x 20") and their rectPx so the plan can be scaled, or, if the plan has no sizes, two or three lengths of standard things (a garage door, a garage depth).'], blocks: [] };
+  if (!cal.estimated && cal.rooms.length < 2) problems.push('Only one labeled room came through; add another so the scale can be checked.');
   for (const r of cal.rooms) {
     const off = (r.pxPerFt - cal.pxPerFt) / cal.pxPerFt;
     if (Math.abs(off) > 0.12) problems.push(`${r.name} measures ${r.pxPerFt.toFixed(2)} px per ft, ${Math.round(off * 100)}% off the ${cal.pxPerFt.toFixed(2)} the other rooms agree on; check its rectPx.`);
@@ -219,7 +227,7 @@ function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap 
   const map = { a: R[0][0] / pps, c: R[0][1] / pps, e: -minX / pps + offX + 0.5, b: R[1][0] / pps, d: R[1][1] / pps, f: -minY / pps + offZ + 0.5 };
   for (const b of blocks) if (!b.cells.length) problems.push(`Block ${b.name} has no walls of its own; it sits inside an earlier block.`);
   return {
-    scale: { pxPerFt: Number(cal.pxPerFt.toFixed(3)), ftPerStud, rooms: cal.rooms.map((r) => ({ name: r.name, pxPerFt: Number(r.pxPerFt.toFixed(2)) })) },
+    scale: { pxPerFt: Number(cal.pxPerFt.toFixed(3)), ftPerStud, ...(cal.estimated ? { estimated: 'from standard lengths; the plan has no size labels' } : {}), rooms: cal.rooms.map((r) => ({ name: r.name, pxPerFt: Number(r.pxPerFt.toFixed(2)) })) },
     street,
     blocks: blocks.map((b) => ({ name: b.name, levels: b.levels, cellRects: b.cellRects, cells: b.cells, openings: b.openings, pulledForward: b.dz })),
     stairs, map, problems, source: 'plan', size,
