@@ -148,7 +148,11 @@ test('upper floors drawn beside the ground floor are moved onto it by their anch
   // The upper floor's walls overlap the ground floor's in plan but belong to their own floor.
   assert.ok(up.cells.some(([x, z]) => x === house.cellRects[0][0] && z === house.cellRects[0][1]));
   const op = skeletonOps(L).find((o) => o.block === 'Upper');
-  assert.deepEqual([op.courses, op.base], [[4, 7], 12]);
+  assert.deepEqual([op.courses, op.base, op.slab], [[4, 7], 14, true]);
+  // the ground floor and the jutting upper floor on its slab compile clean together
+  const ops = skeletonOps(L);
+  const r = compile({ name: 't', phases: ops.map((o) => o.phase), ops: [...ops, { op: 'floor', phase: 'House', color: 'Tan' }] });
+  assert.deepEqual([r.errors.map((e) => e.msg), r.warnings.map((w) => w.msg)], [[], []]);
   const noAnchor = layoutFootprint({ ...plan, anchors: [] });
   assert.match(noAnchor.problems.join(' '), /Floor 2 has blocks but no anchor/);
 });

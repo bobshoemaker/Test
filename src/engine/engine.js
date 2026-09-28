@@ -83,6 +83,8 @@ const DOOR_KINDS = ['door','garage door'];
 // what the model shows: a whole house, or one unit of a larger building cut from its neighbours
 const PROPERTY_TYPES = ['house','townhouse','condo'];
 const GRIP_MAX = 12;
+// how far (studs) a floor slab may hang out past what's under it before it needs a post or corbel
+const OVERHANG_MAX = 4;
 // "variation": "subtle" gives every walls, fill and roof op without its own "mix" one close color on a
 // few pieces, by material; "mix": [] on an op keeps it plain.
 const SUBTLE_MIX = { 'White':[['Light Gray',0.04]], 'Tan':[['Dark Tan',0.05]], 'Dark Tan':[['Tan',0.06]], 'Medium Nougat':[['Dark Tan',0.06]],
@@ -155,7 +157,7 @@ function compile(design){
   function pack(level,kind,y,meta,sizesFor){
     const h=H[kind], cells=[], lenOk=LEN_OK[kind];
     // a lift-off roof is built on its own, so its pieces needn't sit on studs below (it rests on tiles)
-    const floating=!!(meta&&design.ops&&design.ops[meta.op]&&(design.ops[meta.op].liftoff||design.ops[meta.op].assembly));
+    const floating=!!(meta&&(meta.slab||(design.ops&&design.ops[meta.op]&&(design.ops[meta.op].liftoff||design.ops[meta.op].assembly))));
     for(const [k,color] of level){ const [x,z]=k.split(',').map(Number);
       let ok=x>=0&&z>=0&&x<BASE&&z<BASE; for(let q=0;q<h&&ok;q++) if(occ.has(K3(x,z,y+q))) ok=false;
       if(ok) cells.push({x,z,color,k}); }
@@ -305,6 +307,16 @@ function compile(design){
     for(let x=0;x<BASE;x++) for(let z=0;z<BASE;z++){ const k=x+','+z; if(!barrier.has(k)&&!seen.has(k)) inside.add(k); }
     return inside; }
 
+  // the cells a set of cells encloses, with the set itself (the floor inside a ring of walls)
+  function enclosed(ring){ const inside=new Set(); if(!ring.size) return inside;
+    const pts=[...ring].map(k=>k.split(',').map(Number)), xs=pts.map(c=>c[0]), zs=pts.map(c=>c[1]);
+    const bx0=Math.min(...xs)-1, bx1=Math.max(...xs)+1, bz0=Math.min(...zs)-1, bz1=Math.max(...zs)+1;
+    const out=new Set([bx0+','+bz0]), q=[[bx0,bz0]];
+    while(q.length){ const [x,z]=q.pop(); for(const [dx,dz] of N4){ const nx=x+dx, nz=z+dz, k=nx+','+nz;
+      if(nx<bx0||nx>bx1||nz<bz0||nz>bz1||out.has(k)||ring.has(k)) continue; out.add(k); q.push([nx,nz]); } }
+    for(let x=bx0;x<=bx1;x++) for(let z=bz0;z<=bz1;z++) if(!out.has(x+','+z)) inside.add(x+','+z);
+    return inside; }
+
   (design.ops||[]).forEach((op,i)=>{
     const meta={op:i, phase:op.phase};
     if(op.phase===undefined || !phaseIdx.has(op.phase)){ errors.push({msg:`Step ${i+1} uses phase "${op.phase}", which isn't in the phase list`, op:i}); return; }
@@ -320,6 +332,41 @@ function compile(design){
         for(const o of opens) if(o.kind!==undefined){
           if(!DOOR_KINDS.includes(o.kind)) errors.push({msg:`Opening kind "${o.kind}" isn't one of ${DOOR_KINDS.join(', ')}`, op:i});
           else doors.push({op:i, kind:o.kind, line:o.line, along:o.cells[1]===o.cells[3], sill:wbase+(o.courses[0]-op.courses[0])*3, walls:cellSet}); }
+        // "slab": the story stands on its own floor, two layers of plates under its walls and everything
+        // they enclose (plus any extra "rects", a balcony), laid across each other's seams. It's built on
+        // its own and set on the story below like an assembly (or with the op's lift-off), so where the
+        // story juts out past the walls below, the slab carries it: overhangs need no brackets.
+        if(op.slab){ const sl=op.slab===true?{}:op.slab, scol=sl.color||op.color;
+          const area=enclosed(new Set(cellSet.keys()));
+          for(const r of sl.rects||[]) for(const [x,z] of rectCells(r)) area.add(x+','+z);
+          if(!COLORS[scol]) errors.push({msg:'Unknown color "'+scol+'"', op:i});
+          else if(wbase<2) errors.push({msg:`A slab goes under the walls, so its walls need a base of at least 2 (got ${wbase})`, op:i});
+          else {
+            const clash=[...area].filter(k=>{ const [x,z]=k.split(',').map(Number); return occ.has(K3(x,z,wbase-2))||occ.has(K3(x,z,wbase-1)); });
+            if(clash.length) errors.push({msg:`The slab under ${op.phase} (plates at y ${wbase-2} and ${wbase-1}) runs into what's already there at (${clash[0]})${clash.length>1?` and ${clash.length-1} more`:''}: end the story below at y ${wbase-2} (its top course, or seat tiles, under ${wbase-2})`, op:i});
+            else {
+              // with the op's own lift-off or assembly it goes with that; otherwise it's an assembly of its own
+              const smeta={op:i, phase:op.phase, slab:op.liftoff||op.assembly?true:`${op.phase} floor`};
+              const lv=new Map([...area].map(k=>[k,scol]));
+              for(const y of [wbase-2,wbase-1]) pack(lv,'plate',y,smeta);
+              // how far it hangs out: steps from each stud outside the outline of what's under it (a room
+              // below counts as under it; the slab spans that) to the nearest stud inside it
+              const under=new Set(); for(let x=0;x<BASE;x++) for(let z=0;z<BASE;z++) if(occ.has(K3(x,z,wbase-3))) under.add(x+','+z);
+              const below=enclosed(under), hold=new Set([...area].filter(k=>below.has(k)));
+              // a stretch of slab between two held studs (a post and a wall) spans; only what reaches past them hangs
+              for(let grew=true;grew;){ grew=false;
+                for(const [ax,az] of [[1,0],[0,1]]) for(const k of area){ const [x,z]=k.split(',').map(Number);
+                  if(area.has((x-ax)+','+(z-az))) continue; // walk each run of slab along x, then z, from its start
+                  const run=[]; for(let t=0;area.has((x+ax*t)+','+(z+az*t));t++) run.push((x+ax*t)+','+(z+az*t));
+                  const h=run.map((c,j)=>hold.has(c)?j:-1).filter(j=>j>=0);
+                  if(h.length>1) for(let j=h[0];j<=h[h.length-1];j++) if(!hold.has(run[j])){ hold.add(run[j]); grew=true; } } }
+              const held=[...hold];
+              const dist=new Map(held.map(k=>[k,0])), dq=[...held];
+              for(let h=0;h<dq.length;h++){ const [x,z]=dq[h].split(',').map(Number);
+                for(const [dx,dz] of N4){ const k=(x+dx)+','+(z+dz); if(area.has(k)&&!dist.has(k)){ dist.set(k,dist.get(dq[h])+1); dq.push(k); } } }
+              let far=null; for(const [k,d] of dist) if(!far||d>far[1]) far=[k,d];
+              if(far&&far[1]>OVERHANG_MAX) warnings.push({msg:`${op.phase} hangs ${far[1]} studs out past what's under it at (${far[0]}); a slab carries up to ${OVERHANG_MAX}: add a post or corbel under the far edge (a places op of bricks from the ground or a wall), or bring it back`, op:i});
+            } } }
         const trim=new Map();
         if(op.trim) for(const o of opens){ if(!o.fill.part) continue;
           const along=o.cells[1]===o.cells[3], L=o.line, first=L[0], last=L[L.length-1];
@@ -469,7 +516,7 @@ function compile(design){
   // its own, set on the walls, and other things may stand on it.
   const liftGroups=new Map(), asmGroups=new Map();
   for(const p of parts){ const op=design.ops[p.op]; if(!op||p.sub!==undefined) continue;
-    const [G,n]=op.liftoff?[liftGroups,String(op.liftoff)]:op.assembly?[asmGroups,String(op.assembly)]:[null];
+    const [G,n]=op.liftoff?[liftGroups,String(op.liftoff)]:op.assembly?[asmGroups,String(op.assembly)]:typeof p.slab==='string'?[asmGroups,p.slab]:[null];
     if(G){ if(!G.has(n)) G.set(n,[]); G.get(n).push(p); } }
   for(const [G,kind] of [[liftGroups,'liftoff'],[asmGroups,'assembly']]) for(const [name,ps] of G){
     const last=ps.reduce((a,b)=>phaseIdx.get(b.phase)>phaseIdx.get(a.phase)?b:a), si=subs.length;
@@ -485,19 +532,27 @@ function compile(design){
   const main=phases.map(()=>[]);
   for(const p of parts) if(p.sub===undefined) main[phaseIdx.get(p.phase)].push(p);
   phases.forEach((ph,pi)=>{
-    const list=main[pi].sort((a,b)=>a.y-b.y||a.id-b.id), local=[]; let cur=null;
+    const list=main[pi].sort((a,b)=>a.y-b.y||a.id-b.id), local=[], seq=[]; let cur=null;
+    // an assembly in the same phase as parts that stand on it (a story's own slab) is placed when the
+    // build reaches its height; other sub-builds are placed at the end of the phase
+    const asm=subs.map((s,si)=>({s,si})).filter(a=>a.s.phase===ph&&a.s.assembly)
+      .map(a=>({si:a.si,y:Math.min(...a.s.partIds.map(id=>parts[id-1].y))})).sort((a,b)=>a.y-b.y);
+    const early=new Set();
     for(const p of list){
+      while(asm.length&&p.y>=asm[0].y){ const a=asm.shift(); early.add(a.si); seq.push({sub:a.si}); cur=null; }
       const n=cur?cur.parts.length:0;
-      if(!cur||n>=STEP_MAX||(p.y!==cur.lastY&&n>=4)){ cur={kind:'main',phase:ph,parts:[],lastY:p.y}; local.push(cur); }
+      if(!cur||n>=STEP_MAX||(p.y!==cur.lastY&&n>=4)){ cur={kind:'main',phase:ph,parts:[],lastY:p.y}; local.push(cur); seq.push(cur); }
       cur.parts.push(p.id); cur.lastY=p.y;
     }
-    local.forEach((s,k)=>{ s.title=ph; s.n=k+1; s.of=local.length; steps.push(s); });
-    subs.forEach((s,si)=>{ if(s.phase!==ph) return;
+    local.forEach((s,k)=>{ s.title=ph; s.n=k+1; s.of=local.length; });
+    const subSteps=si=>{ const s=subs[si];
       const tpl=s.partIds.map(id=>parts[id-1]).filter(p=>p.copy===0).sort((a,b)=>a.y-b.y||a.id-b.id), ss=[];
       for(let k=0;k<tpl.length;k+=SUB_MAX) ss.push({kind:'sub',phase:ph,sub:si,parts:tpl.slice(k,k+SUB_MAX).map(p=>p.id)});
       ss.forEach((st,k)=>{ st.title=s.name; st.n=k+1; st.of=ss.length; steps.push(st); });
       steps.push({kind:'attach',phase:ph,sub:si,parts:s.partIds.slice(),title:s.copies>1?`Place the ${s.name.toLowerCase()}s`:`Place the ${s.name.toLowerCase()}`,n:1,of:1});
-    });
+    };
+    for(const it of seq) if(it.sub!==undefined) subSteps(it.sub); else steps.push(it);
+    subs.forEach((s,si)=>{ if(s.phase===ph&&!early.has(si)) subSteps(si); });
   });
   steps.forEach((s,si)=>{ s.index=si;
     if(s.kind==='main') s.parts.forEach(id=>{ parts[id-1].mainStep=si; });

@@ -365,3 +365,27 @@ test('an upper story whose walls pass over a room below still leaves that room f
   assert.ok(floored.has('10,9'), 'the stud under the upstairs wall is floored too');
   assert.equal(floored.size, 10 * 10);
 });
+
+test('an upper story with "slab" stands on its own floor, jutting out past the walls below', () => {
+  const ring = (x0, z0, x1, z1) => [[x0, z0, x1, z0], [x0, z1, x1, z1], [x0, z0 + 1, x0, z1 - 1], [x1, z0 + 1, x1, z1 - 1]];
+  const post = (x, z) => [0, 3, 6, 9].map((y) => ({ op: 'places', phase: 'g', part: 'brick:1x1', color: 'White', y, at: [[x, z]] }));
+  const d = (jut, extra = []) => ({ name: 's', phases: ['g', 'u'], ops: [
+    { op: 'walls', phase: 'g', color: 'White', courses: [0, 3], base: 0, segments: ring(4, 4, 15, 15) }, ...extra,
+    { op: 'floor', phase: 'g', color: 'Tan' },
+    { op: 'walls', phase: 'u', color: 'Tan', courses: [4, 7], base: 14, slab: true, segments: ring(4, 4, 15 + jut, 15) }] });
+  const r = compile(d(3));
+  assert.deepEqual([r.errors.map((e) => e.msg), r.warnings.map((w) => w.msg)], [[], []]);
+  const slab = r.parts.filter((p) => p.op === 2 && p.y < 14);
+  assert.deepEqual([...new Set(slab.map((p) => p.y))], [12, 13], 'two layers of plates just under the walls');
+  assert.equal(slab.reduce((n, p) => n + p.w * p.d, 0), 2 * 15 * 12, 'the whole story, the 3-stud jut included');
+  assert.equal(r.subs.find((s) => s.assembly).name, 'u floor');
+  const attach = r.steps.findIndex((s) => s.kind === 'attach'), wall = r.steps.findIndex((s) => s.kind === 'main' && s.phase === 'u');
+  assert.ok(attach >= 0 && attach < wall, 'the manual places the slab before the walls that stand on it');
+  // too far out: warned, until posts under the far corners carry it
+  assert.match(compile(d(6)).warnings.map((w) => w.msg).join(' '), /hangs 6 studs out/);
+  const posted = compile(d(6, [...post(21, 4), ...post(21, 15)]));
+  assert.deepEqual([posted.errors.map((e) => e.msg), posted.warnings.map((w) => w.msg)], [[], []]);
+  // the story below must end under the slab
+  const clash = d(3); clash.ops[2].base = 13;
+  assert.match(compile(clash).errors.map((e) => e.msg).join(' '), /runs into what's already there/);
+});

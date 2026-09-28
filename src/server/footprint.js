@@ -305,8 +305,9 @@ function skeletonOps(locked) {
   const sc = storyCourses(locked);
   return locked.blocks.filter((b) => b.cells.length).map((b) => ({
     op: 'walls', phase: b.name, block: b.name, color: 'White',
-    // an upper floor starts a story per floor up; the design sets its real base on its slab
-    courses: [((b.floor || 1) - 1) * sc, ((b.floor || 1) - 1) * sc + sc * b.levels - 1], base: ((b.floor || 1) - 1) * sc * 3,
+    // an upper floor starts a story per floor up, on its own two-plate slab (which carries any overhang)
+    courses: [((b.floor || 1) - 1) * sc, ((b.floor || 1) - 1) * sc + sc * b.levels - 1], base: ((b.floor || 1) - 1) * (sc * 3 + 2),
+    ...(b.floor > 1 ? { slab: true } : {}),
     segments: segmentsFromCells(b.cells),
     openings: b.openings.map((o) => ({ cells: o.cells, ...(DEFAULT_FILL[o.kind] || DEFAULT_FILL.door), kind: o.kind === 'garage door' ? 'garage door' : 'door', note: `${o.kind} from the floor plan${o.note ? ': ' + o.note : ''}` })),
   }));
