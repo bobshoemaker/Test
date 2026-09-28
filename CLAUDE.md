@@ -17,7 +17,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   garage doors with no drive to the edge of the plate, baseplate showing inside a building,
   lift-off roofs that wouldn't come off in one piece or grip more than a few locating studs;
   a lift-off roof is built on its own like a sub-build and rests on tiled wall tops; an "assembly"
-  such as a floor slab over a wide room is built the same way but stays put), hints (never
+  such as a floor slab over a wide room is built the same way but stays put; upper stories can lift
+  off too, each resting on the one below, and the viewer lifts them top first; "variation": "subtle",
+  which the design loop sets, recolors a few pieces of each material), hints (never
   blocking) for big open stretches of plain tile, a fixture library for roofs (skylight, HVAC unit,
   vents, solar panel, hatch, chimney), manual step grouping, and the inventory.
   Dependency-free; runs in the browser (globals) and in Node (require).
