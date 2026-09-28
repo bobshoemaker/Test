@@ -42,8 +42,11 @@ function makeClient() {
 }
 
 const STATIC = {
-  '/': ['src/viewer/index.html', 'text/html; charset=utf-8'],
+  '/': ['src/viewer/landing.html', 'text/html; charset=utf-8'],
+  '/app': ['src/viewer/index.html', 'text/html; charset=utf-8'],
   '/index.html': ['src/viewer/index.html', 'text/html; charset=utf-8'],
+  '/img/sample-634.jpg': ['src/viewer/img/sample-634.jpg', 'image/jpeg'],
+  '/img/sample-savannah.jpg': ['src/viewer/img/sample-savannah.jpg', 'image/jpeg'],
   '/viewer/app.js': ['src/viewer/app.js', 'text/javascript; charset=utf-8'],
   '/viewer/ldraw-parts.js': ['src/viewer/ldraw-parts.js', 'text/javascript; charset=utf-8'],
   '/engine.js': ['src/engine/engine.js', 'text/javascript; charset=utf-8'],
@@ -252,6 +255,10 @@ const server = http.createServer(async (req, res) => {
     return res.end('Password required.');
   }
   try {
+    // the app moved from / to /app; payment links made before that still come back to /?job=…
+    if (req.method === 'GET' && url.pathname === '/' && url.searchParams.has('job')) {
+      res.writeHead(302, { location: '/app' + url.search }); return res.end();
+    }
     if (req.method === 'GET' && STATIC[url.pathname]) {
       const [file, type] = STATIC[url.pathname];
       return send(res, 200, fs.readFileSync(path.join(ROOT, file)), type);

@@ -32,7 +32,7 @@ test('with a fee, a job waits for its own paid session, runs once, and survives 
   assert.deepEqual(jobs.fee, { amountCents: 1500, currency: 'usd' });
   const { id, checkout } = await jobs.create({ notes: 'house', photos: [] }, 'https://site.test');
   assert.match(checkout, /^https:\/\/checkout\.stripe\.test\/cs_test_1$/);
-  assert.equal(stripe.sessions.get('cs_test_1').successUrl, `https://site.test/?job=${id}&session={CHECKOUT_SESSION_ID}`);
+  assert.equal(stripe.sessions.get('cs_test_1').successUrl, `https://site.test/app?job=${id}&session={CHECKOUT_SESSION_ID}`);
   assert.equal(jobs.get(id).status, 'awaiting_payment');
   // not paid yet, or someone else's session: nothing runs
   assert.equal((await jobs.start(id, 'cs_test_1')).code, 402);
