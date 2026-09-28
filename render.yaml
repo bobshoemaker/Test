@@ -4,7 +4,7 @@ services:
     name: brickhouse
     runtime: docker
     plan: starter            # 512 MB is tight for Chromium renders; the free plan also sleeps when idle
-    branch: claude/brickhouse-griffith-park-design-oyxrm9
+    branch: master
     healthCheckPath: /healthz
     autoDeploy: true         # every push to the branch redeploys
     envVars:
@@ -22,6 +22,10 @@ services:
         value: "1500"
       - key: MAPILLARY_TOKEN                     # optional: street photos from the address box
         sync: false
+      - key: BRICKHOUSE_GOBRICKS_QUOTES          # 0 turns off live GoBricks quotes on the Parts tab
+        value: "1"
+      - key: BRICKHOUSE_CNY_PER_USD              # yuan per dollar for the approximate dollar price
+        value: "7.2"
     disk:                    # keeps generated designs across deploys
       name: designs
       mountPath: /app/designs/generated
