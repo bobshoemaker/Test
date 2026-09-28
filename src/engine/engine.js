@@ -71,7 +71,7 @@ const LEAF=(part,color,cx,y,cz,rot=0)=>{ const [ax,az]=turnCell(SPECIAL[part],SP
 // the studs on top of that leaf, other than the one it's pressed onto: where fruit, flowers or sprigs go
 const TIPS=(part,cx,cz,rot=0)=>{ const d=SPECIAL[part], [ax,az]=turnCell(d,d.at,rot);
   return d.tips.map(c=>turnCell(d,c,rot)).filter(([i,j])=>i!==ax||j!==az).map(([i,j])=>[cx-ax+i,cz-az+j]); };
-// Colors follow the real plants: olive leaves are gray-green with silvery undersides, citrus and
+// Colors follow the real plants, in colors LEGO makes each part in (see parts-availability.js): olive leaves are gray-green with silvery undersides, citrus and
 // boxwood a glossy deep green, cypress nearly black-green, agave and yucca blue-gray, palm fronds a
 // mid green, bark brown or gray-tan; new growth shows as a lighter green on the tips.
 const PLANTS = {
@@ -79,40 +79,40 @@ const PLANTS = {
   // sprigs, flowers or fruit on the branch tips
   'shade tree':{name:'Shade tree', parts:[P('roundbrick2','Reddish Brown',0,0,0),P('roundbrick2','Reddish Brown',0,3,0),P('roundplate2','Dark Green',0,6,0),
     LEAF('leaves65','Dark Green',0,7,0,0),LEAF('leaves65','Green',0,8,0,2),P('roundplate1','Dark Green',0,9,0),LEAF('leaves65','Green',0,10,0,1),
-    LEAF('leaves43','Bright Green',0,11,0,0),LEAF('leaves43','Green',0,12,0,2),P('sprig1','Bright Green',0,13,0),
+    LEAF('leaves43','Lime',0,11,0,0),LEAF('leaves43','Green',0,12,0,2),P('sprig1','Bright Green',0,13,0),
     ...TIPS('leaves43',0,0,2).map(([x,z],k)=>P('sprig1',k%2?'Green':'Bright Green',x,13,z))]},
   'jacaranda':{name:'Jacaranda', parts:[P('roundbrick2','Dark Brown',0,0,0),P('roundbrick2','Dark Brown',0,3,0),P('roundplate2','Green',0,6,0),
-    LEAF('leaves65','Green',0,7,0,0),LEAF('leaves65','Medium Lavender',0,8,0,2),P('flower1','Medium Lavender',0,9,0),LEAF('leaves65','Medium Lavender',0,10,0,1),
+    LEAF('leaves65','Green',0,7,0,0),LEAF('leaves65','Lavender',0,8,0,2),P('flower1','Medium Lavender',0,9,0),LEAF('leaves65','Lavender',0,10,0,1),
     LEAF('leaves43','Lavender',0,11,0,3),P('flower1','Medium Lavender',0,12,0),...TIPS('leaves43',0,0,3).map(([x,z],k)=>P('flower1',k%2?'Lavender':'Medium Lavender',x,12,z))]},
   'olive tree':{name:'Olive tree', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Dark Brown',0,1,0),P('round1','Dark Brown',1,1,1),P('round1','Dark Brown',0,4,0),P('round1','Dark Brown',1,4,1),
     P('plate:2x2','Olive Green',0,7,0),LEAF('leaves43','Olive Green',0,8,0,3),LEAF('leaves43','Sand Green',1,8,1,1),
-    LEAF('leaves43','Sand Green',0,9,0,0),LEAF('leaves43','Olive Green',1,9,1,2),P('sprig1','Olive Green',0,10,0),P('sprig1','Sand Green',1,10,1),
-    ...TIPS('leaves43',0,0,0).map(([x,z],k)=>P('sprig1',k%2?'Olive Green':'Sand Green',x,10,z)),...TIPS('leaves43',1,1,2).map(([x,z],k)=>P('sprig1',k%2?'Sand Green':'Olive Green',x,10,z))]},
+    LEAF('leaves43','Sand Green',0,9,0,0),LEAF('leaves43','Olive Green',1,9,1,2),P('sprig1','Olive Green',0,10,0),P('sprig1','Olive Green',1,10,1),
+    ...TIPS('leaves43',0,0,0).map(([x,z],k)=>P('sprig1',k%2?'Olive Green':'Yellowish Green',x,10,z)),...TIPS('leaves43',1,1,2).map(([x,z],k)=>P('sprig1',k%2?'Yellowish Green':'Olive Green',x,10,z))]},
   'lemon tree':{name:'Lemon tree', parts:[P('roundplate2','Reddish Brown',0,0,0),P('round1','Reddish Brown',0,1,0),P('round1','Reddish Brown',1,1,1),P('round1','Reddish Brown',0,4,0),P('round1','Reddish Brown',1,4,1),
-    P('plate:2x2','Dark Green',0,7,0),LEAF('leaves43','Dark Green',0,8,0,3),LEAF('leaves43','Green',1,8,1,1),P('sprig1','Dark Green',0,9,0),P('flower1','White',1,9,1),
+    P('plate:2x2','Green',0,7,0),LEAF('leaves43','Green',0,8,0,3),LEAF('leaves43','Olive Green',1,8,1,1),P('sprig1','Dark Green',0,9,0),P('flower1','White',1,9,1),
     ...TIPS('leaves43',0,0,3).map(([x,z],k)=>k%2?P('roundplate1','Bright Light Yellow',x,9,z):P('sprig1','Dark Green',x,9,z)),
     ...TIPS('leaves43',1,1,1).map(([x,z],k)=>k%2?P('sprig1','Green',x,9,z):P('roundplate1','Bright Light Yellow',x,9,z))]},
   // its color is in papery bracts: magenta flowers over the leaves
-  'bougainvillea':{name:'Bougainvillea', parts:[P('roundbrick2','Dark Green',0,0,0),P('roundbrick2','Green',0,3,0),LEAF('leaves43','Green',0,6,0,0),LEAF('leaves43','Dark Green',1,6,1,2),
+  'bougainvillea':{name:'Bougainvillea', parts:[P('roundbrick2','Green',0,0,0),P('roundbrick2','Green',0,3,0),LEAF('leaves43','Green',0,6,0,0),LEAF('leaves43','Magenta',1,6,1,2),
     ...TIPS('leaves43',0,0,0).map(([x,z],k)=>P('flower1',k%2?'Dark Pink':'Magenta',x,7,z)),...TIPS('leaves43',1,1,2).map(([x,z],k)=>P('flower1',k%2?'Magenta':'Dark Pink',x,7,z)),
     P('flower1','Magenta',0,7,0),P('flower1','Magenta',1,7,1)]},
-  'palm':{name:'Palm tree', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Dark Tan',0,1,0),P('round1','Tan',0,4,0),P('round1','Dark Tan',0,7,0),P('round1','Tan',0,10,0),P('round1','Dark Tan',0,13,0),
-    P('roundplate1','Dark Brown',0,16,0),P('palmtop','Dark Tan',0,17,0),FROND('Green',0,17,0,'N',7),FROND('Dark Green',0,17,0,'S',7),FROND('Green',0,18,0,'E',7),FROND('Dark Green',0,18,0,'W',7)]},
-  'cypress':{name:'Cypress', parts:[P('roundbrick2','Dark Green',0,0,0),P('roundbrick2','Dark Green',0,3,0),P('roundbrick2','Dark Green',0,6,0),P('roundbrick2','Dark Green',0,9,0),
+  'palm':{name:'Palm tree', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Medium Nougat',0,1,0),P('round1','Tan',0,4,0),P('round1','Medium Nougat',0,7,0),P('round1','Tan',0,10,0),P('round1','Medium Nougat',0,13,0),
+    P('roundplate1','Dark Brown',0,16,0),P('palmtop','Tan',0,17,0),FROND('Green',0,17,0,'N',7),FROND('Bright Green',0,17,0,'S',7),FROND('Green',0,18,0,'E',7),FROND('Bright Green',0,18,0,'W',7)]},
+  'cypress':{name:'Cypress', parts:[P('brick:2x2','Dark Green',0,0,0),P('brick:2x2','Dark Green',0,3,0),P('brick:2x2','Dark Green',0,6,0),P('brick:2x2','Dark Green',0,9,0),
     P('cone1','Dark Green',0,12,0),P('sprig1','Dark Green',1,12,0),P('sprig1','Green',0,12,1),P('sprig1','Dark Green',1,12,1),P('sprig1','Dark Green',0,15,0)]},
   // spiky plants: the plant bush's stiff blades
-  'yucca':{name:'Yucca', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Dark Tan',0,1,0),P('round1','Tan',1,1,1),P('plate:2x2','Dark Tan',0,4,0),P('bush224','Sand Green',0,5,0)]},
-  'grasses':{name:'Grasses', parts:[P('plate:2x2','Olive Green',0,0,0),P('bush224','Olive Green',0,1,0)]},
+  'yucca':{name:'Yucca', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Medium Nougat',0,1,0),P('round1','Tan',1,1,1),P('plate:2x2','Dark Tan',0,4,0),P('bush224','Green',0,5,0)]},
+  'grasses':{name:'Grasses', parts:[P('plate:2x2','Olive Green',0,0,0),P('bush224','Green',0,1,0)]},
   'agave':{name:'Agave', parts:[P('roundplate2','Dark Tan',0,0,0),P('cheese','Sand Green',0,1,0,'W'),P('cheese','Sand Green',1,1,0,'N'),P('cheese','Sand Green',1,1,1,'E'),P('cheese','Sand Green',0,1,1,'S')]},
-  'columnar cactus':{name:'Columnar cactus', parts:[P('plate:2x2','Dark Tan',0,0,0),P('round1','Sand Green',0,1,0),P('round1','Sand Green',0,4,0),P('round1','Sand Green',0,7,0),P('flower1','White',0,10,0),
-    P('round1','Sand Green',1,1,1),P('round1','Sand Green',1,4,1),P('roundplate1','Sand Green',1,7,1)]},
+  'columnar cactus':{name:'Columnar cactus', parts:[P('plate:2x2','Dark Tan',0,0,0),P('round1','Green',0,1,0),P('round1','Green',0,4,0),P('round1','Green',0,7,0),P('flower1','White',0,10,0),
+    P('round1','Green',1,1,1),P('round1','Green',1,4,1),P('roundplate1','Green',1,7,1)]},
   // shrubs and beds: leafy round plates and flower plates on a mound
-  'shrub':{name:'Shrub', parts:[P('roundbrick2','Dark Green',0,0,0),P('sprig1','Green',0,3,0),P('sprig1','Dark Green',1,3,0),P('sprig1','Dark Green',0,3,1),P('sprig1','Green',1,3,1),P('sprig1','Bright Green',0,4,0),P('sprig1','Green',1,4,1)]},
+  'shrub':{name:'Shrub', parts:[P('roundbrick2','Green',0,0,0),P('sprig1','Green',0,3,0),P('sprig1','Dark Green',1,3,0),P('sprig1','Dark Green',0,3,1),P('sprig1','Green',1,3,1),P('sprig1','Bright Green',0,4,0),P('sprig1','Green',1,4,1)]},
   'boxwood':{name:'Boxwood', parts:[P('roundplate2','Dark Green',0,0,0),P('sprig1','Dark Green',0,1,0),P('sprig1','Green',1,1,0),P('sprig1','Green',0,1,1),P('sprig1','Dark Green',1,1,1)]},
-  'flowering shrub':{name:'Flowering shrub', parts:[P('roundbrick2','Dark Green',0,0,0),P('sprig1','Green',0,3,0),P('flower1','bloom',1,3,0),P('flower1','bloom',0,3,1),P('sprig1','Dark Green',1,3,1),
+  'flowering shrub':{name:'Flowering shrub', parts:[P('roundbrick2','Green',0,0,0),P('sprig1','Green',0,3,0),P('flower1','bloom',1,3,0),P('flower1','bloom',0,3,1),P('sprig1','Dark Green',1,3,1),
     P('flower1','bloom',0,4,0),P('flower1','bloom',1,4,1)]},
-  'lavender':{name:'Lavender', parts:[P('plate:2x1','Sand Green',0,0,0),P('sprig1','Sand Green',0,1,0),P('sprig1','Sand Green',1,1,0),P('flower1','Medium Lavender',0,2,0),P('flower1','Medium Lavender',1,2,0)]},
-  'succulents':{name:'Succulents', parts:[P('plate:2x2','Dark Tan',0,0,0),P('sprig1','Sand Green',0,1,0),P('cheese','Olive Green',1,1,0,'E'),P('flower1','Sand Green',0,1,1),P('sprig1','Yellowish Green',1,1,1),P('flower1','Coral',0,2,0)]},
+  'lavender':{name:'Lavender', parts:[P('plate:2x1','Sand Green',0,0,0),P('sprig1','Olive Green',0,1,0),P('sprig1','Olive Green',1,1,0),P('flower1','Medium Lavender',0,2,0),P('flower1','Medium Lavender',1,2,0)]},
+  'succulents':{name:'Succulents', parts:[P('plate:2x2','Dark Tan',0,0,0),P('sprig1','Olive Green',0,1,0),P('cheese','Olive Green',1,1,0,'E'),P('cheese','Sand Green',0,1,1,'S'),P('sprig1','Yellowish Green',1,1,1),P('flower1','Coral',0,2,0)]},
   'flower bed':{name:'Flower bed', parts:[P('plate:4x2','Dark Brown',0,0,0),...[0,1,2,3].flatMap(x=>[0,1].map(z=>(x+z)%2?P('sprig1','Green',x,1,z):P('flower1','bloom',x,1,z))),
     ...[0,2].map(x=>P('flower1','bloom',x+1,2,0)),...[0,2].map(x=>P('flower1','bloom',x,2,1))]},
 };
@@ -120,9 +120,9 @@ const PLANTS = {
 
 // Roof and yard fixtures for the "fixture" op, placed like plants (on studs, from the corner stud).
 const FIXTURES = {
-  'skylight':{name:'Skylight', parts:[P('plate:2x2','White',0,0,0),P('tile:2x2','Trans-Clear',0,1,0)]},
-  'hvac unit':{name:'HVAC unit', parts:[P('plate:2x4','Light Bluish Gray',0,0,0),P('brick:2x4','Light Gray',0,1,0),P('tile:2x2','Dark Bluish Gray',0,4,0),P('tile:2x2','Light Gray',0,4,2)]},
-  'vent pipe':{name:'Vent pipe', parts:[P('plate:1x2','Dark Bluish Gray',0,0,0),P('round1','Light Gray',0,1,0),P('roundplate1','Dark Bluish Gray',0,4,0)]},
+  'skylight':{name:'Skylight', parts:[P('plate:2x2','White',0,0,0),P('tile:1x2','Trans-Clear',0,1,0),P('tile:1x2','Trans-Clear',1,1,0)]},
+  'hvac unit':{name:'HVAC unit', parts:[P('plate:2x4','Dark Bluish Gray',0,0,0),P('brick:2x4','Light Bluish Gray',0,1,0),P('tile:2x2','Dark Bluish Gray',0,4,0),P('tile:2x2','Light Bluish Gray',0,4,2)]},
+  'vent pipe':{name:'Vent pipe', parts:[P('plate:1x2','Dark Bluish Gray',0,0,0),P('round1','Light Bluish Gray',0,1,0),P('roundplate1','Dark Bluish Gray',0,4,0)]},
   'solar panel':{name:'Solar panel', parts:[P('plate:2x4','Light Bluish Gray',0,0,0),P('tile:2x4','Black',0,1,0)]},
   'roof hatch':{name:'Roof hatch', parts:[P('plate:2x2','Light Bluish Gray',0,0,0),P('tile:2x2','Dark Bluish Gray',0,1,0)]},
   'chimney':{name:'Chimney', parts:[P('brick:2x2','White',0,0,0),P('brick:2x2','White',0,3,0),P('plate:2x2','Dark Bluish Gray',0,6,0),P('roundplate1','Black',0,7,0)]},
@@ -137,9 +137,21 @@ const GRIP_MAX = 12;
 const OVERHANG_MAX = 4;
 // "variation": "subtle" gives every walls, fill and roof op without its own "mix" one close color on a
 // few pieces, by material; "mix": [] on an op keeps it plain.
-const SUBTLE_MIX = { 'White':[['Light Gray',0.04]], 'Tan':[['Light Nougat',0.06]], 'Green':[['Dark Green',0.06]], 'Dark Green':[['Green',0.06]], 'Dark Tan':[['Tan',0.06]], 'Medium Nougat':[['Dark Tan',0.06]],
-  'Light Bluish Gray':[['Light Gray',0.05]], 'Dark Bluish Gray':[['Black',0.04]], 'Reddish Brown':[['Dark Brown',0.06]], 'Dark Orange':[['Reddish Brown',0.08]] }; // studs a lift-off roof may grip: enough to locate it, few enough to lift it off
+const SUBTLE_MIX = { 'Tan':[['Light Nougat',0.06]], 'Green':[['Dark Green',0.06]], 'Dark Green':[['Green',0.06]], 'Dark Tan':[['Tan',0.06]], 'Medium Nougat':[['Dark Tan',0.06]],
+  'Dark Bluish Gray':[['Black',0.04]], 'Reddish Brown':[['Dark Brown',0.06]], 'Dark Orange':[['Reddish Brown',0.08]] }; // studs a lift-off roof may grip: enough to locate it, few enough to lift it off
 const K3 = (x,z,p)=>x+','+z+','+p;
+
+// Availability: how many LEGO sets have included a part in a color, and the last year one did
+// (src/engine/parts-availability.js, built from Rebrickable's database by scripts/availability.js).
+// A part in a color is easy to get when at least AVAIL_SETS sets have included it, the latest in
+// AVAIL_YEAR or later; the packer only uses those, and the checker warns about any other.
+const AVAIL=(typeof PART_AVAILABILITY!=='undefined')?PART_AVAILABILITY
+  :(typeof require==='function'?(()=>{ try{ return require('./parts-availability.js').PART_AVAILABILITY; }catch(e){ return null; } })():null);
+const AVAIL_SETS=6, AVAIL_YEAR=2018;
+const availOf=(no,color)=>{ const t=AVAIL&&AVAIL.parts[no]; if(!t) return null; const a=t[color]; return {sets:a?a[0]:0,last:a?a[1]:0}; };
+const easyToGet=(no,color)=>{ const a=availOf(no,color); return !a||(a.sets>=AVAIL_SETS&&a.last>=AVAIL_YEAR); };
+// the colors a part is easy to get in, most common first
+const easyColors=no=>{ const t=(AVAIL&&AVAIL.parts[no])||{}; return Object.keys(t).filter(c=>easyToGet(no,c)).sort((a,b)=>t[b][0]-t[a][0]); };
 
 function resolvePart(key){
   if(SPECIAL[key]) return Object.assign({key, kind:key}, SPECIAL[key]);
@@ -210,6 +222,11 @@ function compile(design){
   // Lengths the seam repair may merge or shift a 1-wide run to: only sizes this kind comes in
   // (tiles have no 1x3 or 1x6).
   const LEN_OK={}; for(const kind in SIZE_PARTS) LEN_OK[kind]=new Set(Object.keys(SIZE_PARTS[kind]).filter(s=>s.startsWith('1x')).map(s=>+s.slice(2)));
+  // the sizes of a kind that are easy to get in a color (a 1 x 1 at worst, which the checker then flags)
+  const sizeMemo=new Map();
+  function easySizes(kind,color,sizes){ const k=kind+'|'+color+'|'+sizes.length; if(sizeMemo.has(k)) return sizeMemo.get(k);
+    const ok=sizes.filter(([a,b])=>easyToGet(SIZE_PARTS[kind][Math.min(a,b)+'x'+Math.max(a,b)],color)); const r=ok.length?ok:[[1,1]]; sizeMemo.set(k,r); return r; }
+  const easyLen=(kind,len,color)=>easyToGet(SIZE_PARTS[kind]['1x'+len],color);
   function pack(level,kind,y,meta,sizesFor){
     const h=H[kind], cells=[], lenOk=LEN_OK[kind];
     // a lift-off roof is built on its own, so its pieces needn't sit on studs below (it rests on tiles)
@@ -222,16 +239,38 @@ function compile(design){
     // something (for a floating pack, resting on a tile counts)
     const rests=(x,z)=>supportAt(x,z,y)!==undefined||(floating&&y>0&&occ.has(K3(x,z,y-1)));
     for(const c of cells){ c.sup=rests(c.x,c.z); let n=0; for(const [dx,dz] of N4) if(rests(c.x+dx,c.z+dz)) n++; c.nsup=n; }
+    // a layer built on its own holds together through the layer above, which covers its inside cells
+    // (every neighbour in the layer or enclosed by it), not its outer edge: each piece should reach an
+    // inside cell, so the cells farthest from one are packed first, and pieces reaching one score higher
+    const anchor=new Set();
+    // (only for plates and tiles in a ring around a hole, like a hip roof's courses: a full layer ties
+    // itself by running bond, and walls by their courses)
+    const within=floating&&kind!=='brick'?enclosed(new Set(avail.keys())):null;
+    if(within&&within.size>avail.size){
+      for(const c of cells) if(N4.every(([dx,dz])=>within.has((c.x+dx)+','+(c.z+dz)))) anchor.add(c.k);
+      const dist=new Map([...anchor].map(k=>[k,0])), q=[...anchor];
+      for(let h=0;h<q.length;h++){ const [x,z]=q[h].split(',').map(Number); for(const [dx,dz] of N4){ const k=(x+dx)+','+(z+dz); if(avail.has(k)&&!dist.has(k)){ dist.set(k,dist.get(q[h])+1); q.push(k); } } }
+      for(const c of cells) c.far=anchor.size?(dist.has(c.k)?dist.get(c.k):99):0; }
+    for(const c of cells) if(c.far===undefined) c.far=0;
     const par=Math.floor(y/h)%2;
     // floating layers (lift-off roofs, assemblies) hold together only through the layer above, so lay
     // them in running bond: alternate rows start from opposite ends and their seams can't line up
     const bond=(a,b)=>par?(a.x-b.x||(a.x%2?b.z-a.z:a.z-b.z)):(a.z-b.z||(a.z%2?b.x-a.x:a.x-b.x));
-    cells.sort((a,b)=>(a.sup-b.sup)||((!floating||!a.sup)?(a.nsup-b.nsup):0)||(floating?bond(a,b):(par?(a.x-b.x||a.z-b.z):(a.z-b.z||a.x-b.x))));
+    cells.sort((a,b)=>(a.sup-b.sup)||(floating?(b.far-a.far):0)||((!floating||!a.sup)?(a.nsup-b.nsup):0)||(floating?bond(a,b):(par?(a.x-b.x||a.z-b.z):(a.z-b.z||a.x-b.x))));
+    // would placing P leave an unpacked edge cell next to it with no piece that reaches an inside cell?
+    const inP=(P,x,z)=>x>=P.x0&&x<P.x0+P.w&&z>=P.z0&&z<P.z0+P.d;
+    const tied=(u,color,sizes,P)=>{ for(const [a,bb] of sizes) for(const [w,d] of (a===bb?[[a,bb]]:[[a,bb],[bb,a]])) for(let ox=0;ox<w;ox++) for(let oz=0;oz<d;oz++){
+        const x0=u.x-ox, z0=u.z-oz; let ok=true, ins=false;
+        for(let i=0;i<w&&ok;i++) for(let j=0;j<d;j++){ const kk=(x0+i)+','+(z0+j), cc=avail.get(kk);
+          if(!cc||owner.has(kk)||cc.color!==color||inP(P,x0+i,z0+j)){ ok=false; break; } if(anchor.has(kk)) ins=true; }
+        if(ok&&ins) return true; } return false; };
+    const strands=(P,color,sizes)=>{ for(let x=P.x0-1;x<=P.x0+P.w;x++) for(let z=P.z0-1;z<=P.z0+P.d;z++){ const k=x+','+z, u=avail.get(k);
+        if(!u||inP(P,x,z)||owner.has(k)||anchor.has(k)||u.color!==color) continue; if(!tied(u,color,sizes,P)) return true; } return false; };
     const seamBelow=(x,z,nx,nz,dy)=>{ const b1=occ.get(K3(x,z,y-dy)), b2=occ.get(K3(nx,nz,y-dy)); return !!(b1&&b2&&b1!==b2); };
     for(const c of cells){
       if(owner.has(c.k)) continue;
-      const sizes=(sizesFor&&sizesFor(c.color))||PACK_SIZES[kind], small=!!(sizesFor&&sizesFor(c.color));
-      let best=null;
+      const sizes=easySizes(kind,c.color,(sizesFor&&sizesFor(c.color))||PACK_SIZES[kind]), small=!!(sizesFor&&sizesFor(c.color));
+      let best=null; const cands=anchor.size?[]:null;
       for(const [a,bb] of sizes){
         const ors=a===bb?[[a,bb]]:[[a,bb],[bb,a]];
         for(const [w,d] of ors) for(let ox=0;ox<w;ox++) for(let oz=0;oz<d;oz++){
@@ -250,10 +289,15 @@ function compile(design){
           const jit=small?(((x0*92821)^(z0*68917)^(y*31337)^(w*7))>>>0)%7*0.9:0;
           // a floating piece (lift-off roof, assembly) should still rest on something where it can, even a
           // tile, so an eave or edge row reaches back over the wall instead of hanging on its own
-          const score=w*d*3+Math.min(bel.size,3)*5-aligned*(floating?60:7)-stacked*30+orient+jit+(floating&&restN>0?1000:0);
+          let inside=false; if(anchor.size) for(const k of own) if(anchor.has(k)){ inside=true; break; }
+          const score=w*d*3+Math.min(bel.size,3)*5-aligned*(floating?60:7)-stacked*30+orient+jit+(floating&&restN>0?1000:0)+(inside?400:0);
+          if(cands) cands.push({score,x0,z0,w,d});
           if(!best||score>best.score) best={score,x0,z0,w,d};
         }
       }
+      // in a ring, don't take the cells an edge cell next to this piece needs to reach an inside cell
+      if(cands&&cands.length>1){ cands.sort((p,q)=>q.score-p.score);
+        best=cands.find(P=>!strands(P,c.color,sizes))||cands[0]; }
       if(!best) best={x0:c.x,z0:c.z,w:1,d:1};
       best.color=c.color; const idx=plan.length; plan.push(best);
       for(let i=0;i<best.w;i++) for(let j=0;j<best.d;j++) owner.set((best.x0+i)+','+(best.z0+j),idx);
@@ -270,14 +314,14 @@ function compile(design){
         const aOK=(axisX?A.d:A.w)===1||lenA===1, bOK=(axisX?B.d:B.w)===1||lenB===1;
         if(!lineOK&&!(aOK&&bOK&&((axisX?A.d:A.w)===1)&&((axisX?B.d:B.w)===1))) continue;
         // try merge
-        if(lenOk.has(lenA+lenB)&&lenA+lenB<=8){
+        if(lenOk.has(lenA+lenB)&&lenA+lenB<=8&&easyLen(kind,lenA+lenB,A.color)){
           const M={x0:Math.min(A.x0,B.x0),z0:Math.min(A.z0,B.z0),w:axisX?lenA+lenB:1,d:axisX?1:lenA+lenB,color:A.color};
           plan[ia]=M; plan[ib]=null;
           for(let i=0;i<M.w;i++) for(let j=0;j<M.d;j++) owner.set((M.x0+i)+','+(M.z0+j),ia);
           changed=true; continue; }
         // try shifting the seam by one stud either way
         for(const dir of [-1,1]){
-          const nA=lenA+dir, nB=lenB-dir; if(nA<1||nB<1||!lenOk.has(nA)||!lenOk.has(nB)) continue;
+          const nA=lenA+dir, nB=lenB-dir; if(nA<1||nB<1||!lenOk.has(nA)||!lenOk.has(nB)||!easyLen(kind,nA,A.color)||!easyLen(kind,nB,B.color)) continue;
           const A2=axisX?{x0:A.x0,z0:A.z0,w:nA,d:1,color:A.color}:{x0:A.x0,z0:A.z0,w:1,d:nA,color:A.color};
           const B2=axisX?{x0:B.x0+dir,z0:B.z0,w:nB,d:1,color:B.color}:{x0:B.x0,z0:B.z0+dir,w:1,d:nB,color:B.color};
           const ex=axisX?A2.x0+A2.w-1:A2.x0, ez=axisX?A2.z0:A2.z0+A2.d-1;
@@ -309,7 +353,7 @@ function compile(design){
     if(!Array.isArray(mix)||mix.some(m=>!Array.isArray(m)||!COLORS[m[0]]||!(m[1]>=0))){ errors.push({msg:'"mix" must be [[color, fraction], ...] with known colors', op:i}); return; }
     for(const id of ids){ const p=parts[id-1]; if(p.color!==main) continue;
       let u=((((p.x*73856093)^(p.z*19349663)^(p.y*83492791)^(i*2654435761))>>>0)%1000)/1000;
-      for(const [mc,fr] of mix){ if(u<fr){ p.color=mc; break; } u-=fr; } }
+      for(const [mc,fr] of mix){ if(u<fr){ if(easyToGet(p.no,mc)) p.color=mc; break; } u-=fr; } }
   }
 
   // A hip roof over the union of several rectangles (an L or T): each plate course steps in one stud
@@ -348,7 +392,7 @@ function compile(design){
         let best=null; for(const [dn,dx,dz] of [['S',0,1],['N',0,-1],['E',1,0],['W',-1,0]]){ const v=dep(x+dx,z+dz); if(!best||v<best[1]) best=[dn,v]; }
         let cc=op.cap||op.color;
         const rmix=mixOf(op); if(rmix&&rmix.length){ const hsh=((x*73856093)^(z*19349663)^(top*83492791))>>>0; let u=(hsh%1000)/1000;
-          for(const [mc,fr] of rmix){ if(u<fr){ cc=mc; break; } u-=fr; } }
+          for(const [mc,fr] of rmix){ if(u<fr){ if(easyToGet(SPECIAL.cheese.no,mc)) cc=mc; break; } u-=fr; } }
         const qq=place('cheese',x,top,z,0,cc,meta,false); if(qq) qq.dir=best[0]; } }
   }
 
@@ -511,7 +555,7 @@ function compile(design){
             let best=c[0]; for(const q of c) if(q[1]<best[1]) best=q;
             let cc=op.cap||op.color;
             const rmix=mixOf(op); if(rmix&&rmix.length){ const hsh=((x*73856093)^(z*19349663)^(top*83492791))>>>0; let u=(hsh%1000)/1000;
-              for(const [mc,fr] of rmix){ if(u<fr){ cc=mc; break; } u-=fr; } }
+              for(const [mc,fr] of rmix){ if(u<fr){ if(easyToGet(SPECIAL.cheese.no,mc)) cc=mc; break; } u-=fr; } }
             const q=place('cheese',x,top,z,0,cc,meta,false); if(q) q.dir=best[0]; } }
         break; }
       case 'band': {
@@ -773,6 +817,11 @@ function compile(design){
   let glassN=0;
   for(const p of parts){ add(p.no,p.name,p.color,p.cost,p.kind); if(p.glass){ add(p.glass.no,p.glass.name,'Trans-Clear',GLASS_COST,'glass'); glassN++; } }
   const inventory=[...lots.values()];
+  // parts that are hard to get in their color: few sets have included them, or none lately
+  for(const e of inventory){ if(easyToGet(e.no,e.color)) continue;
+    const a=availOf(e.no,e.color), alt=easyColors(e.no).slice(0,6), first=parts.find(p=>p.no===e.no&&p.color===e.color);
+    e.hard=true;
+    warnings.push({msg:`${e.name} in ${e.color} (${e.q}) is hard to get: ${a.sets?`${a.sets} LEGO set${a.sets===1?' has':'s have'} included it, the latest in ${a.last}`:'LEGO has not made it in that color'}. Use a color it's easy to get in${alt.length?` (${alt.join(', ')})`:''} or another part`, op:first?first.op:null, part:first?first.id:undefined}); }
   const cost=inventory.reduce((s,e)=>s+e.q*e.cost,0);
   const pieces=parts.length+glassN+1;
   const pages=1+Math.ceil(inventory.length/24)+steps.length;
@@ -780,4 +829,4 @@ function compile(design){
   return {parts,steps,subs,errors,warnings,hints,joints,jn,inventory,occ,
     stats:{liftoff:(()=>{ const lo=new Map(); for(const p of parts) if(p.liftoff) lo.set(p.liftoff,Math.min(lo.has(p.liftoff)?lo.get(p.liftoff):1e9,p.y)); return [...lo].sort((a,b)=>b[1]-a[1]).map(e=>e[0]); })(),pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32}};
 }
-if(typeof module!=='undefined') module.exports={compile,COLORS,SPECIAL,SIZE_PARTS,PLANTS,FIXTURES};
+if(typeof module!=='undefined') module.exports={easyToGet,availOf,easyColors,AVAIL_SETS,AVAIL_YEAR,compile,COLORS,SPECIAL,SIZE_PARTS,PLANTS,FIXTURES};

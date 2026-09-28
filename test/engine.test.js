@@ -10,7 +10,7 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 // warnings other than the bare-floor one, for small test houses built without a floor
 const roofWarnings = (r) => r.warnings.map((w) => w.msg).filter((m) => !/baseplate shows/.test(m));
 
-for (const [name, pieces] of [['savannah-dr', 1249], ['634-unit-a', 804]]) {
+for (const [name, pieces] of [['savannah-dr', 1266], ['634-unit-a', 827]]) {
   test(`${name} compiles clean`, () => {
     const r = compile(load(name));
     assert.deepEqual(r.errors.map((e) => e.msg), []);
@@ -412,4 +412,18 @@ test('a "mix" recoloring more than 10 percent is warned about once, on walls and
   const busy = compile(d([['Reddish Brown', 0.1], ['Medium Nougat', 0.05]])).warnings.map((w) => w.msg);
   assert.equal(busy.length, 2);
   assert.ok(busy.every((m) => /15 percent/.test(m)));
+});
+
+test('designs keep to parts that are easy to buy: the packer picks sizes made in the color, the checker flags the rest', () => {
+  const { easyToGet, SIZE_PARTS } = require('../src/engine/engine.js');
+  // Dark Orange plates come in 2 x 6 but not 2 x 8: a 2 x 16 run packs without any 2 x 8
+  assert.ok(easyToGet(SIZE_PARTS.plate['2x6'], 'Dark Orange') && !easyToGet(SIZE_PARTS.plate['2x8'], 'Dark Orange'));
+  const r = compile({ name: 'a', phases: ['p'], ops: [{ op: 'fill', phase: 'p', kind: 'plate', color: 'Dark Orange', rects: [[4, 4, 5, 19]] }] });
+  assert.deepEqual([r.errors.length, r.warnings.length], [0, 0]);
+  assert.ok(r.parts.every((p) => easyToGet(p.no, p.color)) && !r.parts.some((p) => p.no === SIZE_PARTS.plate['2x8']));
+  // a part asked for by name in a color LEGO hasn't made it in is flagged, with colors it does come in
+  const w = compile({ name: 'b', phases: ['p'], ops: [{ op: 'place', phase: 'p', part: 'arch41', color: 'Dark Green', at: [4, 0, 4] }] }).warnings.map((x) => x.msg).join(' ');
+  assert.match(w, /Arch 1 x 4 in Dark Green \(1\) is hard to get: LEGO has not made it in that color\. Use a color it's easy to get in \(White/);
+  // old Light Gray (last made 2004) is flagged even though many sets had it
+  assert.match(compile({ name: 'c', phases: ['p'], ops: [{ op: 'place', phase: 'p', part: 'brick:2x4', color: 'Light Gray', at: [4, 0, 4] }] }).warnings[0].msg, /the latest in 2004/);
 });

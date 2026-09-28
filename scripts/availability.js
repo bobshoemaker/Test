@@ -1,0 +1,74 @@
+#!/usr/bin/env node
+// Builds src/engine/parts-availability.js: for every part the engine can use, in every color of its
+// palette, how many LEGO sets have included it and the last year one did, from Rebrickable's database
+// downloads (https://rebrickable.com/downloads/). The engine uses it to keep designs to parts that are
+// easy to buy: plentiful ones that sets still include.
+//   node scripts/availability.js        (downloads to .rebrickable-cache/ on first run)
+const fs = require('node:fs');
+const path = require('node:path');
+const zlib = require('node:zlib');
+const readline = require('node:readline');
+
+const ROOT = path.resolve(__dirname, '..');
+const CACHE = path.join(ROOT, '.rebrickable-cache');
+const OUT = path.join(ROOT, 'src/engine/parts-availability.js');
+const FILES = ['colors', 'inventories', 'sets', 'inventory_parts', 'part_relationships'];
+
+async function download(name) {
+  const file = path.join(CACHE, `${name}.csv`);
+  if (fs.existsSync(file)) return file;
+  fs.mkdirSync(CACHE, { recursive: true });
+  const res = await fetch(`https://cdn.rebrickable.com/media/downloads/${name}.csv.gz`);
+  if (!res.ok) throw new Error(`Rebrickable download failed: ${name} (${res.status})`);
+  fs.writeFileSync(file, zlib.gunzipSync(Buffer.from(await res.arrayBuffer())));
+  return file;
+}
+// CSV rows as arrays (these files quote only names, which we split carefully)
+function splitCsv(line) { const out = []; let cur = '', q = false;
+  for (const ch of line) { if (ch === '"') q = !q; else if (ch === ',' && !q) { out.push(cur); cur = ''; } else cur += ch; }
+  out.push(cur); return out; }
+async function* rows(file) { const rl = readline.createInterface({ input: fs.createReadStream(file), crlfDelay: Infinity }); let first = true;
+  for await (const line of rl) { if (first) { first = false; continue; } if (line) yield splitCsv(line); } }
+
+(async () => {
+  for (const f of FILES) await download(f);
+  const { COLORS, SIZE_PARTS, SPECIAL } = require('../src/engine/engine.js');
+  // the engine's part numbers
+  const ours = new Set();
+  for (const kind of Object.values(SIZE_PARTS)) for (const no of Object.values(kind)) ours.add(no);
+  for (const s of Object.values(SPECIAL)) { ours.add(s.no); if (s.glass) ours.add(s.glass); }
+  // molds and alternates count as the same part (a newer mold of a round plate, a renumbered palm top)
+  const group = new Map(); const link = (a, b) => { const A = group.get(a) || new Set([a]), B = group.get(b) || new Set([b]); const U = new Set([...A, ...B]); for (const p of U) group.set(p, U); };
+  for await (const [rel, child, parent] of rows(path.join(CACHE, 'part_relationships.csv'))) if (rel === 'M' || rel === 'A') link(child, parent);
+  // BrickLink numbers that Rebrickable files under other numbers
+  const ALIAS = { 4073: ['6141'], 4032: ['4032a', '4032b'] };
+  const members = new Map(); for (const no of ours) members.set(no, new Set([no, ...(group.get(no) || []), ...(ALIAS[no] || []).flatMap((a) => [a, ...(group.get(a) || [])])]));
+  const want = new Map(); for (const [no, g] of members) for (const p of g) { if (!want.has(p)) want.set(p, []); want.get(p).push(no); }
+  // colors by name
+  const colorId = new Map(), colorName = new Map();
+  for await (const [id, name] of rows(path.join(CACHE, 'colors.csv'))) { colorId.set(name, id); colorName.set(id, name); }
+  const missing = Object.keys(COLORS).filter((c) => !colorId.has(c));
+  if (missing.length) console.log(`Colors not in Rebrickable by that name: ${missing.join(', ')}`);
+  // inventory -> set year
+  const setYear = new Map(); for await (const [setNum, , year] of rows(path.join(CACHE, 'sets.csv'))) setYear.set(setNum, +year);
+  const invSet = new Map(); for await (const [id, , setNum] of rows(path.join(CACHE, 'inventories.csv'))) invSet.set(id, setNum);
+  // part x color -> sets and years
+  const stats = new Map(); // `${no}|${colorName}` -> {sets:Set, last, first}
+  for await (const [inv, part, color, , spare] of rows(path.join(CACHE, 'inventory_parts.csv'))) {
+    const nos = want.get(part); if (!nos || spare === 'True') continue;
+    const setNum = invSet.get(inv), year = setYear.get(setNum), cn = colorName.get(color); if (!setNum || !year || !cn || !COLORS[cn]) continue;
+    for (const no of nos) { const k = `${no}|${cn}`; let s = stats.get(k); if (!s) stats.set(k, s = { sets: new Set(), last: 0, first: 9999 });
+      s.sets.add(setNum); s.last = Math.max(s.last, year); s.first = Math.min(s.first, year); }
+  }
+  const table = {};
+  for (const [k, s] of stats) { const [no, cn] = k.split('|'); (table[no] = table[no] || {})[cn] = [s.sets.size, s.last]; }
+  const year = Math.max(...setYear.values());
+  fs.writeFileSync(OUT, `// How available each part the engine uses is, by color: [number of LEGO sets that included it, last
+// year one did]. From Rebrickable's database downloads (https://rebrickable.com/downloads/), counting a
+// part's other molds and alternates. Generated by scripts/availability.js; don't edit.
+const PART_AVAILABILITY = ${JSON.stringify({ through: year, parts: table })};
+if (typeof module !== 'undefined') module.exports = { PART_AVAILABILITY };
+`);
+  const none = [...ours].filter((no) => !table[no]);
+  console.log(`Wrote ${path.relative(ROOT, OUT)} (${Math.round(fs.statSync(OUT).size / 1024)} KB), data through ${year}. Parts with no set in our colors: ${none.join(', ') || 'none'}`);
+})().catch((e) => { console.error(e.message); process.exit(1); });

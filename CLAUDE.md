@@ -27,6 +27,11 @@ closing gift that realtors give clients: a brick model of the house they just bo
   swordleaf fronds clipped to its bars) in colors true to each plant, hints (never
   blocking) for big open stretches of plain tile, a fixture library for roofs (skylight, HVAC unit,
   vents, solar panel, hatch, chimney), manual step grouping, and the inventory.
+  Parts must be easy to buy: `src/engine/parts-availability.js` (built by `scripts/availability.js`
+  from Rebrickable's database downloads) says how many LEGO sets have included each part in each
+  color and when; a part in a color is easy to get with 6+ sets, the latest 2018 or later. The packer
+  only uses such sizes, mixes only recolor into such colors, and the checker warns about any other
+  part (naming colors it does come in). The plant and fixture libraries are held to it by tests.
   Dependency-free; runs in the browser (globals) and in Node (require).
 - `src/server/prompt.js`: `SPEC`, the design language written for Claude. It is the source of
   truth for what a design may contain. When you add an op, part or field to the engine,
@@ -101,7 +106,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   the viewer and file header) for the plant parts; `scripts/ldraw.js` regenerates it (`--lowres` uses
   8-sided round primitives). The engine's stud layouts for those parts follow the LDraw files.
 - `scripts/`: `compile.js` (check a design), `design.js` (photos to design from the CLI),
-  `bundle.js` (single-file HTML for sharing or publishing as a Claude artifact), `ldraw.js`.
+  `bundle.js` (single-file HTML for sharing or publishing as a Claude artifact), `ldraw.js`,
+  `availability.js` (rebuild the availability table; rerun now and then as LEGO releases sets).
 
 ## Commands
 
@@ -150,8 +156,10 @@ before changing API parameters.
 
 ## Known gaps
 
-- BrickLink part numbers and color availability are unverified (the plant parts' shapes and stud
-  layouts come from LDraw; LDraw lists 2566 palm top and 6064 plant bush as obsolete molds); costs are placeholder
+- Availability counts LEGO sets that included a part (Rebrickable), a good proxy for how easy it is to
+  buy, not live BrickLink stock. BrickLink numbers mostly match Rebrickable's (aliases in
+  scripts/availability.js). LDraw lists 2566 palm top and 6064 plant bush as obsolete molds, though
+  sets still include both; costs are placeholder
   per-piece prices. Check before any real order.
 - Part geometry is simplified in the renderer. Sideways building is limited to side-stud bricks
   in wall openings with a few details hung on them (lantern, house number, plaque, vent); mounted
@@ -175,7 +183,7 @@ its license terms checked for a physical derived product.
 1. Run the real loop on the 634 photos and tune SPEC and the task prompt until results come
    close to the hand-built reference.
 2. PDF manual export (one step per page, parts callouts, cover, inventory).
-3. BrickLink price and availability check for the parts list.
+3. BrickLink price check for the parts list (availability by set count is done).
 4. Address box: done for geocoding and Mapillary street photos. Still to do: MLS feed (RESO)
    and oblique aerial imagery as photo sources, property facts (stories, size, year), and
    cropping Mapillary panoramas, which are skipped today and are much of recent coverage.

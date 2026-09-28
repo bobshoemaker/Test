@@ -39,8 +39,8 @@
        [5,20,5,22], [12,20,12,22], [5,22,12,22]
      ],
      "openings":[
-       {"cells":[7,22,10,22],  "courses":[0,2], "fill":{"part":"win43","color":"Dark Green"}, "note":"Arched window"},
-       {"cells":[7,22,10,22],  "courses":[3,3], "fill":{"part":"arch41","color":"Dark Green"}, "note":"Arched window top"},
+       {"cells":[7,22,10,22],  "courses":[0,2], "fill":{"part":"win43","color":"Black"}, "note":"Arched window"},
+       {"cells":[7,22,10,22],  "courses":[3,3], "fill":{"part":"arch41","color":"White"}, "note":"Arched window top"},
        {"cells":[15,19,16,19], "courses":[0,2], "fill":{"color":"Dark Green"}, "kind":"door", "note":"Front door"},
        {"cells":[14,19,14,19], "courses":[0,3], "fill":{"color":"Light Bluish Gray","small":true}, "note":"Tiled door surround"},
        {"cells":[17,19,17,19], "courses":[0,3], "fill":{"color":"Light Bluish Gray","small":true}},
@@ -49,7 +49,7 @@
        {"cells":[18,13,18,14], "courses":[0,2], "fill":{"color":"Dark Green"}, "kind":"door", "note":"Side door"},
        {"cells":[18,3,18,10],  "courses":[0,2], "fill":{"color":"Dark Brown"}, "kind":"garage door", "note":"Two-car garage door"},
        {"cells":[5,10,5,11],   "courses":[1,2], "fill":{"part":"win22","color":"Dark Green"}},
-       {"cells":[9,2,12,2],    "courses":[0,2], "fill":{"part":"win43","color":"Dark Green"}}
+       {"cells":[9,2,12,2],    "courses":[0,2], "fill":{"part":"win43","color":"Black"}}
      ]},
     {"op":"floor", "phase":"Ground floor", "note":"Floor tiles inside the walls, so no baseplate shows through the windows", "kind":"tile", "color":"Tan"},
 

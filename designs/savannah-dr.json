@@ -174,11 +174,11 @@
      "parts":[
        {"part":"roundplate2", "color":"Dark Tan", "at":[0,0,0]},
        {"part":"round1", "color":"Reddish Brown", "at":[0,1,0]},
-       {"part":"round1", "color":"Dark Tan", "at":[0,4,0]},
+       {"part":"round1", "color":"Tan", "at":[0,4,0]},
        {"part":"round1", "color":"Reddish Brown", "at":[0,7,0]},
-       {"part":"round1", "color":"Dark Tan", "at":[0,10,0]},
+       {"part":"round1", "color":"Tan", "at":[0,10,0]},
        {"part":"round1", "color":"Reddish Brown", "at":[0,13,0]},
-       {"part":"palmtop", "color":"Green", "at":[0,16,0]}
+       {"part":"roundplate2", "color":"Dark Tan", "at":[0,16,0]}, {"part":"bush224", "color":"Green", "at":[0,17,0]}
      ]},
     {"op":"sub", "phase":"Shade tree", "name":"Shade tree", "copies":[[5,0,6]],
      "parts":[
@@ -189,7 +189,7 @@
        {"part":"brick:6x2", "color":"Green", "at":[-2,10,-2]},
        {"part":"brick:6x2", "color":"Dark Green", "at":[-2,10,0]},
        {"part":"brick:6x2", "color":"Green", "at":[-2,10,2]},
-       {"part":"plate:4x4", "color":"Dark Green", "at":[-1,13,-1]},
+       {"part":"plate:4x4", "color":"Green", "at":[-1,13,-1]},
        {"part":"brick:4x2", "color":"Green", "at":[-1,14,-1]},
        {"part":"brick:4x2", "color":"Green", "at":[-1,14,1]},
        {"part":"roundplate2", "color":"Dark Green", "at":[0,17,0]}
@@ -221,7 +221,7 @@
        {"part":"roundplate2", "color":"Reddish Brown", "at":[0,0,0]},
        {"part":"round1", "color":"Reddish Brown", "at":[0,1,0]},
        {"part":"round1", "color":"Reddish Brown", "at":[1,1,1]},
-       {"part":"plate:2x2", "color":"Dark Green", "at":[0,4,0]},
+       {"part":"plate:2x2", "color":"Green", "at":[0,4,0]},
        {"part":"roundbrick2", "color":"Green", "at":[0,5,0]},
        {"part":"roundplate1", "color":"Yellow", "at":[0,8,0]},
        {"part":"roundplate1", "color":"Green", "at":[1,8,0]},
