@@ -180,13 +180,13 @@ test('a lift-off roof must hold together, rest on the walls and carry nothing el
   // one layer of deck plates only holds together through the walls under it, so it comes apart when lifted
   const deck = { op: 'fill', phase: 'b', kind: 'plate', color: 'White', rects: [[5, 5, 12, 10]], y: 12, liftoff: 'Flat' };
   const flat = (extra) => compile({ name: 'f', phases: ['a', 'b'], ops: [...base, deck, ...extra] }).errors.map((e) => e.msg);
-  assert.match(flat([]).join(' '), /Lift-off roof "Flat" comes apart into \d+ pieces/);
+  assert.match(flat([]).join(' '), /Lift-off "Flat" comes apart into \d+ pieces/);
   // a tile layer on top crosses the plates' seams and ties it into one piece
   const tiles = { op: 'fill', phase: 'b', kind: 'tile', color: 'Light Bluish Gray', rects: [[5, 5, 12, 10]], y: 13, liftoff: 'Flat' };
   assert.deepEqual(flat([tiles]), []);
   // a brick standing on the deck but not part of the roof stops it lifting
   const stuck = flat([{ op: 'place', phase: 'b', part: 'brick:1x1', color: 'Red', at: [8, 13, 7] }, { ...tiles, rects: [[5, 5, 7, 10], [9, 5, 12, 10], [8, 5, 8, 6], [8, 8, 8, 10]] }]);
-  assert.match(stuck.join(' '), /sits on lift-off roof "Flat" but isn't part of it/);
+  assert.match(stuck.join(' '), /sits on lift-off "Flat" but isn't part of it/);
 });
 
 test('seams are compared at the same height, not the same course number of different walls ops', () => {
@@ -217,10 +217,10 @@ test('a lift-off roof rests on tiled wall tops, located by corner studs, and is 
   assert.ok(sub && sub.liftoff);
   assert.ok(seated.steps.some((s) => s.kind === 'attach' && s.title === 'Place the roof'), 'the manual builds the roof, then places it');
   // pressed onto every wall-top stud, it grips far too many to lift off
-  assert.match(d([...house, ...roof(12)]).warnings.map((w) => w.msg).join(' '), /Lift-off roof "Roof" grips the house with \d+ studs, too many/);
+  assert.match(d([...house, ...roof(12)]).warnings.map((w) => w.msg).join(' '), /Lift-off "Roof" grips what.s below with \d+ studs, too many/);
   // on tiles with no locating studs it isn't held at all
   const loose = d([...house, { op: 'fill', phase: 'a', kind: 'tile', color: 'White', rects: [...ring, ...corners.map(([x, z]) => [x, z, x, z])], y: 12 }, ...roof(13)]);
-  assert.match(loose.errors.map((e) => e.msg).join(' '), /Lift-off roof "Roof" is held on by 0 studs/);
+  assert.match(loose.errors.map((e) => e.msg).join(' '), /Lift-off "Roof" is held on by 0 studs/);
 });
 
 test('fixtures stand on their own, ride on a lift-off roof, and a big bare roof gets a hint', () => {
@@ -250,7 +250,7 @@ test('fixtures stand on their own, ride on a lift-off roof, and a big bare roof 
   assert.ok(kitted.parts.filter((p) => p.op === 5).every((p) => p.liftoff === 'Roof'), 'fixtures on the roof come off with it');
   // without the roof's liftoff the fixture pins the roof down
   const pinned = compile({ name: 'p', phases: ['a', 'b'], ops: [...base, { op: 'fixture', phase: 'b', kind: 'vent pipe', at: [[8, 14, 8]] }, tiles, floor] });
-  assert.match(pinned.errors.map((e) => e.msg).join(' '), /sits on lift-off roof "Roof" but isn't part of it/);
+  assert.match(pinned.errors.map((e) => e.msg).join(' '), /sits on lift-off "Roof" but isn't part of it/);
 });
 
 test('a color mix recolors a few whole pieces and leaves the structure as it was', () => {
@@ -330,4 +330,23 @@ test('seated lift-off roofs hold together across building sizes (flat 4 to 14 st
     }
   }
   assert.deepEqual(broken, []);
+});
+
+test('each story lifts off the one below, top first, and subtle variation recolors a few pieces by default', () => {
+  const seg = [[6, 6, 17, 6], [6, 15, 17, 15], [6, 7, 6, 14], [17, 7, 17, 14]];
+  const d = (variation) => ({ name: 'two', variation, phases: ['g', 's', 'r'], ops: [
+    { op: 'walls', phase: 'g', color: 'White', courses: [0, 3], base: 0, segments: seg, seat: true },
+    { op: 'fill', phase: 's', kind: 'plate', color: 'White', rects: [[6, 6, 17, 15]], y: 13, liftoff: 'Second floor' },
+    { op: 'fill', phase: 's', kind: 'plate', color: 'Tan', rects: [[6, 6, 17, 15]], y: 14, liftoff: 'Second floor' },
+    { op: 'walls', phase: 's', color: 'White', courses: [4, 7], base: 15, segments: seg, seat: true, liftoff: 'Second floor' },
+    { op: 'roof', phase: 'r', rect: [6, 6, 17, 15], base: 28, color: 'Dark Orange', liftoff: 'Roof' },
+    { op: 'floor', phase: 'g', color: 'Tan' }] });
+  const r = compile(d(undefined));
+  assert.deepEqual([r.errors.map((e) => e.msg), r.warnings.map((w) => w.msg)], [[], []]);
+  assert.deepEqual(r.stats.liftoff, ['Roof', 'Second floor'], 'the roof comes off first, then the second floor');
+  const subtle = compile(d('subtle'));
+  assert.deepEqual([subtle.errors.length, subtle.warnings.length], [0, 0]);
+  assert.equal(subtle.stats.pieces, r.stats.pieces, 'variation changes colors, never pieces');
+  const recolored = subtle.parts.filter((p, i) => p.color !== r.parts[i].color).length;
+  assert.ok(recolored > 0 && recolored < subtle.parts.length * 0.12, `a few pieces recolored (${recolored})`);
 });

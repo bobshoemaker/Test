@@ -300,6 +300,7 @@ async function designHouse({
         }
         st.compiles++;
         if (plate !== 32 && d.plate == null) d.plate = plate; // the larger plate is the task's choice, not a guess
+        if (d.variation == null) d.variation = 'subtle'; // a few pieces of each material in a close color
         const res = compile(d), planProblems = checkFootprint(d, locked);
         d.source = 'photos';
         st.lastDraft = d;

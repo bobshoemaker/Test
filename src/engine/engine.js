@@ -82,7 +82,11 @@ const N4 = [[1,0],[-1,0],[0,1],[0,-1]];
 const DOOR_KINDS = ['door','garage door'];
 // what the model shows: a whole house, or one unit of a larger building cut from its neighbours
 const PROPERTY_TYPES = ['house','townhouse','condo'];
-const GRIP_MAX = 12; // studs a lift-off roof may grip: enough to locate it, few enough to lift it off
+const GRIP_MAX = 12;
+// "variation": "subtle" gives every walls, fill and roof op without its own "mix" one close color on a
+// few pieces, by material; "mix": [] on an op keeps it plain.
+const SUBTLE_MIX = { 'White':[['Light Gray',0.04]], 'Tan':[['Dark Tan',0.05]], 'Dark Tan':[['Tan',0.06]], 'Medium Nougat':[['Dark Tan',0.06]],
+  'Light Bluish Gray':[['Light Gray',0.05]], 'Dark Bluish Gray':[['Black',0.04]], 'Reddish Brown':[['Dark Brown',0.06]], 'Dark Orange':[['Reddish Brown',0.08]] }; // studs a lift-off roof may grip: enough to locate it, few enough to lift it off
 const K3 = (x,z,p)=>x+','+z+','+p;
 
 function resolvePart(key){
@@ -236,12 +240,14 @@ function compile(design){
 
   // "mix" on a fill or walls op: after packing, recolor a scattered few whole pieces of the op's main
   // color (a weathered roof, varied pavers or stucco). Whole pieces, so the structure doesn't change.
+  // an op's own mix, or the design's default variation for its color (not for context stubs or seats)
+  const mixOf=op=>op.mix!==undefined?op.mix:(design.variation==='subtle'&&!op.context?SUBTLE_MIX[op.color]||null:null);
   function mixColors(ids,op,main,i){
-    if(!op.mix) return;
-    if(!Array.isArray(op.mix)||op.mix.some(m=>!Array.isArray(m)||!COLORS[m[0]]||!(m[1]>=0))){ errors.push({msg:'"mix" must be [[color, fraction], ...] with known colors', op:i}); return; }
+    const mix=mixOf(op); if(!mix||!mix.length) return;
+    if(!Array.isArray(mix)||mix.some(m=>!Array.isArray(m)||!COLORS[m[0]]||!(m[1]>=0))){ errors.push({msg:'"mix" must be [[color, fraction], ...] with known colors', op:i}); return; }
     for(const id of ids){ const p=parts[id-1]; if(p.color!==main) continue;
       let u=((((p.x*73856093)^(p.z*19349663)^(p.y*83492791)^(i*2654435761))>>>0)%1000)/1000;
-      for(const [mc,fr] of op.mix){ if(u<fr){ p.color=mc; break; } u-=fr; } }
+      for(const [mc,fr] of mix){ if(u<fr){ p.color=mc; break; } u-=fr; } }
   }
 
   // A hip roof over the union of several rectangles (an L or T): each plate course steps in one stud
@@ -279,8 +285,8 @@ function compile(design){
       for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++){ const x=p.x+a, z=p.z+b; if(occ.has(K3(x,z,top))) continue;
         let best=null; for(const [dn,dx,dz] of [['S',0,1],['N',0,-1],['E',1,0],['W',-1,0]]){ const v=dep(x+dx,z+dz); if(!best||v<best[1]) best=[dn,v]; }
         let cc=op.cap||op.color;
-        if(op.mix){ const hsh=((x*73856093)^(z*19349663)^(top*83492791))>>>0; let u=(hsh%1000)/1000;
-          for(const [mc,fr] of op.mix){ if(u<fr){ cc=mc; break; } u-=fr; } }
+        const rmix=mixOf(op); if(rmix&&rmix.length){ const hsh=((x*73856093)^(z*19349663)^(top*83492791))>>>0; let u=(hsh%1000)/1000;
+          for(const [mc,fr] of rmix){ if(u<fr){ cc=mc; break; } u-=fr; } }
         const qq=place('cheese',x,top,z,0,cc,meta,false); if(qq) qq.dir=best[0]; } }
   }
 
@@ -384,8 +390,8 @@ function compile(design){
             const c=[]; if(m.S) c.push(['S',E.z1-z]); if(m.N) c.push(['N',z-E.z0]); if(m.E) c.push(['E',E.x1-x]); if(m.W) c.push(['W',x-E.x0]);
             let best=c[0]; for(const q of c) if(q[1]<best[1]) best=q;
             let cc=op.cap||op.color;
-            if(op.mix){ const hsh=((x*73856093)^(z*19349663)^(top*83492791))>>>0; let u=(hsh%1000)/1000;
-              for(const [mc,fr] of op.mix){ if(u<fr){ cc=mc; break; } u-=fr; } }
+            const rmix=mixOf(op); if(rmix&&rmix.length){ const hsh=((x*73856093)^(z*19349663)^(top*83492791))>>>0; let u=(hsh%1000)/1000;
+              for(const [mc,fr] of rmix){ if(u<fr){ cc=mc; break; } u-=fr; } }
             const q=place('cheese',x,top,z,0,cc,meta,false); if(q) q.dir=best[0]; } }
         break; }
       case 'band': {
@@ -584,12 +590,12 @@ function compile(design){
       for(const [a,b] of joints){ const ia=ids.has(a), ib=b!=='base'&&ids.has(b);
         if(ia&&ib){ const ra=gf(a), rb=gf(b); if(ra!==rb) gp.set(ra,rb); }
         else if(ia&&!ib) held++;
-        else if(!ia&&ib) onTop.add(a); }
+        else if(!ia&&ib&&!parts[a-1].liftoff) onTop.add(a); } // another lift-off (a floor or roof above) may rest on it
       const comps=new Set([...ids].map(gf)).size;
-      if(comps>1) errors.push({msg:`Lift-off roof "${name}" comes apart into ${comps} pieces when lifted; tie it together (plates or tiles across its seams) so it lifts as one`, op:null});
-      if(onTop.size){ const p=parts[[...onTop][0]-1]; errors.push({msg:`${p.name} #${p.id} at (${p.x}, ${p.y}, ${p.z}) sits on lift-off roof "${name}" but isn't part of it, so the roof can't lift off; add "liftoff": "${name}" to its op or move it`, op:p.op, part:p.id}); }
-      if(held<2) errors.push({msg:`Lift-off roof "${name}" is held on by ${held} stud${held===1?'':'s'}; leave at least two locating studs (at the corners) in the tiles it rests on`, op:null});
-      else if(held>GRIP_MAX) warnings.push({msg:`Lift-off roof "${name}" grips the house with ${held} studs, too many to lift off by hand: tile the wall tops under it and leave only a few locating studs (2 to ${GRIP_MAX}, at the corners)`, op:null});
+      if(comps>1) errors.push({msg:`Lift-off "${name}" comes apart into ${comps} pieces when lifted; tie it together (plates or tiles across its seams) so it lifts as one`, op:null});
+      if(onTop.size){ const p=parts[[...onTop][0]-1]; errors.push({msg:`${p.name} #${p.id} at (${p.x}, ${p.y}, ${p.z}) sits on lift-off "${name}" but isn't part of it, so it can't lift off; add "liftoff": "${name}" to its op or move it`, op:p.op, part:p.id}); }
+      if(held<2) errors.push({msg:`Lift-off "${name}" is held on by ${held} stud${held===1?'':'s'}; leave at least two locating studs (at the corners) in the tiles it rests on`, op:null});
+      else if(held>GRIP_MAX) warnings.push({msg:`Lift-off "${name}" grips what's below with ${held} studs, too many to lift off by hand: tile the wall tops under it and leave only a few locating studs (2 to ${GRIP_MAX}, at the corners)`, op:null});
     }
     for(const [name,ps] of asmGroups){ const ids=new Set(ps.map(p=>p.id));
       const gp=new Map([...ids].map(id=>[id,id])), gf=a=>{ while(gp.get(a)!==a){ gp.set(a,gp.get(gp.get(a))); a=gp.get(a);} return a; };
@@ -641,6 +647,6 @@ function compile(design){
   const pages=1+Math.ceil(inventory.length/24)+steps.length;
   const ms=clock.now()-t0;
   return {parts,steps,subs,errors,warnings,hints,joints,jn,inventory,occ,
-    stats:{liftoff:[...new Set(parts.filter(p=>p.liftoff).map(p=>p.liftoff))],pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32}};
+    stats:{liftoff:(()=>{ const lo=new Map(); for(const p of parts) if(p.liftoff) lo.set(p.liftoff,Math.min(lo.has(p.liftoff)?lo.get(p.liftoff):1e9,p.y)); return [...lo].sort((a,b)=>b[1]-a[1]).map(e=>e[0]); })(),pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32}};
 }
 if(typeof module!=='undefined') module.exports={compile,COLORS,SPECIAL,SIZE_PARTS,PLANTS,FIXTURES};
