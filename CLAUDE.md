@@ -184,7 +184,8 @@ before changing API parameters.
   per-piece prices. Check before any real order.
 - GoBricks quotes and the catalog snapshot use the part-list matcher gobricks.cn's own site calls, not a
   documented API: ask GoBricks (support@webrick.com) before customers rely on it. Prices come back in
-  yuan (the reply names no currency), before shipping; the dollar figure uses a fixed rate. Under a
+  yuan (the reply names no currency), before shipping; the dollar figure uses what Brickwith, GoBricks' store, charged for the 634 sample
+  (¥153.07 came to $43.88, about ¥3.5 a dollar), not the exchange rate. Under a
   supplier the engine warns about what it can't get; Claude, not the engine, swaps the part or color.
   GoBricks sold no green baseplate when the table was built (its 32 x 32 was off the shelf, its 48 x 48 only
   in other colors), so the Parts tab leaves the baseplate out of the GoBricks total and says so.

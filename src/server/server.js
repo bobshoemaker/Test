@@ -213,7 +213,8 @@ async function handleLookup(req, res) {
 }
 
 // GoBricks quotes come from its part-list matcher, which isn't a documented API (see gobricks.js):
-// BRICKHOUSE_GOBRICKS_QUOTES=0 turns them off. BRICKHOUSE_CNY_PER_USD sets the rate the viewer uses
+// BRICKHOUSE_GOBRICKS_QUOTES=0 turns them off. BRICKHOUSE_CNY_PER_USD sets how many of GoBricks'
+// yuan make a dollar at Brickwith, its store (about 3.5; the viewer uses that by default),
 // for its approximate dollar figure.
 const QUOTER = process.env.BRICKHOUSE_GOBRICKS_QUOTES === '0' ? null : makeQuoter();
 const CNY_PER_USD = Number(process.env.BRICKHOUSE_CNY_PER_USD) || null;

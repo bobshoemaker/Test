@@ -397,7 +397,9 @@ let gq={key:null,q:null,busy:false,err:null};
 const gdsLots=()=>R.inventory.map(e=>({no:e.no,color:e.color,q:e.q,name:e.name}));
 const lotsKey=lots=>JSON.stringify(lots.map(l=>[l.no,l.color,l.q]));
 const yuan=v=>'¥'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
-const usd=v=>'$'+Math.round(v/((health&&health.cnyPerUsd)||7.2)).toLocaleString();
+// GoBricks' yuan prices to what its store, Brickwith, charges in dollars: the 634 sample's ¥153.07 came to
+// $43.88 there on 2026-09-28, about ¥3.5 a dollar (twice what the exchange rate gives)
+const usd=v=>'$'+Math.round(v/((health&&health.cnyPerUsd)||3.5)).toLocaleString();
 async function fetchQuote(){
   if(!GB||!health||!health.quote||!R) return;
   const lots=gdsLots(), key=lotsKey(lots); if(!lots.length||(gq.key===key&&(gq.q||gq.busy||gq.err))) return;
@@ -425,12 +427,12 @@ function renderParts(){
     // GoBricks may not sell the baseplate (it had no green 32 x 32 or 48 x 48 on sale when last checked)
     const plate=rows.find(r=>r.kind==='baseplate'), noPlate=plate&&each(plate)==null;
     $('pGds').textContent=yuan(total);
-    $('pGdsLabel').textContent=(live?`GoBricks today, about ${usd(total)}`:gq.busy?`GoBricks, checking today's price…`:`GoBricks catalog, about ${usd(total)}`)+(noPlate?', no baseplate':'');
+    $('pGdsLabel').textContent=(live?`GoBricks today, about ${usd(total)} at Brickwith`:gq.busy?`GoBricks, checking today's price…`:`GoBricks catalog, about ${usd(total)} at Brickwith`)+(noPlate?', no baseplate':'');
     const list=(a,f)=>a.slice(0,4).map(f).join(', ')+(a.length>4?', …':'');
-    const says=live?`GoBricks quoted ${yuan(live.total)} (about ${usd(live.total)}) for the ${live.pieces.toLocaleString()} pieces it has in stock today, before shipping.`+
+    const says=live?`GoBricks quoted ${yuan(live.total)} (about ${usd(live.total)} at Brickwith) for the ${live.pieces.toLocaleString()} pieces it has in stock today, before shipping.`+
         (live.outOfStock.length?` Out of stock right now: ${list(live.outOfStock,i=>esc(`${i.name} in ${i.color} (${i.q})`))}; their tool offers substitutes.`:'')+
         (live.notMade.filter(i=>!plate||i.no!==plate.no).length?` It doesn't make ${list(live.notMade.filter(i=>!plate||i.no!==plate.no),i=>esc(`${i.name} in ${i.color} (${i.q})`))}.`:'')
-      :`At GoBricks' catalog prices on ${GB.asOf} these parts come to about ${yuan(est)} (about ${usd(est)}) before shipping; `+
+      :`At GoBricks' catalog prices on ${GB.asOf} these parts come to about ${yuan(est)} (about ${usd(est)} at Brickwith) before shipping; `+
         (gq.err?`today's quote didn't come back (${esc(gq.err)}).`:health&&health.quote?`checking today's price and stock…`:`the Brickhouse server checks today's price and stock.`)+
         (gap.length?` It doesn't make ${gap.length} of these lots (${gp} piece${gp===1?'':'s'}: ${list(gap,r=>r.name+' in '+r.color)}); get those from BrickLink, or hold the design to GoBricks ("supplier": "gobricks") and it uses only what GoBricks makes.`:' It makes every part here.');
     $('gdsNote').innerHTML=`GoBricks makes compatible bricks at a fraction of the price. ${says} <b>Order from GoBricks</b> saves this list as a BrickLink XML file for their <a href="${GB.order}" target="_blank" rel="noopener">part list tool</a>. `+
