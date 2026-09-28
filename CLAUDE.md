@@ -21,7 +21,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   gets its story's floor laid under it that way (covering the story below too, so a set-back story
   rests on its walls), so a story that juts out past the one below needs no brackets (a warning past 4 studs of overhang, unless a post or wall spans it); upper stories can lift
   off too, each resting on the one below, and the viewer lifts them top first; "variation": "subtle",
-  which the design loop sets, recolors a few pieces of each material), hints (never
+  which the design loop sets, recolors a few pieces of each material), a plant library built from
+  real LEGO foliage (leaves 4 x 3 and 6 x 5 stacked into tiered canopies, leafy and flower-edged
+  round plates) in colors true to each plant, hints (never
   blocking) for big open stretches of plain tile, a fixture library for roofs (skylight, HVAC unit,
   vents, solar panel, hatch, chimney), manual step grouping, and the inventory.
   Dependency-free; runs in the browser (globals) and in Node (require).

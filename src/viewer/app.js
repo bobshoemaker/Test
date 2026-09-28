@@ -46,6 +46,29 @@ function archGeoFor(h,top){ const k=h+'|'+top; if(archCache[k]) return archCache
   const g=new THREE.ExtrudeGeometry(s,{depth:0.94,bevelEnabled:false,curveSegments:18}); g.translate(-2,0,-0.47); archCache[k]=g; return g; }
 const frondGeo=(()=>{ const g=new THREE.BoxGeometry(2.3,0.07,0.5); g.translate(1.15,0,0); return g; })();
 
+// Foliage shapes, one geometry per kind (and leaf size), drawn instanced like bricks.
+// A blade is a creased diamond from the middle out to (tx, tz), its tip drooping.
+function bladeGeo(tx,tz,y0,droop,width){ const L=Math.hypot(tx,tz), ux=tx/L, uz=tz/L, px=-uz*width/2, pz=ux*width/2, m=0.42;
+  const B=[0,y0,0], T=[tx,y0-droop,tz], Lf=[tx*m+px,y0+0.02-droop*m*0.6,tz*m+pz], Rt=[tx*m-px,y0+0.02-droop*m*0.6,tz*m-pz], C=[tx*m,y0+0.07-droop*m*0.5,tz*m];
+  const v=[...B,...Lf,...C, ...C,...Lf,...T, ...B,...C,...Rt, ...C,...T,...Rt];
+  const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(v,3)); g.computeVertexNormals(); return g; }
+const folCache={};
+function foliageGeo(p){ const key=p.shape==='leaves'?`leaves|${p.w}x${p.d}`:p.shape; if(folCache[key]) return folCache[key];
+  const items=[], H=PH*0.9;
+  if(p.shape==='leaves'){ // blades radiating to the edge of the footprint, with a hub at the middle
+    const rx=p.w/2-0.05, rz=p.d/2-0.05, n=p.w*p.d>20?14:10;
+    for(let k=0;k<n;k++){ const a=(k+0.37*(k%3))*Math.PI*2/n, c=Math.cos(a), si=Math.sin(a), L=1/Math.sqrt(c*c/(rx*rx)+si*si/(rz*rz))*(k%2?0.8:1);
+      items.push([bladeGeo(c*L,si*L,H*0.7,0.06+0.04*(k%3),0.35*L+0.3)]); }
+    const hub=new THREE.CylinderGeometry(0.34,0.38,H,10); hub.translate(0,H/2,0); items.push([hub]);
+  } else if(p.shape==='sprig'){ // a round plate with three leaves reaching out
+    const pl=new THREE.CylinderGeometry(0.42,0.44,H,10); pl.translate(0,H/2,0); items.push([pl]);
+    for(let k=0;k<3;k++){ const a=Math.PI/6+k*Math.PI*2/3; items.push([bladeGeo(Math.cos(a)*0.95,Math.sin(a)*0.95,H*0.8,-0.08,0.42)]); }
+  } else if(p.shape==='flower'){ // five round petals around the middle
+    for(let k=0;k<5;k++){ const a=k*Math.PI*2/5, pt=new THREE.CylinderGeometry(0.2,0.2,H,8); pt.translate(Math.cos(a)*0.26,H/2,Math.sin(a)*0.26); items.push([pt]); }
+    const mid=new THREE.CylinderGeometry(0.2,0.2,H*1.02,8); mid.translate(0,H*0.51,0); items.push([mid]);
+  }
+  return folCache[key]=mergeGeos(items); }
+
 const matO=new THREE.MeshLambertMaterial({color:0xffffff});
 const matT=new THREE.MeshLambertMaterial({color:0xffffff,transparent:true,opacity:0.62,depthWrite:false});
 const matW=new THREE.MeshLambertMaterial({color:0xffffff,side:THREE.DoubleSide});
@@ -69,7 +92,7 @@ function makeInstanced(geo,mat,list,cast){ const m=new THREE.InstancedMesh(geo,m
 function buildScene(){
   if(root){ scene.remove(root); meshes.forEach(m=>m.dispose&&m.dispose()); specials.forEach(s=>{ s.mats.forEach(o=>o.mat.dispose()); s.obj.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); }); }
   root=new THREE.Group(); scene.add(root); inst=[]; specials=[]; meshes=[]; studRecs=[]; anims.clear(); recOf=new Map(); studsOf=new Map();
-  const boxO=[], boxT=[], ch=[], cyl=[];
+  const boxO=[], boxT=[], ch=[], cyl=[], fol=new Map();
   for(const p of R.parts){
     const cx=p.x+p.w/2-OFF, cz=p.z+p.d/2-OFF, y0=p.y*PH, hh=p.h*PH;
     if(p.shape==='box'||p.shape==='cyl'){
@@ -79,9 +102,13 @@ function buildScene(){
     } else if(p.shape==='cheese'){
       tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,{S:0,N:Math.PI,E:Math.PI/2,W:-Math.PI/2}[p.dir]||0,0);
       tmp.updateMatrix(); const r={p,m:tmp.matrix.clone()}; ch.push(r); inst.push(r); recOf.set(p.id,r);
+    } else if(p.shape==='leaves'||p.shape==='sprig'||p.shape==='flower'){
+      tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,0,0); tmp.updateMatrix();
+      const geo=foliageGeo(p), r={p,m:tmp.matrix.clone()}; if(!fol.has(geo)) fol.set(geo,[]); fol.get(geo).push(r); inst.push(r); recOf.set(p.id,r);
     } else { const sp=makeSpecial(p); sp.pos0=sp.obj.position.clone(); sp.rot0=sp.obj.rotation.y; specials.push(sp); recOf.set(p.id,sp); }
   }
   makeInstanced(boxGeo,matO,boxO,true); makeInstanced(boxGeo,matT,boxT,false); makeInstanced(cheeseGeo,matW,ch,true); makeInstanced(cylGeo,matO,cyl,true);
+  for(const [geo,list] of fol) makeInstanced(geo,matW,list,true);
   // studs
   for(const p of R.parts) for(const [x,z] of p.studs){ const top=p.y+p.h; const cov=R.occ.get(x+','+z+','+top); studRecs.push({p,x,z,top,cov}); }
   for(let x=0;x<PLATE;x++) for(let z=0;z<PLATE;z++){ const cov=R.occ.get(x+','+z+',0'); studRecs.push({p:null,x,z,top:0,cov}); }

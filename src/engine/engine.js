@@ -8,7 +8,11 @@ const COLORS = {
   'Reddish Brown':{hex:'#582A12',bl:88}, 'Dark Orange':{hex:'#A95500',bl:68}, 'Green':{hex:'#237841',bl:6},
   'Dark Green':{hex:'#184632',bl:80}, 'Bright Green':{hex:'#4B9F4A',bl:36}, 'Trans-Clear':{hex:'#CFE6F2',bl:12},
   'Red':{hex:'#C91A09',bl:5}, 'Yellow':{hex:'#F2CD37',bl:3}, 'Bright Pink':{hex:'#E4ADC8',bl:104}, 'Sand Green':{hex:'#A0BCAC',bl:48},
-  'Blue':{hex:'#0055BF',bl:7}, 'Medium Nougat':{hex:'#AA7D55',bl:150}, 'Light Gray':{hex:'#C8C8C8',bl:9}, 'Dark Red':{hex:'#720E0F',bl:59}, 'Sand Blue':{hex:'#6074A1',bl:55}, 'Olive Green':{hex:'#9B9A5A',bl:155}, 'Dark Brown':{hex:'#352100',bl:120}, 'Trans-Yellow':{hex:'#F5CD2F',bl:19}, 'Trans-Black':{hex:'#3B3F46',bl:13}
+  'Blue':{hex:'#0055BF',bl:7}, 'Medium Nougat':{hex:'#AA7D55',bl:150}, 'Light Gray':{hex:'#C8C8C8',bl:9}, 'Dark Red':{hex:'#720E0F',bl:59}, 'Sand Blue':{hex:'#6074A1',bl:55}, 'Olive Green':{hex:'#9B9A5A',bl:155}, 'Dark Brown':{hex:'#352100',bl:120}, 'Trans-Yellow':{hex:'#F5CD2F',bl:19}, 'Trans-Black':{hex:'#3B3F46',bl:13},
+  // foliage and flowers
+  'Lime':{hex:'#BBE90B',bl:34}, 'Yellowish Green':{hex:'#DFEEA5',bl:158}, 'Medium Lavender':{hex:'#AC78BA',bl:157}, 'Lavender':{hex:'#E1D5ED',bl:154},
+  'Magenta':{hex:'#923978',bl:71}, 'Dark Pink':{hex:'#C870A0',bl:47}, 'Coral':{hex:'#FF698F',bl:220}, 'Orange':{hex:'#FE8A18',bl:4},
+  'Bright Light Orange':{hex:'#F8BB3D',bl:110}, 'Bright Light Yellow':{hex:'#FFF03A',bl:103}, 'Medium Blue':{hex:'#5A93DB',bl:42}
 };
 const SIZE_PARTS = {
   brick:{'1x1':'3005','1x2':'3004','1x3':'3622','1x4':'3010','1x6':'3009','1x8':'3008','2x2':'3003','2x3':'3002','2x4':'3001','2x6':'2456','2x8':'3007'},
@@ -36,6 +40,12 @@ const SPECIAL = {
   win23:{no:'60593', name:'Window 1 x 2 x 3', w:2,d:1,h:9, shape:'window', glass:'60602', glassName:'Glass for window 1 x 2 x 3', cost:0.20},
   fence4:{no:'3633', name:'Fence 1 x 4 x 1', w:4,d:1,h:3, shape:'fence', cost:0.10},
   palmtop:{no:'2566', name:'Palm tree top', w:1,d:1,h:1, studs:false, shape:'palm', cost:0.30},
+  // foliage: leaves clip onto one stud through the hole at their middle and carry one stud there, so
+  // leaves stack into layered canopies; their blades spread over the rest of the footprint
+  leaves43:{no:'2423', name:'Plant leaves 4 x 3', w:4,d:3,h:1, shape:'leaves', at:[1,1], cost:0.08},
+  leaves65:{no:'2417', name:'Plant leaves 6 x 5', w:6,d:5,h:1, shape:'leaves', at:[2,2], cost:0.12},
+  sprig1:{no:'32607', name:'Plant plate round 1 x 1 with 3 leaves', w:1,d:1,h:1, shape:'sprig', cost:0.05},
+  flower1:{no:'33291', name:'Plate round 1 x 1 with flower edge', w:1,d:1,h:1, shape:'flower', cost:0.05},
   // Sideways building (SNOT): a brick with a stud on one side sits in a wall opening, facing out,
   // and wall details hang on that stud (the "detail" op). Mounted parts are drawn as small blocks.
   snot:{no:'87087', name:'Brick 1 x 1 with stud on 1 side', w:1,d:1,h:3, shape:'box', cost:0.08},
@@ -48,24 +58,43 @@ const SPECIAL = {
 const GLASS_COST = 0.10, BASEPLATES = {32:{no:'3811', name:'Baseplate 32 x 32', color:'Green', cost:12}, 48:{no:'4186', name:'Baseplate 48 x 48', color:'Green', cost:25}};
 // Plant library for the "plant" op: sub-builds checked to stand on their own, placed by kind.
 // Offsets are from the plant's corner stud; "bloom" parts take the op's bloom color.
-const P=(part,color,x,y,z,dir)=>({part,color,at:[x,y,z],...(dir?{dir}:{})});
+const P=(part,color,x,y,z,dir)=>({part,color,at:[x,y,z],...(typeof dir==='number'?{rot:dir}:dir?{dir}:{})});
+// a leaf clipped onto the stud at (cx, cz): its corner is placed so its middle hole lands there
+const LEAF=(part,color,cx,y,cz,rot=0)=>{ const a=SPECIAL[part].at, [ax,az]=rot%2?[a[1],a[0]]:a; return P(part,color,cx-ax,y,cz-az,rot); };
+// Colors follow the real plants: olive leaves are gray-green with silvery undersides, citrus and
+// boxwood a glossy deep green, cypress nearly black-green, agave and yucca blue-gray, palm fronds a
+// mid green, bark brown or gray-tan; new growth shows as a lighter green on the tips.
 const PLANTS = {
-  'olive tree':{name:'Olive tree', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Reddish Brown',0,1,0),P('round1','Reddish Brown',1,1,1),P('round1','Reddish Brown',0,4,0),P('round1','Reddish Brown',1,4,1),
-    P('plate:2x2','Olive Green',0,7,0),P('plate:4x4','Olive Green',-1,8,-1),P('plate:2x2','Olive Green',0,9,0),P('roundplate1','Sand Green',-1,9,-1),P('roundplate1','Sand Green',2,9,-1),P('roundplate1','Sand Green',-1,9,2),P('roundplate1','Sand Green',2,9,2),P('roundplate2','Sand Green',0,10,0)]},
-  'yucca':{name:'Yucca', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Tan',0,1,0),P('round1','Tan',0,4,0),P('palmtop','Sand Green',0,7,0)]},
-  'agave':{name:'Agave', parts:[P('plate:2x2','Sand Green',0,0,0),P('cheese','Sand Green',0,1,0,'W'),P('cheese','Sand Green',1,1,0,'N'),P('cheese','Sand Green',1,1,1,'E'),P('cheese','Sand Green',0,1,1,'S')]},
-  'columnar cactus':{name:'Columnar cactus', parts:[P('plate:2x2','Dark Tan',0,0,0),P('round1','Green',0,1,0),P('round1','Green',0,4,0),P('round1','Green',0,7,0),P('roundplate1','Green',0,10,0),P('round1','Green',1,1,1),P('round1','Green',1,4,1),P('roundplate1','Green',1,7,1)]},
-  'palm':{name:'Palm tree', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Reddish Brown',0,1,0),P('round1','Dark Tan',0,4,0),P('round1','Reddish Brown',0,7,0),P('round1','Dark Tan',0,10,0),P('round1','Reddish Brown',0,13,0),P('palmtop','Green',0,16,0)]},
-  'cypress':{name:'Cypress', parts:[P('roundbrick2','Dark Green',0,0,0),P('roundbrick2','Dark Green',0,3,0),P('roundbrick2','Dark Green',0,6,0),P('roundbrick2','Dark Green',0,9,0),P('roundplate2','Dark Green',0,12,0)]},
-  'shade tree':{name:'Shade tree', parts:[P('roundbrick2','Reddish Brown',0,0,0),P('roundbrick2','Reddish Brown',0,3,0),P('roundbrick2','Reddish Brown',0,6,0),P('plate:6x6','Green',-2,9,-2),
-    P('brick:6x2','Green',-2,10,-2),P('brick:6x2','Dark Green',-2,10,0),P('brick:6x2','Green',-2,10,2),P('plate:4x4','Dark Green',-1,13,-1),P('brick:4x2','Green',-1,14,-1),P('brick:4x2','Green',-1,14,1),P('roundplate2','Dark Green',0,17,0)]},
-  'shrub':{name:'Shrub', parts:[P('roundbrick2','Dark Green',0,0,0),P('roundplate2','Green',0,3,0)]},
-  'flowering shrub':{name:'Flowering shrub', parts:[P('roundbrick2','Dark Green',0,0,0),P('roundplate1','bloom',0,3,0),P('roundplate1','Green',1,3,0),P('roundplate1','Green',0,3,1),P('roundplate1','bloom',1,3,1)]},
-  'grasses':{name:'Grasses', parts:[P('plate:2x1','Olive Green',0,0,0),P('cheese','Olive Green',0,1,0,'W'),P('cheese','Olive Green',1,1,0,'E')]},
-  'lavender':{name:'Lavender', parts:[P('plate:2x1','Sand Green',0,0,0),P('roundplate1','Sand Blue',0,1,0),P('roundplate1','Sand Blue',1,1,0)]},
-  'flower bed':{name:'Flower bed', parts:[P('plate:4x2','Reddish Brown',0,0,0),...[0,1,2,3].flatMap(x=>[0,1].map(z=>P('roundplate1',(x+z)%2?'Green':'bloom',x,1,z)))]},
-  'lemon tree':{name:'Lemon tree', parts:[P('roundplate2','Reddish Brown',0,0,0),P('round1','Reddish Brown',0,1,0),P('round1','Reddish Brown',1,1,1),P('plate:2x2','Dark Green',0,4,0),P('roundbrick2','Green',0,5,0),
-    P('roundplate1','Yellow',0,8,0),P('roundplate1','Green',1,8,0),P('roundplate1','Green',0,8,1),P('roundplate1','Yellow',1,8,1)]},
+  'olive tree':{name:'Olive tree', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Dark Brown',0,1,0),P('round1','Dark Brown',1,1,1),P('round1','Dark Brown',0,4,0),P('round1','Dark Brown',1,4,1),
+    P('plate:2x2','Olive Green',0,7,0),LEAF('leaves43','Olive Green',0,8,0),LEAF('leaves43','Sand Green',0,9,0,1),LEAF('leaves43','Olive Green',0,10,0),LEAF('leaves43','Sand Green',0,11,0,1),P('sprig1','Olive Green',0,12,0)]},
+  'yucca':{name:'Yucca', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Dark Tan',0,1,0),P('round1','Tan',0,4,0),P('sprig1','Sand Green',0,7,0),P('palmtop','Sand Green',0,8,0)]},
+  'agave':{name:'Agave', parts:[P('roundplate2','Dark Tan',0,0,0),P('cheese','Sand Green',0,1,0,'W'),P('cheese','Sand Green',1,1,0,'N'),P('cheese','Sand Green',1,1,1,'E'),P('cheese','Sand Green',0,1,1,'S')]},
+  'columnar cactus':{name:'Columnar cactus', parts:[P('plate:2x2','Dark Tan',0,0,0),P('round1','Sand Green',0,1,0),P('round1','Sand Green',0,4,0),P('round1','Sand Green',0,7,0),P('flower1','White',0,10,0),
+    P('round1','Sand Green',1,1,1),P('round1','Sand Green',1,4,1),P('roundplate1','Sand Green',1,7,1)]},
+  'palm':{name:'Palm tree', parts:[P('roundplate2','Dark Tan',0,0,0),P('round1','Dark Tan',0,1,0),P('round1','Tan',0,4,0),P('round1','Dark Tan',0,7,0),P('round1','Tan',0,10,0),P('round1','Dark Tan',0,13,0),
+    P('roundplate1','Dark Brown',0,16,0),P('palmtop','Green',0,17,0)]},
+  'cypress':{name:'Cypress', parts:[P('roundbrick2','Dark Green',0,0,0),P('roundbrick2','Dark Green',0,3,0),P('roundbrick2','Dark Green',0,6,0),P('roundbrick2','Dark Green',0,9,0),
+    P('cone1','Dark Green',0,12,0),P('sprig1','Dark Green',1,12,0),P('sprig1','Green',0,12,1),P('sprig1','Dark Green',1,12,1),P('sprig1','Dark Green',0,15,0)]},
+  'shade tree':{name:'Shade tree', parts:[P('roundbrick2','Reddish Brown',0,0,0),P('roundbrick2','Reddish Brown',0,3,0),P('roundplate2','Dark Green',0,6,0),
+    LEAF('leaves65','Dark Green',0,7,0),LEAF('leaves65','Green',0,8,0,1),P('roundplate1','Dark Green',0,9,0),LEAF('leaves65','Green',0,10,0),LEAF('leaves43','Dark Green',0,11,0,1),
+    P('roundplate1','Green',0,12,0),LEAF('leaves43','Bright Green',0,13,0),P('sprig1','Bright Green',0,14,0)]},
+  'shrub':{name:'Shrub', parts:[P('roundbrick2','Dark Green',0,0,0),LEAF('leaves43','Green',0,3,0),LEAF('leaves43','Dark Green',0,4,0,1),P('sprig1','Bright Green',0,5,0)]},
+  'boxwood':{name:'Boxwood', parts:[P('roundplate2','Dark Green',0,0,0),P('sprig1','Dark Green',0,1,0),P('sprig1','Green',1,1,0),P('sprig1','Green',0,1,1),P('sprig1','Dark Green',1,1,1)]},
+  'flowering shrub':{name:'Flowering shrub', parts:[P('roundbrick2','Dark Green',0,0,0),P('sprig1','Green',0,3,0),P('flower1','bloom',1,3,0),P('flower1','bloom',0,3,1),P('sprig1','Dark Green',1,3,1),
+    P('flower1','bloom',0,4,0),P('flower1','bloom',1,4,1)]},
+  // its color is in papery bracts, which read as magenta leaves
+  'bougainvillea':{name:'Bougainvillea', parts:[P('roundbrick2','Dark Green',0,0,0),P('roundbrick2','Green',0,3,0),LEAF('leaves43','Green',0,6,0),P('flower1','Magenta',0,7,0),
+    LEAF('leaves43','Magenta',0,8,0,1),P('flower1','Dark Pink',0,9,0),LEAF('leaves43','Dark Green',0,10,0),P('flower1','Magenta',0,11,0)]},
+  'grasses':{name:'Grasses', parts:[P('plate:2x1','Olive Green',0,0,0),P('sprig1','Olive Green',0,1,0),P('sprig1','Tan',1,1,0),P('sprig1','Yellowish Green',0,2,0)]},
+  'lavender':{name:'Lavender', parts:[P('plate:2x1','Sand Green',0,0,0),P('sprig1','Sand Green',0,1,0),P('sprig1','Sand Green',1,1,0),P('flower1','Medium Lavender',0,2,0),P('flower1','Medium Lavender',1,2,0)]},
+  'succulents':{name:'Succulents', parts:[P('plate:2x2','Dark Tan',0,0,0),P('sprig1','Sand Green',0,1,0),P('cheese','Olive Green',1,1,0,'E'),P('flower1','Sand Green',0,1,1),P('sprig1','Yellowish Green',1,1,1),P('flower1','Coral',0,2,0)]},
+  'flower bed':{name:'Flower bed', parts:[P('plate:4x2','Dark Brown',0,0,0),...[0,1,2,3].flatMap(x=>[0,1].map(z=>(x+z)%2?P('sprig1','Green',x,1,z):P('flower1','bloom',x,1,z))),
+    ...[0,2].map(x=>P('flower1','bloom',x+1,2,0)),...[0,2].map(x=>P('flower1','bloom',x,2,1))]},
+  'lemon tree':{name:'Lemon tree', parts:[P('roundplate2','Reddish Brown',0,0,0),P('round1','Reddish Brown',0,1,0),P('round1','Reddish Brown',0,4,0),P('plate:2x2','Dark Green',0,7,0),
+    LEAF('leaves43','Dark Green',0,8,0),P('roundplate1','Bright Light Yellow',0,9,0),LEAF('leaves43','Green',0,10,0,1),P('flower1','White',0,11,0),LEAF('leaves43','Dark Green',0,12,0),P('roundplate1','Bright Light Yellow',0,13,0)]},
+  'jacaranda':{name:'Jacaranda', parts:[P('roundbrick2','Dark Brown',0,0,0),P('roundbrick2','Dark Brown',0,3,0),P('roundplate2','Green',0,6,0),
+    LEAF('leaves65','Green',0,7,0),LEAF('leaves65','Medium Lavender',0,8,0,1),P('flower1','Medium Lavender',0,9,0),LEAF('leaves65','Medium Lavender',0,10,0),LEAF('leaves43','Lavender',0,11,0,1),
+    P('flower1','Medium Lavender',0,12,0),LEAF('leaves43','Medium Lavender',0,13,0),P('flower1','Lavender',0,14,0)]},
 };
 
 // Roof and yard fixtures for the "fixture" op, placed like plants (on studs, from the corner stud).
@@ -87,7 +116,7 @@ const GRIP_MAX = 12;
 const OVERHANG_MAX = 4;
 // "variation": "subtle" gives every walls, fill and roof op without its own "mix" one close color on a
 // few pieces, by material; "mix": [] on an op keeps it plain.
-const SUBTLE_MIX = { 'White':[['Light Gray',0.04]], 'Tan':[['Light Nougat',0.06]], 'Dark Tan':[['Tan',0.06]], 'Medium Nougat':[['Dark Tan',0.06]],
+const SUBTLE_MIX = { 'White':[['Light Gray',0.04]], 'Tan':[['Light Nougat',0.06]], 'Green':[['Dark Green',0.06]], 'Dark Green':[['Green',0.06]], 'Dark Tan':[['Tan',0.06]], 'Medium Nougat':[['Dark Tan',0.06]],
   'Light Bluish Gray':[['Light Gray',0.05]], 'Dark Bluish Gray':[['Black',0.04]], 'Reddish Brown':[['Dark Brown',0.06]], 'Dark Orange':[['Reddish Brown',0.08]] }; // studs a lift-off roof may grip: enough to locate it, few enough to lift it off
 const K3 = (x,z,p)=>x+','+z+','+p;
 
@@ -110,8 +139,10 @@ function makePart(def,x,y,z,rot,color,meta){
       for(let q=leg?0:def.h-def.archTop;q<def.h;q++) occ.push([cx,cz,y+q]);
       if(leg) sockets.push([cx,cz]); studs.push([cx,cz]); }
   } else {
+    const at=def.at?(rot%2?[def.at[1],def.at[0]]:def.at):null;
     for(let i=0;i<sw;i++) for(let j=0;j<sd;j++){ const cx=x+i, cz=z+j;
       for(let q=0;q<def.h;q++) occ.push([cx,cz,y+q]);
+      if(at&&(i!==at[0]||j!==at[1])) continue;
       sockets.push([cx,cz]); if(def.studs!==false) studs.push([cx,cz]); }
   }
   p.occ=occ; p.sockets=sockets; p.studs=studs; p.studSet=new Set(studs.map(s=>s[0]+','+s[1]));
@@ -513,7 +544,7 @@ function compile(design){
         if(!def){ errors.push({msg:`Unknown ${op.op} "${op.kind}"; the library has ${Object.keys(LIB).join(', ')}`, op:i}); break; }
         const si=subs.length; subs.push({name:def.name, phase:op.phase, copies:op.at.length, op:i, partIds:[]});
         op.at.forEach((c,ci)=>def.parts.forEach((pp,pi)=>{
-          const q=place(pp.part,c[0]+pp.at[0],c[1]+pp.at[1],c[2]+pp.at[2],0,pp.color==='bloom'?(op.bloom||'Bright Pink'):pp.color,Object.assign({},meta,{sub:si,copy:ci,tpl:pi}),true);
+          const q=place(pp.part,c[0]+pp.at[0],c[1]+pp.at[1],c[2]+pp.at[2],pp.rot||0,pp.color==='bloom'?(op.bloom||'Bright Pink'):pp.color,Object.assign({},meta,{sub:si,copy:ci,tpl:pi}),true);
           if(q){ if(pp.dir) q.dir=pp.dir; subs[si].partIds.push(q.id); } }));
         break; }
       default: errors.push({msg:`Unknown operation "${op.op}"`, op:i});
@@ -609,7 +640,8 @@ function compile(design){
   par.set('base','base'); parts.forEach(p=>par.set(p.id,p.id)); joints.forEach(([a,b])=>{ const ra=f(a), rb=f(b); if(ra!==rb) par.set(ra,rb); });
   const root=f('base');
   for(const p of parts) if(f(p.id)!==root&&!flagged.has(p.id)){ errors.push({msg:`${p.name} #${p.id} at (${p.x}, ${p.y}, ${p.z}) isn't connected to the baseplate`, op:p.op, part:p.id}); flagged.add(p.id); }
-  for(const p of parts){ const area=p.shape==='arch'?4:p.w*p.d; if(area>=2&&jn.get(p.id)<=1&&!flagged.has(p.id)) warnings.push({msg:`${p.name} #${p.id} at (${p.x}, ${p.y}, ${p.z}) is held by a single stud`, op:p.op, part:p.id}); }
+  // a part that grips only at one stud by design (plant leaves) isn't flagged for it
+  for(const p of parts){ const area=p.shape==='arch'?4:p.sockets.length; if(area>=2&&jn.get(p.id)<=1&&!flagged.has(p.id)) warnings.push({msg:`${p.name} #${p.id} at (${p.x}, ${p.y}, ${p.z}) is held by a single stud`, op:p.op, part:p.id}); }
   // roof edges left showing: an abutted side whose neighbour (a wall or another roof) stays lower
   if(abutEdges.length){
     const colTop=new Map(); for(const p of parts) for(let a=0;a<p.w;a++) for(let b=0;b<p.d;b++){ const k=(p.x+a)+','+(p.z+b); colTop.set(k,Math.max(colTop.get(k)||0,p.y+p.h)); }
