@@ -104,7 +104,7 @@ async function makeRenderer({ width = 800, height = 600 } = {}) {
       });
       x.strokeStyle = '#e67e22'; x.lineWidth = 3;
       for (const s of a.locked.stairs || []) { const r = s.rect; x.strokeRect(r[0] * S, r[1] * S, (r[2] - r[0] + 1) * S, (r[3] - r[1] + 1) * S); }
-      x.fillStyle = '#555'; x.fillRect(0, (a.size - 1) * S, c.width, S); x.fillStyle = '#fff'; x.font = 'bold 11px sans-serif'; x.fillText('STREET (z = 31)', 6, a.size * S - 6);
+      x.fillStyle = '#555'; x.fillRect(0, (a.size - 1) * S, c.width, S); x.fillStyle = '#fff'; x.font = 'bold 11px sans-serif'; x.fillText(`STREET (z = ${a.size - 1})`, 6, a.size * S - 6);
     }, { src, loadImg, locked, size, px });
   }
 
