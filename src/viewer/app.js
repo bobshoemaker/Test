@@ -293,7 +293,7 @@ function renderThumbs(){
   photoUrls.forEach(u=>URL.revokeObjectURL(u)); photoUrls=photos.map(f=>URL.createObjectURL(f));
   const html=photoUrls.map((u,i)=>`<img src="${u}" alt="House photo ${i+1}">`).join('');
   $('thumbs').innerHTML=html; $('refPhotos').innerHTML=html; $('refWrap').hidden=!photos.length;
-  $('designBtn').textContent=photos.length?`Design from ${photos.length} photo${photos.length>1?'s':''}`:'Design from description';
+  $('designBtn').textContent=(photos.length?`Design from ${photos.length} photo${photos.length>1?'s':''}`:'Design from description')+feeText();
   $('surveyBtn').hidden=!photos.length; if(survey){ survey=null; $('survey').hidden=true; $('survey').innerHTML=''; } // new photos: ask again
 }
 async function toPayload(file,maxSide=1568){
@@ -352,35 +352,57 @@ $('useCands').onclick=async()=>{
 $('stopBtn').onclick=()=>{ if(busyCtl) busyCtl.abort(); };
 $('lastBtn').hidden=true;
 
+// Designs run as jobs on the server. With a design fee set, a new job goes to Stripe Checkout first
+// and starts when Stripe sends the owner back paid; either way the page polls the job for progress,
+// so paying, reloading or closing the tab doesn't lose it (the job id is in the address bar).
+let jobId=null, jobAfter=0, jobHave=0, jobT0=0;
+const feeText=()=>health&&health.fee?` (${(health.fee.amountCents/100).toLocaleString(undefined,{style:'currency',currency:health.fee.currency.toUpperCase()})} design fee)`:'';
 async function askServer(mode){
-  if(busyCtl) return;
-  const notes=$('notes').value.trim().slice(0,1500), target=Math.max(300,Math.min(2500,+$('target').value||1200));
-  if(mode==='design'&&!photos.length&&!notes){ status('Add at least one photo or a short description first.',true); return; }
-  const ctl=new AbortController(); busyCtl=ctl; setBusy(true); const t0=Date.now();
-  status(mode==='design'?'Preparing photos…':'Sending the design back to Claude…');
+  if(busyCtl||jobId&&mode!=='fix') return;
   try{
+    if(mode==='fix'){
+      const r=await fetch(`/api/jobs/${jobId}/fix`,{method:'POST'}), j=await r.json();
+      if(!r.ok) throw new Error(j.error||`Server error ${r.status}`);
+      return watchJob(jobId,true);
+    }
+    const notes=$('notes').value.trim().slice(0,1500), target=Math.max(300,Math.min(2500,+$('target').value||1200));
+    if(!photos.length&&!notes){ status('Add at least one photo or a short description first.',true); return; }
+    setBusy(true); status('Preparing photos…');
     const big=$('bigPlate').checked;
-    const body={mode,notes,target:big?Math.max(target,2400):target,plate:big?48:32,address:mode==='design'&&lookedUp?lookedUp:undefined,
-      plan:mode==='design'&&planFile?await toPayload(planFile,2400):undefined,
-      photos:mode==='design'?await Promise.all(photos.map(f=>toPayload(f))):[],design:mode==='fix'?curDesign:undefined,
-      credits:mode==='design'?photos.map(f=>photoCredit.get(f)).filter(Boolean):undefined,
-      choices:mode==='design'?surveyChoices():undefined};
-    status(mode==='design'?'Claude is studying the photos. This usually takes a few minutes.':'Claude is fixing the design…');
-    const res=await fetch('/api/design',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:ctl.signal});
-    if(!res.ok){ const j=await res.json().catch(()=>({})); throw new Error(j.error||`Server error ${res.status}`); }
-    const reader=res.body.getReader(), dec=new TextDecoder(); let buf='';
-    for(;;){ const {value,done}=await reader.read(); if(done) break; buf+=dec.decode(value,{stream:true});
-      let i; while((i=buf.indexOf('\n'))>=0){ const line=buf.slice(0,i).trim(); buf=buf.slice(i+1); if(line) handleEvent(JSON.parse(line),t0); } }
-  }catch(e){ status(e.name==='AbortError'?'Stopped. The server finishes the job in the background and saves it to designs/generated.':esc(e.message),e.name!=='AbortError'); }
-  finally{ busyCtl=null; setBusy(false); }
+    const body={notes,target:big?Math.max(target,2400):target,plate:big?48:32,address:lookedUp||undefined,
+      plan:planFile?await toPayload(planFile,2400):undefined, photos:await Promise.all(photos.map(f=>toPayload(f))),
+      credits:photos.map(f=>photoCredit.get(f)).filter(Boolean), choices:surveyChoices()};
+    const res=await fetch('/api/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}), j=await res.json();
+    if(!res.ok) throw new Error(j.error||`Server error ${res.status}`);
+    if(j.checkout){ status('Taking you to the secure payment page for the design fee…'); location.href=j.checkout; return; }
+    watchJob(j.id,false);
+  }catch(e){ status(esc(e.message),true); setBusy(false); }
+}
+function watchJob(id,keep){
+  jobId=id; if(!keep){ jobAfter=0; jobHave=0; } jobT0=Date.now(); setBusy(true); $('stopBtn').hidden=true;
+  try{ history.replaceState(null,'','?job='+id); }catch(e){}
+  status('Claude is studying the photos. This usually takes 15 to 25 minutes; you can close this page and come back with the same address.');
+  pollJob();
+}
+async function pollJob(){
+  let j;
+  try{ const r=await fetch(`/api/jobs/${jobId}?after=${jobAfter}&have=${jobHave}`); j=await r.json(); if(!r.ok) throw new Error(j.error||`Server error ${r.status}`); }
+  catch(e){ status(esc(e.message),true); setTimeout(pollJob,5000); return; }
+  if(j.draft){ jobHave=j.draftN; showDesign(j.draft); $('designSrc').value=JSON.stringify(j.draft,null,2); }
+  for(const ev of j.events) handleEvent(ev.type==='done'&&j.result?j.result:ev,jobT0);
+  jobAfter=j.next;
+  if(j.status==='awaiting_payment'){ status(`This design is waiting for its design fee.`); setBusy(false); return; }
+  if(j.status==='interrupted'){ status('The server restarted during this design. Reload this page to pick it up again.',true); setBusy(false); return; }
+  if(j.status==='done'||j.status==='error'){ setBusy(false); return; }
+  setTimeout(pollJob,2000);
 }
 function handleEvent(ev,t0){
   const secs=()=>Math.round((Date.now()-t0)/1000);
   if(ev.type==='status') status(`${esc(ev.message)} <span style="color:var(--muted)">${secs()} s</span>`);
-  else if(ev.type==='draft'){ showDesign(ev.design); $('designSrc').value=JSON.stringify(ev.design,null,2);
-    status(`Draft ${ev.n} compiled: ${ev.stats.pieces.toLocaleString()} pieces, ${ev.errors} errors, ${ev.warnings} warnings. Claude is revising… <span style="color:var(--muted)">${secs()} s</span>`); }
-  else if(ev.type==='done'){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; run(t); DESIGN_TEXT=t;
-    status(`Done in ${ev.seconds} s after ${ev.compiles} compile${ev.compiles===1?'':'s'}: ${ev.stats.pieces.toLocaleString()} pieces, ${ev.errors} errors, ${ev.warnings} warnings. Saved as designs/${esc(ev.saved)}.json.`
+  else if(ev.type==='part') status(`Building part ${ev.n} of ${ev.of}: ${esc(ev.name)}… <span style="color:var(--muted)">${secs()} s</span>`);
+  else if(ev.type==='draft') status(`Draft ${ev.n} compiled: ${ev.stats.pieces.toLocaleString()} pieces, ${ev.errors} errors, ${ev.warnings} warnings. Claude is revising… <span style="color:var(--muted)">${secs()} s</span>`);
+  else if(ev.type==='done'&&ev.design){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; run(t); DESIGN_TEXT=t;
+    status(`Done: ${ev.stats.pieces.toLocaleString()} pieces, ${ev.errors} errors, ${ev.warnings} warnings. Saved as designs/${esc(ev.saved)}.json.`
       +(ev.note?` ${esc(ev.note)}`:'')+((ev.errors||ev.warnings)?' <button class="btn sm" id="fixBtn">Ask Claude to fix these</button>':''));
     const fb=$('fixBtn'); if(fb) fb.onclick=()=>askServer('fix'); loadDesignList(ev.saved); }
   else if(ev.type==='error') status(esc(ev.message),true);
@@ -447,5 +469,13 @@ async function boot(){
   $('photoControls').hidden=false;
   $('photoIntro').textContent=`Enter the address to find street photos${health.streetPhotos?'':' (needs MAPILLARY_TOKEN)'}, or pick up to ${health.maxPhotos} exterior photos, front first. Claude (${health.model}) studies them, writes a design, compiles it here, fixes what the checker flags, and saves it.`;
   renderThumbs();
+  // Back from Stripe (?job=…&session=…): confirm the payment and start the design; ?job=… alone
+  // picks up a design in progress or finished.
+  const q=new URLSearchParams(location.search), qj=q.get('job');
+  if(qj&&q.get('canceled')){ status('Payment canceled; nothing was charged. Your photos are still here if you want to try again.'); try{ history.replaceState(null,'','/'); }catch(e){} }
+  else if(qj&&q.get('session')){ status('Confirming the payment…');
+    const r=await fetch(`/api/jobs/${qj}/start`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({session:q.get('session')})}), j=await r.json();
+    if(!r.ok) status(esc(j.error||'The payment could not be confirmed.'),true); else watchJob(qj,false); }
+  else if(qj) watchJob(qj,false);
 }
 boot();

@@ -13,6 +13,10 @@ the Node server (it calls Claude and renders drafts in headless Chromium).
    - `BRICKHOUSE_PASSWORD`: the password everyone types to open the site (any user name).
    - `BRICKHOUSE_ANTHROPIC_API_KEY`: your Anthropic key. Never commit it: this repo is public.
    - `BRICKHOUSE_ANTHROPIC_WORKSPACE_ID`: only if the key is organization-scoped.
+   - `STRIPE_SECRET_KEY`: your Stripe secret key (Stripe dashboard > Developers > API keys). With it, a
+     design only starts after its design fee is paid; without it, designs are free to start. Try it
+     first with a test key (`sk_test_...`) and Stripe's test card 4242 4242 4242 4242.
+   - `BRICKHOUSE_DESIGN_FEE_CENTS`: the fee in cents (1500 = $15), credited toward the kit if you like.
    - `MAPILLARY_TOKEN`: optional, for street photos from the address box.
 4. Apply. The first build takes a few minutes (the image includes Chromium). The site is then at
    `https://brickhouse-XXXX.onrender.com`; share that and the password.
@@ -22,8 +26,9 @@ the Node server (it calls Claude and renders drafts in headless Chromium).
 - Render Starter web service plus a 1 GB disk: about $7 to $8 a month. The free plan sleeps when
   idle and has too little memory for the renders.
 - Each house designed: about $3 to $4 of Anthropic API credit, charged to the key above, 15 to 25
-  minutes. Anyone with the password can start one, so share it only with people you trust, and set
-  a monthly spend limit on the key in the Anthropic console.
+  minutes. With Stripe set up, each one is paid for first by the design fee; the free first look
+  (the survey, about $0.07) and new jobs are rate-limited per visitor. Still set a monthly spend
+  limit on the key in the Anthropic console as a backstop.
 
 ## Notes
 

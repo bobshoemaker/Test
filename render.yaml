@@ -16,6 +16,10 @@ services:
         sync: false
       - key: BRICKHOUSE_EFFORT
         value: high
+      - key: STRIPE_SECRET_KEY                   # design fee through Stripe Checkout; without it designs are free
+        sync: false
+      - key: BRICKHOUSE_DESIGN_FEE_CENTS         # the fee in cents
+        value: "1500"
       - key: MAPILLARY_TOKEN                     # optional: street photos from the address box
         sync: false
     disk:                    # keeps generated designs across deploys

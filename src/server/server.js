@@ -9,6 +9,8 @@ const { scaleFor } = require('./scale');
 const { lookupAddress, fetchMapillaryImage } = require('./lookup');
 const { lookupTerrain } = require('./terrain');
 const { prepareDesign } = require('./pipeline');
+const { createJobs } = require('./jobs');
+const { makeStripe } = require('./payments');
 const { anthropicKey, makeAnthropicClient } = require('./client');
 
 const ROOT = path.resolve(__dirname, '../..');
@@ -94,58 +96,100 @@ async function handleSurvey(req, res) {
   } catch (e) { send(res, 502, { error: e && e.message ? e.message : String(e) }); }
 }
 
-async function handleDesign(req, res) {
-  const client = makeClient();
-  if (!client) return send(res, 503, { error: NO_KEY });
-  let body;
-  try { body = JSON.parse(await readBody(req)); } catch (e) { return send(res, 400, { error: e.message }); }
-  const photos = cleanPhotos(body.photos);
+// A design request's parameters, cleaned: photos, notes, target, choices, credits, plan, address, plate.
+function parseDesignRequest(body) {
   const sc = scaleFor(body.plate);
-  const target = Math.max(300, Math.min(3000, Number(body.target) || sc.target));
-  const notes = String(body.notes || '').slice(0, 1500);
-  // The owner's answers to the survey, as {question, answer, detail}; the design follows them.
-  const choices = (Array.isArray(body.choices) ? body.choices : []).slice(0, 8)
-    .map((c) => c && ({ question: String(c.question || '').slice(0, 200), answer: String(c.answer || '').slice(0, 300), detail: String(c.detail || '').slice(0, 300) }))
-    .filter((c) => c && c.question && c.answer);
-  // Credits for looked-up photos (source, author, license) travel with the saved design,
-  // including through a fix round, where Claude rewrites the design.
-  const rawCredits = body.mode === 'fix' ? body.design && body.design.photoCredits : body.credits;
-  const credits = (Array.isArray(rawCredits) ? rawCredits : []).slice(0, MAX_PHOTOS)
-    .map((c) => c && ({ credit: String(c.credit || '').slice(0, 200), license: String(c.license || '').slice(0, 60), page: String(c.page || '').slice(0, 300) }))
-    .filter((c) => c && c.credit);
+  return {
+    photos: cleanPhotos(body.photos), plate: sc.plate,
+    target: Math.max(300, Math.min(3000, Number(body.target) || sc.target)),
+    notes: String(body.notes || '').slice(0, 1500),
+    // The owner's answers to the survey, as {question, answer, detail}; the design follows them.
+    choices: (Array.isArray(body.choices) ? body.choices : []).slice(0, 8)
+      .map((c) => c && ({ question: String(c.question || '').slice(0, 200), answer: String(c.answer || '').slice(0, 300), detail: String(c.detail || '').slice(0, 300) }))
+      .filter((c) => c && c.question && c.answer),
+    // Credits for looked-up photos (source, author, license) travel with the saved design.
+    credits: (Array.isArray(body.credits) ? body.credits : []).slice(0, MAX_PHOTOS)
+      .map((c) => c && ({ credit: String(c.credit || '').slice(0, 200), license: String(c.license || '').slice(0, 60), page: String(c.page || '').slice(0, 300) }))
+      .filter((c) => c && c.credit),
+    plan: cleanPhotos([body.plan])[0] || null, address: cleanAddress(body.address),
+    frontStreet: body.frontStreet ? String(body.frontStreet).slice(0, 100) : null,
+  };
+}
 
-  const plan = cleanPhotos([body.plan])[0] || null, address = cleanAddress(body.address);
+// Save a finished design and report it.
+function finishDesign(out, p, emit, t0) {
+  if (p.credits.length) out.design.photoCredits = p.credits;
+  const name = `${slug(out.design.name)}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
+  fs.writeFileSync(path.join(ROOT, 'designs/generated', name + '.json'), JSON.stringify(out.design, null, 2));
+  emit({ type: 'done', design: out.design, stats: out.result.stats, errors: out.result.errors.length + (out.planProblems || []).length, planProblems: out.planProblems || [],
+    warnings: out.result.warnings.length, compiles: out.compiles, seconds: Math.round((Date.now() - t0) / 1000),
+    saved: `generated/${name}`, note: out.note || null, model: FAKE ? 'fake' : MODEL });
+}
 
-  res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' });
-  // Renders and plan overlays go to Claude, not down the wire: the viewer draws the drafts itself.
-  const emit = (ev) => res.write(JSON.stringify({ ...ev, renders: undefined, overlay: undefined }) + '\n');
-  const t0 = Date.now();
+// The same steps as scripts/design.js: address facts, walls locked to the plan or the building
+// outline, then the house built in parts with renders of each draft (src/server/pipeline.js).
+async function runDesign(p, emit) {
+  const client = makeClient(), t0 = Date.now();
+  if (!client) throw new Error(NO_KEY);
+  if (p.address) emit({ type: 'status', message: 'Looking up the building, streets and slope…' });
+  const prep = await prepareDesign({ address: p.address, notes: p.notes, plan: p.plan, plate: p.plate, frontStreet: p.frontStreet });
+  prep.log.forEach((m) => emit({ type: 'status', message: m }));
+  const renderer = await getRenderer();
+  const out = await designHouse({ client, model: MODEL, effort: EFFORT, photos: p.photos, plan: p.plan, notes: prep.notes, target: p.target, choices: p.choices,
+    plate: p.plate, mode: 'parts', locked: prep.locked, render: renderer && renderer.render, planTools: renderer, onEvent: emit });
+  finishDesign(out, p, emit, t0);
+}
+
+// One more round on a finished design ("ask Claude to fix these").
+async function runFix(p, emit) {
+  const client = makeClient(), t0 = Date.now();
+  if (!client) throw new Error(NO_KEY);
+  const out = await designHouse({ client, model: MODEL, effort: EFFORT, photos: p.photos, notes: p.notes, target: p.target, plate: p.plate, mode: 'fix', design: p.design, onEvent: emit });
+  finishDesign(out, p, emit, t0);
+}
+
+// Design jobs, paid for through Stripe Checkout when STRIPE_SECRET_KEY is set (see jobs.js).
+const JOBS = createJobs({
+  dir: path.join(ROOT, 'designs/generated/jobs'),
+  stripe: makeStripe({ secretKey: process.env.STRIPE_SECRET_KEY, ...(process.env.BRICKHOUSE_STRIPE_API ? { apiBase: process.env.BRICKHOUSE_STRIPE_API } : {}) }), // the override is for local tests
+  feeCents: Number(process.env.BRICKHOUSE_DESIGN_FEE_CENTS || 1500), currency: process.env.BRICKHOUSE_CURRENCY || 'usd',
+  run: runDesign, fixRun: runFix,
+});
+const originOf = (req) => `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers['x-forwarded-host'] || req.headers.host}`;
+
+// A few requests per address per hour for the steps that cost something before any payment.
+const hits = new Map();
+function limited(req, key, perHour) {
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim(), k = `${key}|${ip}`, t = Date.now();
+  const recent = (hits.get(k) || []).filter((x) => t - x < 3600e3);
+  recent.push(t); hits.set(k, recent);
+  return recent.length > perHour;
+}
+
+async function handleJobs(req, res, url) {
+  const m = /^\/api\/jobs(?:\/([a-f0-9-]{36})(?:\/(start|fix))?)?$/.exec(url.pathname);
+  if (!m) return send(res, 404, { error: 'Not found' });
+  const [, id, action] = m;
   try {
-    let out;
-    if (body.mode === 'fix') {
-      out = await designHouse({ client, model: MODEL, effort: EFFORT, photos, notes, target, plate: sc.plate, mode: 'fix', design: body.design || null, onEvent: emit });
-    } else {
-      // The same steps as scripts/design.js: address facts, walls locked to the plan or the building
-      // outline, then the house built in parts with renders of each draft (src/server/pipeline.js).
-      if (address) emit({ type: 'status', message: 'Looking up the building, streets and slope…' });
-      const prep = await prepareDesign({ address, notes, plan, plate: sc.plate, frontStreet: body.frontStreet ? String(body.frontStreet).slice(0, 100) : null });
-      prep.log.forEach((m) => emit({ type: 'status', message: m }));
-      const renderer = await getRenderer();
-      out = await designHouse({
-        client, model: MODEL, effort: EFFORT, photos, plan, notes: prep.notes, target, choices, plate: sc.plate, mode: 'parts',
-        locked: prep.locked, render: renderer && renderer.render, planTools: renderer, onEvent: emit,
-      });
+    if (req.method === 'POST' && !id) {
+      if (!FAKE && !anthropicKey()) return send(res, 503, { error: NO_KEY });
+      if (limited(req, 'job', 20)) return send(res, 429, { error: 'Too many designs started from here; try again in an hour.' });
+      const p = parseDesignRequest(JSON.parse(await readBody(req)));
+      if (!p.photos.length && !p.notes) return send(res, 400, { error: 'Add at least one photo or a description.' });
+      return send(res, 200, await JOBS.create(p, originOf(req)));
     }
-    if (credits.length) out.design.photoCredits = credits;
-    const name = `${slug(out.design.name)}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
-    fs.writeFileSync(path.join(ROOT, 'designs/generated', name + '.json'), JSON.stringify(out.design, null, 2));
-    emit({ type: 'done', design: out.design, stats: out.result.stats, errors: out.result.errors.length + (out.planProblems || []).length, planProblems: out.planProblems || [],
-      warnings: out.result.warnings.length, compiles: out.compiles, seconds: Math.round((Date.now() - t0) / 1000),
-      saved: `generated/${name}`, note: out.note || null, model: FAKE ? 'fake' : MODEL });
-  } catch (e) {
-    emit({ type: 'error', message: e && e.message ? e.message : String(e), status: e && e.status });
-  }
-  res.end();
+    if (req.method === 'POST' && action === 'start') {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      const r = await JOBS.start(id, body.session ? String(body.session) : null);
+      return send(res, r.code, r);
+    }
+    if (req.method === 'POST' && action === 'fix') { const r = JOBS.fix(id); return send(res, r.code, r); }
+    if (req.method === 'GET' && !action) {
+      const r = JOBS.get(id, { after: Number(url.searchParams.get('after')) || 0, have: Number(url.searchParams.get('have')) || 0 });
+      return r ? send(res, 200, r) : send(res, 404, { error: 'No such job' });
+    }
+    send(res, 405, { error: 'Method not allowed' });
+  } catch (e) { send(res, 502, { error: e && e.message ? e.message : String(e) }); }
 }
 
 async function handleLookup(req, res) {
@@ -193,7 +237,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, fs.readFileSync(path.join(ROOT, file)), type);
     }
     if (req.method === 'GET' && url.pathname === '/api/health') {
-      return send(res, 200, { ok: true, model: FAKE ? 'fake' : MODEL, effort: EFFORT, ready: FAKE || !!anthropicKey(), maxPhotos: MAX_PHOTOS, streetPhotos: !!process.env.MAPILLARY_TOKEN });
+      return send(res, 200, { ok: true, model: FAKE ? 'fake' : MODEL, effort: EFFORT, ready: FAKE || !!anthropicKey(), fee: JOBS.fee, maxPhotos: MAX_PHOTOS, streetPhotos: !!process.env.MAPILLARY_TOKEN });
     }
     if (req.method === 'GET' && url.pathname === '/api/designs') return send(res, 200, listDesigns());
     const m = /^\/designs\/((?:generated\/)?[a-z0-9._-]+)\.json$/i.exec(url.pathname);
@@ -202,8 +246,11 @@ const server = http.createServer(async (req, res) => {
       if (!fs.existsSync(file)) return send(res, 404, { error: 'No such design' });
       return send(res, 200, fs.readFileSync(file));
     }
-    if (req.method === 'POST' && url.pathname === '/api/design') return handleDesign(req, res);
-    if (req.method === 'POST' && url.pathname === '/api/survey') return handleSurvey(req, res);
+    if (url.pathname.startsWith('/api/jobs')) return handleJobs(req, res, url);
+    if (req.method === 'POST' && url.pathname === '/api/survey') {
+      if (limited(req, 'survey', 30)) return send(res, 429, { error: 'Too many checks from here; try again in an hour.' });
+      return handleSurvey(req, res);
+    }
     if (req.method === 'POST' && url.pathname === '/api/lookup') return handleLookup(req, res);
     const ph = /^\/api\/photo\/(\d{1,20})$/.exec(url.pathname);
     if (req.method === 'GET' && ph) return handlePhoto(res, ph[1]);
