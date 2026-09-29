@@ -134,11 +134,11 @@ closing gift that realtors give clients: a brick model of the house they just bo
   served by `GET /api/jobs/<id>` unless the job has a kit order or the request is from the server's own machine): the
   whole model with plain bricks, plates and tiles merged into made-up blocks, special parts as themselves, the first 3
   guide steps, and the Kit tab's totals and colors, no list. `POST /api/jobs/<id>/kit` orders the kit (Stripe Checkout
-  for `BRICKHOUSE_KIT_CLASSIC_CENTS` / `BRICKHOUSE_KIT_GRAND_CENTS` with a US shipping address, metadata kind "kit";
+  for `BRICKHOUSE_KIT_MINI_CENTS` / `BRICKHOUSE_KIT_CLASSIC_CENTS` / `BRICKHOUSE_KIT_GRAND_CENTS` with a US shipping address, metadata kind "kit";
   `{session}` confirms it on return, which unlocks the full design); with no Stripe key it's a test order that unlocks
   at once. `scripts/orders.js` lists kit orders to fulfill. The admin page (`/admin`, `src/viewer/admin.html`;
   `BRICKHOUSE_ADMIN_PASSWORD`, an HttpOnly SameSite=Strict cookie holding an HMAC of it): kit orders to fulfill (shipping
-  address, the Brickwith parts file from `/admin/api/jobs/<id>/parts.xml` without the baseplate, status new, ordered,
+  address, the Brickwith parts file from `/admin/api/jobs/<id>/parts.xml` without the baseplate (the Mini's plate is in it), status new, ordered,
   packed, shipped or cancelled with the Brickwith order number and tracking; shipped with tracking emails the customer
   once; a GoBricks stock check of the kit's parts, run when the kit is ordered and again on Check stock, naming lots short
   of stock and any the catalog snapshot says GoBricks no longer makes, kept on the job), designs that failed or have problems (Run again, from the part they reached), and all designs; the admin sees
@@ -163,8 +163,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   `bundle.js`) puts in place of each page's `<!-- topbar -->`, so it doesn't move between pages; its button reads
   "See an example" on the upload page). "Make yours" (`/app#design`) is an upload page of its own, the sample house hidden,
   until the first draft of their house comes back. With one or two photos (or none, only a description) it notes above the Design button that
-  the sides we can't see get guessed, so the model won't be as accurate (not a block). The size is a choice of two cards,
-  Classic and Grand, with the landing page's sizes and piece counts (`#bigPlate` is Grand). Designs made in a browser are
+  the sides we can't see get guessed, so the model won't be as accurate (not a block). The size is a choice of three cards,
+  Mini, Classic and Grand, with the landing page's sizes and piece counts (`#sizeMini`, `#sizeClassic`, `#bigPlate`). Designs made in a browser are
   remembered there (localStorage `brickhouse-designs`: job id, name, date) and listed as "Your designs" on the
   upload page. Email goes through Resend (`src/server/mail.js`, `RESEND_API_KEY`, sender `BRICKHOUSE_MAIL_FROM`
   on a verified domain): an optional email on the form (or the one from a Stripe checkout) gets the design's link
@@ -215,9 +215,14 @@ before changing API parameters.
 
 ## Coordinates and units
 
-- A design may set `"plate": 48` for the larger model (48 x 48 baseplate, 1.5 ft per stud, about
-  2,400 pieces, room for yards and a corner lot's second street); `src/server/scale.js` holds the
-  numbers and `--plate 48` / `plate` on /api/design select it. The rest of this section is 32.
+- A design may set `"plate": 48` for the larger model (Grand: 48 x 48 baseplate, 1.5 ft per stud, about
+  2,400 pieces, room for yards and a corner lot's second street) or `"plate": 16` for the smallest and cheapest
+  (Mini: an ordinary 16 x 16 plate, 91405, a plate thick, at 4 ft per stud, so the same stretch of lot as the
+  Classic at half the detail, about 250 to 450 pieces and about $15 of GoBricks parts; a story is 2 courses,
+  windows are transparent bricks, and the task's plate note says what to leave out). `src/server/scale.js` holds
+  the numbers (`sizeName`: Mini, Classic, Grand) and `--plate` / `plate` on /api/jobs select it; the engine's
+  `BASEPLATES` carry each size's feet per stud, and a story's courses (enclosing a floor) follow it.
+  `designs/634-unit-a-mini.json` is the Mini sample. The rest of this section is 32.
 - 32 x 32 stud baseplate. x = 0..31 left to right seen from the street; z = 0..31 back to
   front; the street runs along z = 31.
 - Heights are in plates: brick = 3, plate/tile = 1. Wall course c starts at

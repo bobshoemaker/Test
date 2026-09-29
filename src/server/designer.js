@@ -175,7 +175,7 @@ async function planFootprint({ client, model, photos = [], plan, notes = '', eff
       }
       n++;
       let locked;
-      try { locked = layoutFootprint(tu.input || {}, { size: sc.size, ftPerStud: sc.ftPerStud, frontYard: sc.frontYard }); } catch (e) {
+      try { locked = layoutFootprint(tu.input || {}, { size: sc.size, ftPerStud: sc.ftPerStud, frontYard: sc.frontYard, streetRows: sc.streetRows }); } catch (e) {
         results.push({ type: 'tool_result', tool_use_id: tu.id, content: `Could not lay out the footprint: ${e.message}`, is_error: true });
         continue;
       }
@@ -269,7 +269,7 @@ async function callClaude(client, params, onEvent = () => {}) {
  * @param {object} [o.seed]     parts mode: a design from earlier parts to continue from (with fromPart)
  * @param {number} [o.fromPart] parts mode: the part to start at, 1-based (needs seed when above 1)
  * @param {Array<{question,answer,detail}>} [o.choices] the owner's answers to the survey (resolveChoices), binding for the design
- * @param {32|48} [o.plate]     baseplate size; 48 is the larger model at 1.5 ft per stud (scale.js)
+ * @param {16|32|48} [o.plate]  baseplate size: 16 the Mini at 4 ft per stud, 48 the Grand at 1.5 (scale.js)
  */
 async function designHouse({
   client, model, photos = [], plan = null, notes = '', target = 1200, mode = 'design', design = null,
@@ -338,7 +338,7 @@ async function designHouse({
           continue;
         }
         st.compiles++;
-        if (plate !== 32 && d.plate == null) d.plate = plate; // the larger plate is the task's choice, not a guess
+        if (plate !== 32 && d.plate == null) d.plate = plate; // the plate size is the task's choice, not a guess
         if (d.variation == null) d.variation = 'subtle'; // a few pieces of each material in a close color
         const res = compile(d), planProblems = checkFootprint(d, locked);
         d.source = 'photos';

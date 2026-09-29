@@ -106,7 +106,7 @@ figcaption span{color:var(--muted);font-size:15px;display:block}
 figcaption a{font-weight:600;font-size:15px;color:var(--accent)}
 
 .sizes{display:grid;gap:16px}
-@media (min-width:760px){.sizes{grid-template-columns:1fr 1fr;gap:20px}}
+@media (min-width:760px){.sizes{grid-template-columns:repeat(3,1fr);gap:20px}}
 .size{background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:28px}
 .size h3{font-size:34px}
 .size .dims{color:var(--muted);margin:4px 0 18px}
@@ -235,9 +235,14 @@ html{touch-action:manipulation}
 
 <section id="sizes" style="padding-top:0">
   <div class="wrap">
-    <h2>Two sizes</h2>
-    <p class="intro">Both sit on a brick base; the bigger one has room for the yard, the garden and the street.</p>
+    <h2>Three sizes</h2>
+    <p class="intro">All three sit on a brick base. The Mini is the whole house in fewer, bigger strokes; the bigger ones have room for more detail, the yard, the garden and the street.</p>
     <div class="sizes">
+      <div class="size">
+        <h3>Mini</h3>
+        <p class="dims">5 × 5 in (13 cm) base</p>
+        <dl><dt>Pieces</dt><dd>about 250 to 450</dd><dt>Build time</dt><dd>an afternoon</dd></dl>
+      </div>
       <div class="size">
         <h3>Classic</h3>
         <p class="dims">10 × 10 in (26 cm) base</p>

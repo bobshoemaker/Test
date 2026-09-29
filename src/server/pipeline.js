@@ -31,7 +31,7 @@ async function prepareDesign({ address = null, place = null, notes = '', plan = 
   } else if (lockToOutline && terrain) {
     const input = outlineInput(terrain, { frontStreet });
     if (input) {
-      locked = footprintFromOutline({ ...input, size: sc.size, ftPerStud: sc.ftPerStud, frontYard: sc.frontYard });
+      locked = footprintFromOutline({ ...input, size: sc.size, ftPerStud: sc.ftPerStud, frontYard: sc.frontYard, streetRows: sc.streetRows });
       lockSource = 'outline';
       log.push(`Walls locked to the building outline, ${input.front} at the front${input.side && locked.sideStreet ? `, ${input.side} on the ${locked.sideStreet.side}` : ''}.`);
       locked.problems.forEach((p) => log.push(`Outline: ${p}`));

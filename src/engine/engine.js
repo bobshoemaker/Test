@@ -62,10 +62,11 @@ const SPECIAL = {
   sidetile1:{no:'3070b', name:'Tile 1 x 1 (on a side stud)', w:1,d:1,h:3, studs:false, shape:'box', cost:0.05},
   sidetile2:{no:'3069b', name:'Tile 1 x 2 (on side studs)', w:2,d:1,h:3, studs:false, shape:'box', cost:0.06}
 };
-// Baseplates by size: a design sets "plate": 48 for the larger one (default 32).
+// Baseplates by size: a design sets "plate": 16 for the Mini or 48 for the Grand (default 32, the Classic).
+// ft: feet per stud at that size. The Mini stands on an ordinary 16 x 16 plate, a plate thick (thick).
 // neutral baseplate colors, most preferred first, for when the green one can't be had
 const BASE_NEUTRAL = ['Dark Bluish Gray','Light Bluish Gray','Tan','Dark Tan','Dark Brown','Reddish Brown','Black','White'];
-const GLASS_COST = 0.10, BASEPLATES = {32:{no:'3811', name:'Baseplate 32 x 32', color:'Green', cost:12}, 48:{no:'4186', name:'Baseplate 48 x 48', color:'Green', cost:25}};
+const GLASS_COST = 0.10, BASEPLATES = {16:{no:'91405', name:'Plate 16 x 16', color:'Green', cost:3, ft:4, thick:true}, 32:{no:'3811', name:'Baseplate 32 x 32', color:'Green', cost:12, ft:2}, 48:{no:'4186', name:'Baseplate 48 x 48', color:'Green', cost:25, ft:1.5}};
 // Plant library for the "plant" op: sub-builds checked to stand on their own, placed by kind.
 // Offsets are from the plant's corner stud; "bloom" parts take the op's bloom color.
 const P=(part,color,x,y,z,dir)=>({part,color,at:[x,y,z],...(typeof dir==='number'?{rot:dir}:dir?{dir}:{})});
@@ -226,6 +227,9 @@ function rectCells(r){ const out=[]; for(let x=Math.min(r[0],r[2]);x<=Math.max(r
 
 function compile(design){
   const BASE=design&&design.plate!=null?Number(design.plate):32, BASEPLATE=BASEPLATES[BASE]||BASEPLATES[32];
+  // courses in a story at this scale (about 9 ft): 4 on the Classic and Grand, 2 on the Mini; walls at least this
+  // tall enclose a building (its floor, and the baseplate that mustn't show inside it)
+  const STORY=Math.min(4,Math.max(2,Math.round(9/(1.2*BASEPLATE.ft))));
   const clock=(typeof performance!=='undefined')?performance:Date;
   const t0=clock.now();
   const errors=[], warnings=[], parts=[], occ=new Map(), subs=[], lawned=new Set();
@@ -236,7 +240,7 @@ function compile(design){
   // tall); else green, or a neutral color it sells the LEGO baseplate in (the lawn op then lays the grass over it)
   const OWN_BASE=SUP&&SUP.baseplates&&SUP.baseplates[BASE]||null;
   const baseColor=OWN_BASE?OWN_BASE.color:SUP?[BASEPLATE.color,...BASE_NEUTRAL].find(c=>supplies(SUP,BASEPLATE.no,c))||BASEPLATE.color:BASEPLATE.color;
-  if(!BASEPLATES[BASE]) errors.push({msg:`plate must be 32 or 48 (got ${design.plate})`, op:null});
+  if(!BASEPLATES[BASE]) errors.push({msg:`plate must be 16, 32 or 48 (got ${design.plate})`, op:null});
   if(design.property!=null&&!PROPERTY_TYPES.includes(design.property)) errors.push({msg:`property must be one of ${PROPERTY_TYPES.join(', ')} (got ${design.property})`, op:null});
   const phases=design.phases||[]; const phaseIdx=new Map(phases.map((p,i)=>[p,i]));
   // wall bricks by cell and height (not course number: each walls op counts its courses from its own base)
@@ -465,7 +469,7 @@ function compile(design){
   // a fill or walls below). An upper story's walls over a room below have air under them and don't
   // count. Computed from what's placed so far: the floor op (listed last) and the final check call it.
   function insideCells(){ const barrier=new Set(), inside=new Set();
-    (design.ops||[]).forEach(op=>{ if(op.op!=='walls'||op.context||!Array.isArray(op.segments)||!op.courses||op.courses[1]-op.courses[0]<3) return;
+    (design.ops||[]).forEach(op=>{ if(op.op!=='walls'||op.context||!Array.isArray(op.segments)||!op.courses||op.courses[1]-op.courses[0]<STORY-1) return;
       const base=op.base!==undefined?op.base:op.courses[0]*3;
       try{ for(const sg of op.segments) for(const [x,z] of lineCells(sg)){ let solid=true; for(let y=0;y<base&&solid;y++) if(!occ.has(K3(x,z,y))) solid=false; if(solid) barrier.add(x+','+z); } }catch(e){} });
     if(!barrier.size) return inside;
@@ -642,7 +646,7 @@ function compile(design){
       case 'floor': { // every stud inside the buildings (within rects, if given) at height y
         const lim=op.rects?new Set(op.rects.flatMap(r=>rectCells(r)).map(([x,z])=>x+','+z)):null, level=new Map();
         for(const k of insideCells()) if(!lim||lim.has(k)) level.set(k,op.color);
-        if(!level.size) warnings.push({msg:'The floor op found no studs inside walls (it floors what walls at least 4 courses tall enclose)', op:i});
+        if(!level.size) warnings.push({msg:'The floor op found no studs inside walls (it floors what walls at least '+STORY+' courses tall enclose)', op:i});
         const fids=pack(level,op.kind||'tile',op.y||0,meta); if((op.kind||'tile')==='tile') studTexture(fids,op,i,0.08); break; }
       case 'lawn': { // bare ground made into a finished lawn: patches of lighter and darker green, tufts, a few flowers
         const T=LAWN[op.texture||'lawn']; if(!T){ errors.push({msg:`Lawn texture must be one of ${Object.keys(LAWN).join(', ')}`, op:i}); break; }
@@ -864,7 +868,7 @@ function compile(design){
   }
   // bare ground: a big open stretch of baseplate with nothing on it reads as unfinished
   // (not for a model of the building alone, without its lot: "lot": false)
-  if(design.lot!==false){ const inside=insideCells(), bare=(x,z)=>!occ.has(K3(x,z,0))&&!inside.has(x+','+z)&&!lawned.has(x+','+z), side=Math.max(4,Math.round(12/((design.plate||32)>32?1.5:2)));
+  if(design.lot!==false){ const inside=insideCells(), bare=(x,z)=>!occ.has(K3(x,z,0))&&!inside.has(x+','+z)&&!lawned.has(x+','+z), side=Math.max(4,Math.round(12/BASEPLATE.ft));
     const dp=new Map(); let best=0, at=null;
     for(let x=0;x<BASE;x++) for(let z=0;z<BASE;z++){ if(!bare(x,z)) continue;
       const v=1+Math.min(dp.get((x-1)+','+z)||0,dp.get(x+','+(z-1))||0,dp.get((x-1)+','+(z-1))||0); dp.set(x+','+z,v); if(v>best){ best=v; at=[x-v+1,z-v+1]; } }
@@ -961,6 +965,6 @@ function compile(design){
   const pages=1+Math.ceil(inventory.length/24)+steps.length;
   const ms=clock.now()-t0;
   return {parts,steps,subs,errors,warnings,hints,joints,jn,inventory,occ,
-    stats:{plantLots:plantLots.size,liftoff:(()=>{ const lo=new Map(); for(const p of parts) if(p.liftoff) lo.set(p.liftoff,Math.min(lo.has(p.liftoff)?lo.get(p.liftoff):1e9,p.y)); return [...lo].sort((a,b)=>b[1]-a[1]).map(e=>e[0]); })(),pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32,baseColor,baseThick:OWN_BASE?1:0}};
+    stats:{plantLots:plantLots.size,liftoff:(()=>{ const lo=new Map(); for(const p of parts) if(p.liftoff) lo.set(p.liftoff,Math.min(lo.has(p.liftoff)?lo.get(p.liftoff):1e9,p.y)); return [...lo].sort((a,b)=>b[1]-a[1]).map(e=>e[0]); })(),pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32,baseColor,baseThick:OWN_BASE||BASEPLATE.thick?1:0}};
 }
 if(typeof module!=='undefined') module.exports={BASEPLATES,SUPPLY,supplies,supplierNo,easyToGet,availOf,easyColors,AVAIL_SETS,AVAIL_YEAR,compile,COLORS,SPECIAL,SIZE_PARTS,PLANTS,PLANT_LOTS,FIXTURES};

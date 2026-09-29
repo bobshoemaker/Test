@@ -7,7 +7,7 @@ const path = require('node:path');
 const { designHouse, surveyHouse, checkPhotos } = require('./designer');
 const { makePreview } = require('./preview');
 const { makeMailer, cleanEmail, readyEmail, kitEmail, shippedEmail, mineEmail } = require('./mail');
-const { scaleFor } = require('./scale');
+const { scaleFor, sizeName } = require('./scale');
 const { lookupAddress, fetchMapillaryImage } = require('./lookup');
 const { lookupTerrain } = require('./terrain');
 const { prepareDesign } = require('./pipeline');
@@ -192,8 +192,8 @@ const JOBS = createJobs({
   stripe: makeStripe({ secretKey: process.env.STRIPE_SECRET_KEY, ...(process.env.BRICKHOUSE_STRIPE_API ? { apiBase: process.env.BRICKHOUSE_STRIPE_API } : {}) }), // the override is for local tests
   feeCents: Number(process.env.BRICKHOUSE_DESIGN_FEE_CENTS || 1500), currency: process.env.BRICKHOUSE_CURRENCY || 'usd',
   run: runDesign, fixRun: runFix,
-  // the kit's price by baseplate: Classic (32) and Grand (48); unset means kits aren't on sale yet
-  kitCents: (plate) => Number(plate === 48 ? process.env.BRICKHOUSE_KIT_GRAND_CENTS : process.env.BRICKHOUSE_KIT_CLASSIC_CENTS) || null,
+  // the kit's price by baseplate: Mini (16), Classic (32) and Grand (48); unset means that size isn't on sale yet
+  kitCents: (plate) => Number(process.env[`BRICKHOUSE_KIT_${sizeName(plate).toUpperCase()}_CENTS`]) || null,
   preview: makePreview,
   onKit: (j) => QUOTER && SUPPLIER === 'gobricks' && stockCheck(j.id),
   notify: async (j, kind) => {
@@ -327,10 +327,12 @@ function isAdmin(req) {
   return !!m && sameSecret(m[1], adminToken());
 }
 const adminCookie = (req, value, maxAge) => `bh_admin=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${(req.headers['x-forwarded-proto'] || '') === 'https' ? '; Secure' : ''}`;
-// A design's parts to order (the inventory without the baseplate, which is added by hand)
+// A design's parts to order: the inventory without the baseplate, which is added by hand (GoBricks' own has no LEGO
+// number), except the Mini's 16 x 16 plate, an ordinary part that goes in the list
 function orderRows(design) {
-  const { COLORS, compile } = require('../engine/engine.js');
-  return compile(design).inventory.filter((e) => e.kind !== 'baseplate' && COLORS[e.color]);
+  const { COLORS, BASEPLATES, compile } = require('../engine/engine.js');
+  const plainPlate = !!(BASEPLATES[design.plate] || {}).thick;
+  return compile(design).inventory.filter((e) => (e.kind !== 'baseplate' || plainPlate) && COLORS[e.color]);
 }
 // A design's parts as a BrickLink XML wanted list, for Brickwith's part-list upload
 function partsXml(design) {
@@ -443,4 +445,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, cleanText, cleanAddress, parseDesignRequest };
+module.exports = { server, cleanText, cleanAddress, parseDesignRequest, partsXml };

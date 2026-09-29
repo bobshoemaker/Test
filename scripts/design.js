@@ -11,7 +11,8 @@
 //            --address "..."  add the street and slope from USGS elevations and OpenStreetMap to the notes; with
 //                             --parts and no --plan, the walls are locked to the house's building outline
 //            --front-street "Wood Terrace"  on a corner lot, the street that goes at the front (z = 31)
-//            --plate 48  the larger model: 48 x 48 baseplate at 1.5 ft per stud, about 2,400 pieces
+//            --plate 48  the Grand: 48 x 48 baseplate at 1.5 ft per stud, about 2,400 pieces
+//            --plate 16  the Mini: 16 x 16 plate at 4 ft per stud, about 250 to 450 pieces
 //            --choices survey.json [--answer id=option ...]  the owner's answers from scripts/survey.js
 //            --parts-limit 1  stop after the first N parts   --no-render  don't send renders of each draft
 const fs = require('node:fs');

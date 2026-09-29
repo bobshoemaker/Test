@@ -74,6 +74,7 @@ const when=t=>t?new Date(t).toLocaleString(undefined,{month:'short',day:'numeric
 const money=(a,c)=>a==null?'test order':(a/100).toLocaleString(undefined,{style:'currency',currency:(c||'usd').toUpperCase()});
 const addr=a=>a?[a.line1,a.line2,[a.city,a.state,a.postal_code].filter(Boolean).join(' '),a.country].filter(Boolean).map(esc).join('<br>'):'<span class="muted">no address</span>';
 const STATUSES=['new','ordered','packed','shipped','cancelled'];
+const SIZE=p=>({16:'Mini',48:'Grand'})[p]||'Classic';
 let data=null;
 
 async function api(path,opts={}){ const r=await fetch(path,{credentials:'same-origin',...opts,headers:{'content-type':'application/json',...(opts.headers||{})}});
@@ -106,17 +107,17 @@ function render(){
 function statusHtml(j){ const s=`<span class="st ${esc(j.status)}">${esc(j.status)}</span>`;
   return s+(j.status==='running'&&j.part?` <span class="muted small">part ${esc(j.part)}</span>`:'')+(j.error?`<div class="small err">${esc(j.error)}</div>`:'')+(j.status==='done'&&j.problems?`<div class="small err">${j.problems} problem${j.problems>1?'s':''} left</div>`:''); }
 function rowHtml(j){ const f=j.fulfillment;
-  return `<tr><td class="small">${when(j.createdAt)}</td><td><b>${esc(j.name||'(untitled)')}</b><div class="small muted">${esc(j.address)} · ${j.plate===48?'Grand':'Classic'} · ${j.photos} photo${j.photos===1?'':'s'}</div></td>
+  return `<tr><td class="small">${when(j.createdAt)}</td><td><b>${esc(j.name||'(untitled)')}</b><div class="small muted">${esc(j.address)} · ${SIZE(j.plate)} · ${j.photos} photo${j.photos===1?'':'s'}</div></td>
     <td>${statusHtml(j)}</td><td>${j.pieces?j.pieces.toLocaleString():''}</td><td class="small">${esc(j.email||'')}</td>
     <td class="small">${j.kit?`${money(j.kit.amount,j.kit.currency)}<br>${esc(f?f.status:'new')}`:''}</td>
     <td><div class="row" style="margin:0"><a class="btn" href="/app?job=${j.id}" target="_blank" rel="noopener">Open</a>${['error','interrupted'].includes(j.status)?`<button class="btn" data-retry="${j.id}">Run again</button>`:''}</div></td></tr>`; }
 function orderCard(j){ const k=j.kit, f=j.fulfillment||{status:'new'};
   return `<div class="card order" data-id="${j.id}"><div>
-    <h3>${esc(j.name||'(untitled)')} <span class="pill">${j.plate===48?'Grand':'Classic'}</span></h3>
+    <h3>${esc(j.name||'(untitled)')} <span class="pill">${SIZE(j.plate)}</span></h3>
     <div class="small muted">Ordered ${when(k.at)} · ${k.test?'test order':money(k.amount,k.currency)} · ${j.pieces?j.pieces.toLocaleString()+' pieces':''}</div>
     <p style="margin:8px 0 0"><b>${esc(k.name||'')}</b>${k.email?` · <a href="mailto:${esc(k.email)}">${esc(k.email)}</a>`:''}<br>${addr(k.shipping)}</p>
     <div class="row"><a class="btn" href="/app?job=${j.id}" target="_blank" rel="noopener">Open design</a><a class="btn" href="/admin/api/jobs/${j.id}/parts.xml">Brickwith parts file</a><a class="btn" href="https://www.brickwith.com/en/part-list/upload" target="_blank" rel="noopener">Brickwith upload</a></div>
-    <p class="note">Upload the parts file at Brickwith, then add the baseplate by hand: ${j.plate===48?'GDS-2238 (48 x 48)':'GDS-2237 (32 x 32)'}, green.</p>
+    <p class="note">${j.plate===16?'Upload the parts file at Brickwith; the 16 x 16 green plate the Mini stands on is in it.':`Upload the parts file at Brickwith, then add the baseplate by hand: ${j.plate===48?'GDS-2238 (48 x 48)':'GDS-2237 (32 x 32)'}, green.`}</p>
     ${stockHtml(j)}
   </div><form data-ful="${j.id}">
     <label class="f">Status</label><select name="status">${STATUSES.map(s=>`<option${s===f.status?' selected':''}>${s}</option>`).join('')}</select>

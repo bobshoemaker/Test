@@ -36,7 +36,8 @@ function mergeGeos(items){ const pos=[], nor=[];
   for(const [geo,m] of items){ const g=geo.index?geo.toNonIndexed():geo.clone(); if(m) g.applyMatrix4(m);
     pos.push(...g.attributes.position.array); nor.push(...g.attributes.normal.array); }
   const out=new THREE.BufferGeometry(); out.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); out.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3)); return out; }
-const PH=0.4; let PLATE=32, OFF=16; // the baseplate size comes from the design ("plate": 32 or 48)
+const PH=0.4; let PLATE=32, OFF=16; // the baseplate size comes from the design ("plate": 16, 32 or 48)
+const sizeName=p=>({16:'Mini',48:'Grand'})[p]||'Classic';
 const tmp=new THREE.Object3D(), ZERO=new THREE.Matrix4().makeScale(0,0,0), col=new THREE.Color();
 let stageLin=lin('#D9E2EB');
 
@@ -499,7 +500,7 @@ function renderParts(){
   $('kitLock').hidden=!R.preview; $('kitList').hidden=!!R.preview;
   if(R.preview){ const st=R.stats, cs=st.colors||[];
     $('pLots').textContent=st.lots; $('pPieces').textContent=st.pieces.toLocaleString();
-    $('kitLead').innerHTML=`Your kit: <b>${st.pieces.toLocaleString()}</b> pieces in <b>${st.lots}</b> kinds and <b>${cs.length}</b> colors, on a ${st.plate>32?'Grand':'Classic'} baseplate.`;
+    $('kitLead').innerHTML=`Your kit: <b>${st.pieces.toLocaleString()}</b> pieces in <b>${st.lots}</b> kinds and <b>${cs.length}</b> colors, on a ${sizeName(st.plate)} baseplate.`;
     $('kitSwatches').innerHTML=cs.map(c=>`<span title="${esc(c.color)}"><i style="background:${COLORS[c.color]?COLORS[c.color].hex:'#999'}"></i>${esc(c.color)}</span>`).join('');
     $('partsBody').innerHTML=''; xml=''; refreshOrderUI(); return; } // nothing of a list left in the page
   const rows=R.inventory.slice().sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true})||b.q-a.q);
@@ -573,7 +574,7 @@ function renderReport(){
     :`Checked brick by brick: all ${st.joints.toLocaleString()} connections hold, in the order you'll build it.`;
   const list=[...R.errors.map(x=>['e',x]),...R.warnings.map(x=>['w',x])].slice(0,12);
   $('problems').innerHTML=list.map(([t,x])=>`<li class="${t}">${x.msg}${x.op!=null?` (design step ${x.op+1})`:''}</li>`).join('');
-  $('chips').innerHTML=`<span><b>${st.pieces.toLocaleString()}</b>pieces</span><span><b>${st.steps}</b>steps</span><span><b>${PLATE>32?'Grand':'Classic'}</b>size</span>`
+  $('chips').innerHTML=`<span><b>${st.pieces.toLocaleString()}</b>pieces</span><span><b>${st.steps}</b>steps</span><span><b>${sizeName(PLATE)}</b>size</span>`
     +(DEV?`<span><b>${st.subBuilds}</b>sub-builds</span><span><b>${PLATE}×${PLATE}</b>studs</span><span><b>$${Math.round(st.cost)}</b>parts</span>`:'');
 }
 $('stress').onchange=e=>{ stress=e.target.checked; applyState(); };
@@ -663,6 +664,7 @@ let planFile=null;
 $('planBtn').onclick=()=>$('planInput').click();
 $('planInput').onchange=e=>{ planFile=e.target.files[0]||null; e.target.value='';
   $('planStatus').textContent=planFile?`Floor plan: ${planFile.name}. The walls will follow it.`:''; $('planBtn').textContent=planFile?'Change floor plan':'Add floor plan'; };
+const chosenPlate=()=>$('sizeMini').checked?16:$('bigPlate').checked?48:32; // the size cards: Mini, Classic, Grand
 const houseAddress=()=>$('addrInput').value.trim().slice(0,200)||undefined; // the server adds its building, street and slope facts
 $('photoInput').accept='image/jpeg,image/png,image/webp';
 // photos add up across picks (the same file twice counts once); click a thumbnail to remove it
@@ -726,8 +728,8 @@ async function askServer(mode){
     if(!photos.length&&!notes){ status('Add at least one photo or a short description first.',true); return; }
     if(!houseAddress()){ status('Please enter the house\'s address.',true,true); $('addrInput').focus(); return; }
     setBusy(true); status('Preparing photos…');
-    const big=$('bigPlate').checked;
-    const body={notes,target:big?Math.max(target,2400):target,plate:big?48:32,address:houseAddress(),email:$('emailInput').value.trim()||undefined,
+    const plate=chosenPlate();
+    const body={notes,target:plate===48?Math.max(target,2400):plate===16?Math.min(target,350):target,plate,address:houseAddress(),email:$('emailInput').value.trim()||undefined,
       plan:planFile?await toPayload(planFile,2400):undefined, photos:await Promise.all(photos.map(f=>toPayload(f))),
       credits:photos.map(f=>photoCredit.get(f)).filter(Boolean), choices:surveyChoices()};
     if(photos.length) status('Checking your photos…');
@@ -817,7 +819,7 @@ $('surveyBtn').onclick=async()=>{
   status('Taking a quick look at the photos for anything they leave open…');
   try{
     const body={notes:$('notes').value.trim().slice(0,1500),photos:await Promise.all(photos.map(f=>toPayload(f))),address:houseAddress(),
-      plate:$('bigPlate').checked?48:32,plan:planFile?await toPayload(planFile,2400):undefined};
+      plate:chosenPlate(),plan:planFile?await toPayload(planFile,2400):undefined};
     const res=await fetch('/api/survey',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:ctl.signal});
     const j=await res.json(); if(!res.ok) throw failed(res,j);
     survey=j; renderSurvey(j);

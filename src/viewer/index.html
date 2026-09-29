@@ -139,7 +139,7 @@ textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-ra
 .kitordernote{margin:8px 0 0}
 .kitdone{color:var(--ink)!important;font-weight:600}
 .guidelock p{margin:0 0 10px}
-.sizes{border:0;padding:0;margin:16px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sizes{border:0;padding:0;margin:16px 0 0;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
 .sizes legend{font-weight:700;font-size:14px;margin-bottom:6px;padding:0}
 .size{position:relative;display:flex;flex-direction:column;gap:2px;border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer;background:var(--panel)}
 .size:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 1.5px var(--accent) inset}
@@ -148,7 +148,7 @@ textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-ra
 .sizename{font-family:"Jersey 10","Archivo",sans-serif;font-size:26px;line-height:1}
 .sizedim{font-weight:700;font-size:14px}
 .sizeabout{font-size:13px;color:var(--muted);line-height:1.4}
-@media (max-width:420px){.sizes{grid-template-columns:1fr}}
+@media (max-width:600px){.sizes{grid-template-columns:1fr}}
 .mine{margin:0 0 14px;padding:10px 14px;border-radius:12px;background:var(--stage)}
 .mine h3{margin:0 0 4px;font-size:15px}
 .mine ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2px}
@@ -329,6 +329,9 @@ if(location.hash==='#design'&&!/[?&](job|hero)=/.test(location.search)) document
             <p class="addrwhy" id="emailWhy">We'll email you the link to your design when it's ready, so you can come back to it from any device.</p>
             <fieldset class="sizes">
               <legend>Choose a size</legend>
+              <label class="size"><input type="radio" name="size" id="sizeMini">
+                <span class="sizename">Mini</span><span class="sizedim">5 × 5 in base</span>
+                <span class="sizeabout">The whole house, smaller and simpler, at our lowest price. About 250 to 450 pieces, an afternoon to build.</span></label>
               <label class="size"><input type="radio" name="size" id="sizeClassic" checked>
                 <span class="sizename">Classic</span><span class="sizedim">10 × 10 in base</span>
                 <span class="sizeabout">The house and its front yard. About 800 to 1,300 pieces, an evening or two to build.</span></label>
