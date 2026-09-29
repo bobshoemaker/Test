@@ -520,12 +520,18 @@ test('a design held to GoBricks uses exactly the parts and colors GoBricks makes
     segments: [[2, 2, 9, 2]], openings: [{ cells: [4, 2, 5, 2], courses: [0, 2], fill: { part, color: 'Dark Green' } }] }] }).warnings.map((w) => w.msg);
   assert.deepEqual(win('win22'), []);
   assert.match(win('win23').join(' '), /Window 1 x 2 x 3 \(60593\) can't be ordered from GoBricks: use another part/);
-  // no green baseplate at GoBricks: a neutral one it sells, and the lawn lays a full layer of grass over it
+  // GoBricks' own thick green baseplate (no LEGO number), so the lawn is patches on green as with LEGO
   const yard = (supplier) => compile({ name: 'y', lot: true, plate: 48, supplier, phases: ['g'], ops: [{ op: 'lawn', phase: 'g' }] });
-  const lego = yard(undefined), gds = yard('gobricks');
-  assert.equal(lego.stats.baseColor, 'Green');
-  assert.ok(supplies(G, '4186', gds.stats.baseColor) && gds.stats.baseColor !== 'Green', gds.stats.baseColor);
   const ground = (r) => new Set(r.parts.filter((q) => q.y === 0).flatMap((q) => q.occ.filter((v) => v[2] === 0).map((v) => v[0] + ',' + v[1]))).size;
-  assert.equal(ground(gds), 48 * 48); assert.ok(ground(lego) < 48 * 48 / 2);
-  assert.deepEqual(gds.errors, []); assert.deepEqual(gds.warnings, []);
+  const lego = yard(undefined), gds = yard('gobricks'), plate = gds.inventory.find((e) => e.kind === 'baseplate');
+  assert.equal(lego.stats.baseColor, 'Green'); assert.equal(lego.stats.baseThick, 0);
+  assert.deepEqual([plate.gds, plate.color, gds.stats.baseThick], ['GDS-2238-040', 'Green', 1]);
+  assert.ok(ground(gds) < 48 * 48 / 2); assert.deepEqual(gds.errors, []); assert.deepEqual(gds.warnings, []);
+  // a supplier without its own baseplate: a neutral one it sells the LEGO baseplate in, with the lawn laid over it
+  const own = G.baseplates; delete G.baseplates;
+  try {
+    const n = yard('gobricks');
+    assert.ok(supplies(G, '4186', n.stats.baseColor) && n.stats.baseColor !== 'Green', n.stats.baseColor);
+    assert.equal(ground(n), 48 * 48); assert.deepEqual(n.warnings, []);
+  } finally { G.baseplates = own; }
 });

@@ -219,9 +219,10 @@ function compile(design){
   // the parts this design may use: what its supplier makes, or else LEGO parts that are easy to get
   const SUP=design.supplier!=null&&SUPPLY?SUPPLY[design.supplier]||null:null;
   const canBuy=SUP?(no,color)=>supplies(SUP,no,color):easyToGet;
-  // the baseplate: green, or, held to a supplier that doesn't sell a green one, a neutral color it does sell,
-  // so the whole kit comes from one place (the lawn op then lays the grass over it)
-  const baseColor=SUP?[BASEPLATE.color,...BASE_NEUTRAL].find(c=>supplies(SUP,BASEPLATE.no,c))||BASEPLATE.color:BASEPLATE.color;
+  // the baseplate: held to a supplier, its own baseplate when it has one (GoBricks' thick green ones, a plate
+  // tall); else green, or a neutral color it sells the LEGO baseplate in (the lawn op then lays the grass over it)
+  const OWN_BASE=SUP&&SUP.baseplates&&SUP.baseplates[BASE]||null;
+  const baseColor=OWN_BASE?OWN_BASE.color:SUP?[BASEPLATE.color,...BASE_NEUTRAL].find(c=>supplies(SUP,BASEPLATE.no,c))||BASEPLATE.color:BASEPLATE.color;
   if(!BASEPLATES[BASE]) errors.push({msg:`plate must be 32 or 48 (got ${design.plate})`, op:null});
   if(design.property!=null&&!PROPERTY_TYPES.includes(design.property)) errors.push({msg:`property must be one of ${PROPERTY_TYPES.join(', ')} (got ${design.property})`, op:null});
   const phases=design.phases||[]; const phaseIdx=new Map(phases.map((p,i)=>[p,i]));
@@ -914,7 +915,8 @@ function compile(design){
 
   // ---------- inventory ----------
   const lots=new Map(); const add=(no,name,color,cost,kind)=>{ const k=no+'|'+color; const e=lots.get(k)||{no,name,color,q:0,cost,kind}; e.q++; lots.set(k,e); };
-  add(BASEPLATE.no,BASEPLATE.name,baseColor,BASEPLATE.cost,'baseplate');
+  add(BASEPLATE.no,OWN_BASE?OWN_BASE.name:BASEPLATE.name,baseColor,BASEPLATE.cost,'baseplate');
+  if(OWN_BASE) Object.assign(lots.get(BASEPLATE.no+'|'+baseColor),{gds:OWN_BASE.gds+'-'+OWN_BASE.code,usd:OWN_BASE.usd});
   let glassN=0;
   for(const p of parts){ add(p.no,p.name,p.color,p.cost,p.kind); if(p.glass){ add(p.glass.no,p.glass.name,'Trans-Clear',GLASS_COST,'glass'); glassN++; } }
   const inventory=[...lots.values()];
@@ -939,6 +941,6 @@ function compile(design){
   const pages=1+Math.ceil(inventory.length/24)+steps.length;
   const ms=clock.now()-t0;
   return {parts,steps,subs,errors,warnings,hints,joints,jn,inventory,occ,
-    stats:{liftoff:(()=>{ const lo=new Map(); for(const p of parts) if(p.liftoff) lo.set(p.liftoff,Math.min(lo.has(p.liftoff)?lo.get(p.liftoff):1e9,p.y)); return [...lo].sort((a,b)=>b[1]-a[1]).map(e=>e[0]); })(),pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32,baseColor}};
+    stats:{liftoff:(()=>{ const lo=new Map(); for(const p of parts) if(p.liftoff) lo.set(p.liftoff,Math.min(lo.has(p.liftoff)?lo.get(p.liftoff):1e9,p.y)); return [...lo].sort((a,b)=>b[1]-a[1]).map(e=>e[0]); })(),pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32,baseColor,baseThick:OWN_BASE?1:0}};
 }
 if(typeof module!=='undefined') module.exports={BASEPLATES,SUPPLY,supplies,supplierNo,easyToGet,availOf,easyColors,AVAIL_SETS,AVAIL_YEAR,compile,COLORS,SPECIAL,SIZE_PARTS,PLANTS,FIXTURES};

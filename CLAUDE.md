@@ -188,9 +188,11 @@ before changing API parameters.
   yuan (the reply names no currency), before shipping; the dollar figure uses what Brickwith, GoBricks' store, charged for the 634 sample
   (¥153.07 came to $43.88, about ¥3.5 a dollar), not the exchange rate. Under a
   supplier the engine warns about what it can't get; Claude, not the engine, swaps the part or color.
-  GoBricks sells no green baseplate, so a design held to GoBricks takes a neutral one it does sell (the
-  32 x 32 in Dark Brown, the 48 x 48 in Dark Bluish Gray) and the lawn op lays a full layer of grass over
-  it; LEGO designs keep the green baseplate, and their Parts tab leaves it out of the GoBricks total.
+  GoBricks has no green LEGO-numbered baseplate, but makes its own thick (3.2 mm, a plate tall) green ones,
+  GDS-2237 (32 x 32) and GDS-2238 (48 x 48), with no LEGO number: a design held to GoBricks uses them (entered
+  by hand in scripts/gobricks.js with their dollar prices; the viewer draws the base a plate thick). Without
+  a LEGO number the uploaded list can't carry them, so the Parts tab says to add them at Brickwith by hand.
+  A supplier without its own baseplate gets a neutral one it sells, and the lawn op lays a full layer of grass.
   Brickwith's part-list upload doesn't know the 1 x 2 x 3 window (60593), so the catalog leaves it out.
 - Plain bricks, plates and tiles are drawn as boxes with studs (no underside or logo). Sideways building is limited to side-stud bricks
   in wall openings with a few details hung on them (lantern, house number, plaque, vent); mounted
