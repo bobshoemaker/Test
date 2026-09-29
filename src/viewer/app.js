@@ -417,14 +417,14 @@ function renderStep(){
   shownIdx=stepIdx; shownAll=showAll;
   const n=R.steps.length; $('slider').max=n-1; $('slider').value=showAll?n-1:stepIdx;
   const box=$('stepParts'); box.innerHTML=''; const tag=$('subTag');
-  if(showAll||!n){ $('stepNum').textContent='✓'; $('stepTitle').textContent='Finished model'; $('stepOf').textContent=`${R.stats.pieces.toLocaleString()} pieces in ${n} steps`; tag.hidden=true;
+  if(showAll||!n){ $('stepNum').textContent='✓'; $('stepTitle').textContent='Finished model'; $('stepOf').textContent=`${R.stats.pieces.toLocaleString()} pieces in ${n} steps`; tag.style.visibility=''; tag.textContent='\u00a0';
     box.innerHTML='<span class="note" style="margin:0">Press Next or Start from step 1 to walk through the build.</span>'; }
   else {
     const s=R.steps[stepIdx]; $('stepNum').textContent=stepIdx+1;
     $('stepTitle').textContent=s.kind==='main'?s.title:(s.kind==='sub'?R.subs[s.sub].name:s.title);
     $('stepOf').textContent=`Step ${stepIdx+1} of ${n}, page ${stepIdx+2+inventoryPages()}`;
-    if(s.kind==='sub'){ const sub=R.subs[s.sub]; tag.hidden=false; tag.textContent=`Sub-build ${s.n} of ${s.of}`+(sub.copies>1?`, make ${sub.copies}`:''); }
-    else if(s.kind==='main'&&s.of>1){ tag.hidden=false; tag.textContent=`${s.n} of ${s.of} in this section`; } else tag.hidden=true;
+    if(s.kind==='sub'){ const sub=R.subs[s.sub]; tag.style.visibility='visible'; tag.textContent=`Sub-build ${s.n} of ${s.of}`+(sub.copies>1?`, make ${sub.copies}`:''); }
+    else if(s.kind==='main'&&s.of>1){ tag.style.visibility='visible'; tag.textContent=`${s.n} of ${s.of} in this section`; } else { tag.style.visibility=''; tag.textContent='\u00a0'; }
     if(s.kind==='attach'){ const sub=R.subs[s.sub]; const d=document.createElement('div'); d.className='chip'; d.innerHTML=`<span>${sub.name}</span><span class="q">×${sub.copies}</span>`; box.appendChild(d); }
     else { const agg=new Map(); s.parts.forEach(id=>{ const p=R.parts[id-1]; const k=p.name+'|'+p.color; agg.set(k,(agg.get(k)||0)+1); if(p.glass){ const g=p.glass.name+'|Trans-Clear'; agg.set(g,(agg.get(g)||0)+1); } });
       [...agg.entries()].sort((a,b)=>b[1]-a[1]).forEach(([k,q])=>{ const [name,color]=k.split('|'); const d=document.createElement('div'); d.className='chip'; d.title=color;
@@ -444,12 +444,13 @@ $('lift').onclick=()=>{ const L=R.stats.liftoff||[], was=lifted; lifted=(lifted+
   if(lifted>was) flyGroups([L[was]],false); else flyGroups(L.slice(0,was),true);
   applyState(); };
 $('startOver').onclick=()=>{ stopPlay(); showAll=false; stepIdx=0; renderStep(); };
-$('finished').onclick=()=>{ stopPlay(); showAll=true; stepIdx=R.steps.length-1; renderStep(); };
+$('finished').onclick=$('showWhole').onclick=()=>{ stopPlay(); showAll=true; stepIdx=R.steps.length-1; renderStep(); };
 
 // ---------- showcase playback ----------
 let playTimer=null;
 function updateShowLabel(){
   const lbl=$('showLbl'), bar=$('barFill'), mainSteps=R.steps.filter(s=>s.kind!=='sub');
+  $('showWhole').hidden=showAll;
   if(showAll){ lbl.innerHTML='<b>Finished</b> '+R.stats.pieces.toLocaleString()+' pieces'; bar.style.width='100%'; return; }
   const s=R.steps[stepIdx], k=mainSteps.indexOf(s);
   lbl.innerHTML=`<b>${stepIdx+1} / ${R.steps.length}</b> ${s.kind==='main'?s.title:(s.kind==='sub'?R.subs[s.sub].name:s.title)}`;
@@ -574,7 +575,11 @@ $('revertBtn').onclick=()=>{ $('designSrc').value=DESIGN_TEXT; run(DESIGN_TEXT);
 // ---------- design from photos (local server: POST /api/design, NDJSON progress) ----------
 let photos=[], photoUrls=[], busyCtl=null, health=null, survey=null;
 const photoCredit=new WeakMap(); // File -> credit for photos found by address lookup
-function status(html,err){ $('photoStatus').innerHTML=err?`<span class="status-err">${html}</span>`:html; }
+// customers see errors in plain words: anything naming the service behind the design, keys, settings or
+// codes becomes a friendly line (the technical view shows it as it came)
+const TECHNICAL=/claude|anthropic|\bai\b|api|key|\.env|brickhouse_|model|token|mapillary|stripe_|http \d|server error|fetch|json|undefined|econn|timeout/i;
+function status(html,err){ if(err&&!DEV&&TECHNICAL.test(html)) html='Something went wrong on our side. Please try again in a little while.';
+  $('photoStatus').innerHTML=err?`<span class="status-err">${html}</span>`:html; }
 function setBusy(b){ $('planBtn').disabled=b; $('surveyBtn').disabled=b; $('designBtn').disabled=b; $('pickBtn').disabled=b; $('addrBtn').disabled=b; $('useCands').disabled=b; $('stopBtn').hidden=!b; $('compileBtn').disabled=b; $('revertBtn').disabled=b; }
 function renderThumbs(){
   photoUrls.forEach(u=>URL.revokeObjectURL(u)); photoUrls=photos.map(f=>URL.createObjectURL(f));

@@ -79,17 +79,17 @@ ul.facts li{margin:2px 0}
 .toggle{display:flex;align-items:center;gap:8px;font-size:14px;margin-top:14px}
 .legend{display:flex;gap:12px;font-size:13px;color:var(--muted);margin-top:6px;flex-wrap:wrap}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
-.stephead{display:flex;gap:14px;align-items:center}
+.stephead{display:flex;gap:14px;align-items:center;height:112px}
 .stepnum{flex:none;min-width:76px;height:76px;padding:0 8px;border-radius:12px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-family:"Jersey 10","Archivo",sans-serif;font-weight:400;font-size:50px;line-height:1;font-variant-numeric:tabular-nums}
-.steptitle{font-size:19px;font-weight:700;margin:0}
+.steptitle{font-size:19px;font-weight:700;margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .stepof{color:var(--muted);font-size:14px;margin:2px 0 0}
-.subtag[hidden]{display:none}
-.subtag{display:inline-block;margin-top:5px;font-size:12.5px;font-weight:700;border:1.5px solid var(--ink);border-radius:6px;padding:1px 7px}
-.callout{margin:14px 0;border:2px solid var(--ink);border-radius:10px;padding:10px;display:flex;flex-wrap:wrap;gap:8px;min-height:52px}
+.subtag{display:inline-block;visibility:hidden;margin-top:5px;font-size:12.5px;font-weight:700;border:1.5px solid var(--ink);border-radius:6px;padding:1px 7px}
+/* one height for every step, scrolling when a step has many pieces, so nothing below it moves */
+.callout{margin:14px 0;border:2px solid var(--ink);border-radius:14px;padding:10px;display:flex;flex-wrap:wrap;align-content:flex-start;gap:8px;height:196px;overflow-y:auto}
 .chip{display:flex;align-items:center;gap:8px;background:var(--chip);border-radius:8px;padding:6px 9px;font-size:14px}
 .sw{width:16px;height:16px;border-radius:4px;border:1px solid rgba(0,0,0,.25);flex:none;display:inline-block}
 .chip .q{font-weight:750;font-variant-numeric:tabular-nums}
-.nav{display:flex;gap:8px;align-items:center}
+.nav{display:flex;gap:8px;align-items:center;margin-top:14px}
 .nav input[type=range]{flex:1;accent-color:var(--accent)}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
@@ -176,6 +176,7 @@ html.hero canvas:active{cursor:grabbing}
         <div class="modebadge" id="modebadge">Sub-build</div>
         <div class="showcase">
           <button class="btn sm primary" id="play">Play build</button>
+          <button class="btn sm" id="showWhole" hidden>Show whole model</button>
           <span class="lbl" id="showLbl"><b>Finished</b></span>
           <span class="bar"><i id="barFill"></i></span>
         </div>
@@ -211,14 +212,14 @@ html.hero canvas:active{cursor:grabbing}
       <section class="pane" id="pane-manual" hidden>
         <div class="stephead">
           <div class="stepnum" id="stepNum">1</div>
-          <div><p class="steptitle" id="stepTitle">…</p><p class="stepof" id="stepOf"></p><span class="subtag" id="subTag" hidden></span></div>
+          <div><p class="steptitle" id="stepTitle">…</p><p class="stepof" id="stepOf"></p><span class="subtag" id="subTag"></span></div>
         </div>
-        <div class="callout" id="stepParts" aria-label="Parts added in this step"></div>
         <div class="nav">
           <button class="btn" id="prev">Back</button>
           <input type="range" id="slider" min="0" max="0" value="0" aria-label="Step">
           <button class="btn primary" id="next">Next</button>
         </div>
+        <div class="callout" id="stepParts" aria-label="Parts added in this step"></div>
         <div class="row"><button class="btn" id="startOver">Start from step 1</button><button class="btn" id="finished">Finished model</button></div>
       </section>
       <section class="pane" id="pane-parts" hidden>
