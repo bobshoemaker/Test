@@ -112,8 +112,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   for a parts list today (cached a day per list; `BRICKHOUSE_GOBRICKS_QUOTES=0` turns it off, `BRICKHOUSE_CNY_PER_USD`
   sets the viewer's dollar rate). `POST /api/lookup {address}` returns the place and ranked candidate
   photos; `GET /api/photo/<mapillary id>` proxies one image.
-- `src/viewer/landing.html`: the home page at `/` (what it is, how it works, the sample models, for realtors),
-  with renders of the samples in `src/viewer/img/` made by `scripts/landing.js`; "Start a design" goes to `/app#design`.
+- `src/viewer/landing.html`: the home page at `/`, written for homeowners and gift buyers, not technical (moments,
+  how it works, examples, sizes, questions); renders of the samples on its warm background in `src/viewer/img/`,
+  made by `scripts/landing.js`; "Make yours" goes to `/app#design`. Promise only what ships today.
 - `src/viewer/`: single-page three.js (r128, CDN) viewer, at `/app`: model, manual (sub-builds shown on
   their own), parts and BrickLink XML, design editor, photo upload, and "Lift roof" for designs
   whose roof ops carry `"liftoff"` (floors show underneath; the rooms too when there was a plan).

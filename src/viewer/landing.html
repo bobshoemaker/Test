@@ -3,100 +3,129 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Brickhouse: their new home, in bricks</title>
-<meta name="description" content="Photos of a house in, a buildable brick model out: a 3D model, a step-by-step building guide and a parts list, with every connection checked. A closing gift from their realtor.">
+<title>Brickhouse: your home, brick by brick</title>
+<meta name="description" content="Send a few photos of any house and we'll design a brick model of it, with a step-by-step building guide and every piece listed. For your first home, the house you grew up in, or a gift.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Jersey+10&family=Archivo:wdth,wght@100,400..700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --paper:#E9EFF5; --panel:#FFFFFF; --stage:#D9E2EB; --ink:#16253A; --muted:#56677D; --line:#C5D2DE;
-  --accent:#F2B705; --accent-ink:#16253A; --brick:#C8412B; --band:#16253A; --band-ink:#E9EFF5;
+  --paper:#F7F1E8; --panel:#FFFDF9; --sand:#EFE6D8; --ink:#27211B; --muted:#6A6056; --line:#E3D7C5;
+  --accent:#B4462A; --accent-ink:#FFFFFF; --accent-soft:#F4DED3; --leaf:#2F6B45;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --paper:#0E1724; --panel:#162234; --stage:#D9E2EB; --ink:#E6EDF5; --muted:#92A3B8; --line:#26374E;
-    --accent:#F2B705; --accent-ink:#16253A; --brick:#EE6A52; --band:#162234; --band-ink:#E6EDF5; color-scheme:dark;
+    --paper:#16120E; --panel:#201A15; --sand:#EFE6D8; --ink:#F3ECE2; --muted:#B5A898; --line:#3A3028;
+    --accent:#E0714F; --accent-ink:#1B120C; --accent-soft:#3A241B; --leaf:#7FB894; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --paper:#0E1724; --panel:#162234; --stage:#D9E2EB; --ink:#E6EDF5; --muted:#92A3B8; --line:#26374E;
-  --accent:#F2B705; --accent-ink:#16253A; --brick:#EE6A52; --band:#162234; --band-ink:#E6EDF5; color-scheme:dark;
+  --paper:#16120E; --panel:#201A15; --sand:#EFE6D8; --ink:#F3ECE2; --muted:#B5A898; --line:#3A3028;
+  --accent:#E0714F; --accent-ink:#1B120C; --accent-soft:#3A241B; --leaf:#7FB894; color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:border-box}
 html{scroll-behavior:smooth}
-body{margin:0;background:var(--paper);color:var(--ink);font-family:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:17px;line-height:1.5;-webkit-font-smoothing:antialiased;
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased;
   padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 a{color:inherit}
 img{max-width:100%;display:block}
-.wrap{max-width:1160px;margin:0 auto;padding:0 16px}
+.wrap{max-width:1140px;margin:0 auto;padding:0 16px}
 @media (min-width:720px){.wrap{padding:0 28px}}
-:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:4px}
+:focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:6px}
+/* pixel type: keep letters apart (some pixel fonts' "fi" ligature reads as an "A") */
+h1,h2,h3,.logo,summary,figcaption b{font-variant-ligatures:none;font-feature-settings:"liga" 0,"clig" 0}
+h1,h2,h3{font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;letter-spacing:0;text-wrap:balance;margin:0}
 
 /* top bar */
-.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 0}
-.logo{display:flex;align-items:center;gap:10px;text-decoration:none;font-weight:800;font-stretch:112%;font-size:21px;letter-spacing:-.01em}
-.logo svg{flex:none}
-.nav{display:flex;align-items:center;gap:22px;font-size:15px;font-weight:600}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 0}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none;font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;font-size:28px}
+.nav{display:flex;align-items:center;gap:24px;font-size:15px}
 .nav a.link{text-decoration:none;color:var(--muted)}
 .nav a.link:hover{color:var(--ink)}
 @media (max-width:760px){.nav a.link{display:none}}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none;font-weight:700;font-size:16px;border-radius:10px;padding:12px 18px;border:1.5px solid var(--line);background:var(--panel);color:var(--ink)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none;font-weight:600;font-size:16px;border-radius:999px;padding:13px 22px;border:1.5px solid var(--line);background:var(--panel);color:var(--ink)}
 .btn:hover{border-color:var(--muted)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
-.btn.primary:hover{filter:brightness(1.05)}
-.btn.sm{padding:8px 14px;font-size:15px}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.sm{padding:9px 16px;font-size:15px}
 
 /* hero */
-.hero{display:grid;gap:28px;padding:24px 0 56px;align-items:center}
-@media (min-width:960px){.hero{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:44px;padding:40px 0 80px}}
-.eyebrow{display:inline-block;font-size:14px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--brick);margin:0 0 12px}
-h1{margin:0;font-weight:800;font-stretch:108%;font-size:clamp(40px,7vw,70px);line-height:.98;letter-spacing:-.02em;text-wrap:balance}
-.lede{font-size:clamp(18px,2.1vw,20px);color:var(--muted);margin:20px 0 26px;max-width:36ch}
+.hero{display:grid;gap:30px;padding:28px 0 64px;align-items:center}
+@media (min-width:940px){.hero{grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:44px;padding:48px 0 96px}}
+.eyebrow{display:inline-block;font-size:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
+h1{font-size:clamp(50px,6.6vw,82px);line-height:.98}
+.lede{font-size:clamp(18px,2vw,20px);color:var(--muted);margin:22px 0 30px;max-width:34ch}
 .ctas{display:flex;gap:10px;flex-wrap:wrap}
-.facts{display:flex;flex-wrap:wrap;gap:8px 18px;margin:26px 0 0;padding:0;list-style:none;font-size:15px;color:var(--muted)}
-.facts li{display:flex;align-items:center;gap:7px}
-.facts li::before{content:"";width:10px;height:10px;border-radius:2px;background:var(--accent);flex:none}
-.shot{position:relative;border-radius:18px;overflow:hidden;background:var(--stage);box-shadow:0 1px 0 var(--line),0 24px 60px -30px rgba(22,37,58,.45)}
-.shot img{width:100%;height:auto;aspect-ratio:1200/860;object-fit:cover}
-.tag{position:absolute;left:12px;bottom:12px;background:rgba(255,255,255,.92);color:#16253A;border-radius:8px;padding:5px 10px;font-size:14px;font-weight:600}
+.small{font-size:14px;color:var(--muted);margin:18px 0 0}
+.frame{border-radius:24px;overflow:hidden;background:var(--sand);box-shadow:0 30px 70px -40px rgba(60,40,20,.45)}
+.frame img{width:100%;height:auto}
+.hero .frame img{aspect-ratio:1200/860;object-fit:cover}
 
 /* sections */
-section{padding:56px 0}
-@media (min-width:960px){section{padding:80px 0}}
-h2{margin:0 0 10px;font-weight:800;font-stretch:104%;font-size:clamp(30px,4.4vw,44px);line-height:1.05;letter-spacing:-.015em;text-wrap:balance}
-.intro{color:var(--muted);font-size:18px;max-width:58ch;margin:0 0 34px}
-.steps{display:grid;gap:14px;counter-reset:s;padding:0;margin:0;list-style:none}
-@media (min-width:760px){.steps{grid-template-columns:repeat(3,1fr);gap:18px}}
-.steps li{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px}
-.steps li::before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:44px;height:44px;border-radius:10px;background:var(--accent);color:var(--accent-ink);font-weight:800;font-size:24px;font-stretch:80%;margin-bottom:14px}
-.steps h3,.cards h3{margin:0 0 6px;font-size:20px;font-weight:700}
-.steps p,.cards p{margin:0;color:var(--muted);font-size:16px}
-.cards{display:grid;gap:14px}
-@media (min-width:760px){.cards{grid-template-columns:repeat(3,1fr);gap:18px}}
-.cards div{border-top:3px solid var(--ink);padding-top:16px}
+section{padding:64px 0}
+@media (min-width:940px){section{padding:96px 0}}
+h2{font-size:clamp(40px,5.4vw,60px);line-height:1}
+.intro{color:var(--muted);font-size:18px;max-width:52ch;margin:14px 0 40px}
+.center{text-align:center}.center .intro{margin-left:auto;margin-right:auto}
 
-.samples{display:grid;gap:22px}
-@media (min-width:860px){.samples{grid-template-columns:1fr 1fr}}
+.moments{display:grid;gap:14px}
+@media (min-width:640px){.moments{grid-template-columns:1fr 1fr}}
+@media (min-width:1000px){.moments{grid-template-columns:repeat(4,1fr)}}
+.moment{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:24px}
+.moment svg{color:var(--accent);margin-bottom:14px}
+.moment h3{font-size:27px;margin-bottom:6px}
+.moment p{margin:0;color:var(--muted);font-size:16px}
+
+.steps{display:grid;gap:28px;padding:0;margin:0;list-style:none;counter-reset:s}
+@media (min-width:800px){.steps{grid-template-columns:repeat(3,1fr);gap:32px}}
+.steps li{counter-increment:s;border-top:1.5px solid var(--ink);padding-top:18px}
+.steps li::before{content:counter(s);display:block;font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-size:60px;line-height:1;color:var(--accent);margin-bottom:12px}
+.steps h3{font-size:28px;margin-bottom:6px}
+.steps p{margin:0;color:var(--muted);font-size:16px}
+
+.feature{display:grid;gap:28px;align-items:center}
+@media (min-width:940px){.feature{grid-template-columns:1.15fr .85fr;gap:56px}}
+.checks{list-style:none;margin:0;padding:0;display:grid;gap:16px}
+.checks li{display:grid;grid-template-columns:28px 1fr;gap:12px;font-size:17px}
+.checks li b{display:block}
+.checks li span{color:var(--muted);font-size:16px}
+.checks svg{color:var(--leaf);margin-top:3px}
+
+.examples{display:grid;gap:24px}
+@media (min-width:860px){.examples{grid-template-columns:1fr 1fr}}
 figure{margin:0}
-figcaption{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:12px}
-figcaption b{font-size:18px}
-figcaption span{color:var(--muted);font-size:15px}
-figcaption a{font-weight:700;font-size:15px}
+figcaption{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:14px}
+figcaption b{font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;font-size:26px}
+figcaption span{color:var(--muted);font-size:15px;display:block}
+figcaption a{font-weight:600;font-size:15px;color:var(--accent)}
 
-.band{background:var(--band);color:var(--band-ink);border-radius:22px;padding:34px 22px;display:grid;gap:22px}
-@media (min-width:860px){.band{grid-template-columns:1.2fr 1fr;padding:48px;gap:40px;align-items:center}}
-.band .intro{color:inherit;opacity:.8;margin-bottom:0}
-.band ul{margin:0;padding:0;list-style:none;display:grid;gap:12px;font-size:16px}
-.band li{display:flex;gap:10px}
-.band li::before{content:"";width:12px;height:12px;border-radius:3px;background:var(--accent);flex:none;margin-top:6px}
+.sizes{display:grid;gap:16px}
+@media (min-width:760px){.sizes{grid-template-columns:1fr 1fr;gap:20px}}
+.size{background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:28px}
+.size h3{font-size:34px}
+.size .dims{color:var(--muted);margin:4px 0 18px}
+.size dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:16px}
+.size dt{color:var(--muted)}
+.size dd{margin:0;font-weight:600;text-align:right}
+.note{color:var(--muted);font-size:14px;margin:18px 0 0;max-width:70ch}
 
-.start{text-align:center;padding-bottom:72px}
-.start .intro{margin:0 auto 26px}
-.start .ctas{justify-content:center}
-footer{border-top:1px solid var(--line);padding:26px 0 40px;color:var(--muted);font-size:14px}
+.faq{max-width:760px}
+details{border-bottom:1px solid var(--line);padding:4px 0}
+summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:16px;align-items:center;padding:16px 0;font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;font-size:26px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";font-family:"Archivo",sans-serif;font-weight:400;font-size:26px;color:var(--accent);flex:none}
+details[open] summary::after{content:"\2212"}
+details p{margin:0 0 18px;color:var(--muted);max-width:62ch}
+
+.closing{background:var(--accent-soft);border-radius:28px;padding:48px 22px;text-align:center}
+@media (min-width:860px){.closing{padding:72px 48px}}
+.closing .intro{margin:14px auto 28px}
+.closing .ctas{justify-content:center}
+
+footer{padding:36px 0 48px;color:var(--muted);font-size:14px}
 footer p{margin:4px 0;max-width:80ch}
+footer a{color:inherit}
 @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
 </style>
 </head>
@@ -104,112 +133,155 @@ footer p{margin:4px 0;max-width:80ch}
 <div class="wrap">
   <div class="bar">
     <a class="logo" href="/" aria-label="Brickhouse home">
-      <svg width="34" height="30" viewBox="0 0 34 30" aria-hidden="true"><rect x="1" y="9" width="32" height="20" rx="3" fill="#F2B705"/><rect x="5" y="3" width="9" height="7" rx="2" fill="#F2B705"/><rect x="20" y="3" width="9" height="7" rx="2" fill="#F2B705"/><rect x="1" y="9" width="32" height="20" rx="3" fill="none" stroke="#16253A" stroke-opacity=".25"/></svg>
+      <svg width="30" height="28" viewBox="0 0 30 28" aria-hidden="true"><path d="M3 13 15 3l12 10v13H3z" fill="#B4462A"/><rect x="7" y="0.5" width="5" height="4" rx="1.2" fill="#B4462A"/><rect x="11.5" y="16" width="7" height="10" rx="1" fill="#F7F1E8"/></svg>
       Brickhouse
     </a>
     <nav class="nav" aria-label="Main">
       <a class="link" href="#how">How it works</a>
-      <a class="link" href="#samples">Samples</a>
-      <a class="link" href="#realtors">For realtors</a>
-      <a class="btn primary sm" href="/app#design">Start a design</a>
+      <a class="link" href="#examples">Examples</a>
+      <a class="link" href="#sizes">Sizes</a>
+      <a class="link" href="#faq">Questions</a>
+      <a class="btn primary sm" href="/app#design">Make yours</a>
     </nav>
   </div>
 
   <header class="hero">
     <div>
-      <p class="eyebrow">A closing gift they'll actually keep</p>
-      <h1>Their new home, in bricks.</h1>
-      <p class="lede">Send photos of a house. Get back a brick model of it you can really build: a 3D preview, a step-by-step building guide, and a parts list ready to order.</p>
+      <p class="eyebrow">Brick models of real homes</p>
+      <h1>Your home,<br>brick by&nbsp;brick.</h1>
+      <p class="lede">Send a few photos of a house that matters to you. We'll design a brick model of it that you can build yourself, one step at a time.</p>
       <div class="ctas">
-        <a class="btn primary" href="/app#design">Start a design</a>
-        <a class="btn" href="/app?design=savannah-dr">Explore a sample in 3D</a>
+        <a class="btn primary" href="/app#design">Start with your photos</a>
+        <a class="btn" href="/app?design=savannah-dr">See one in 3D</a>
       </div>
-      <ul class="facts">
-        <li>Designed in about 20 minutes</li>
-        <li>Every connection checked</li>
-        <li>Standard bricks, easy to buy</li>
-      </ul>
+      <p class="small">Works with LEGO® bricks · Designed in about 20 minutes</p>
     </div>
-    <div class="shot">
-      <img src="/img/sample-savannah.jpg" width="1200" height="860" alt="A brick model of a two-story house with a clay tile roof, palm trees, flower beds and a red car in the driveway.">
-      <span class="tag">Sample model, 1,266 pieces</span>
+    <div class="frame">
+      <img src="/img/sample-savannah-front.jpg" width="1200" height="860" alt="A brick model of a tan two-story house with an orange tile roof, two palm trees, a flowering tree, flower beds and a small red car in the driveway.">
     </div>
   </header>
 </div>
 
-<section id="how">
+<section id="moments" style="padding-top:0">
   <div class="wrap">
-    <h2>From listing photos to a model in three steps</h2>
-    <p class="intro">No design skills needed. Claude, Anthropic's AI, does the design work, and an engine checks that every brick actually holds.</p>
+    <h2>For the places that stay with you</h2>
+    <p class="intro">A house is never just a house. Build the one that means something.</p>
+    <div class="moments">
+      <div class="moment">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.7-8.7M16 6l2.5 2.5M14 8l2 2"/></svg>
+        <h3>Your first home</h3><p>Mark the moment you got the keys, and keep it on the shelf for good.</p>
+      </div>
+      <div class="moment">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M12 17.5s-3-1.8-3-3.8a1.6 1.6 0 0 1 3-.8 1.6 1.6 0 0 1 3 .8c0 2-3 3.8-3 3.8z"/></svg>
+        <h3>The house you grew up in</h3><p>The porch, the tree out front, the window that was yours.</p>
+      </div>
+      <div class="moment">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="9" width="18" height="12" rx="1.5"/><path d="M3 13h18M12 9v12M12 9s-1.5-5-4.5-5a2 2 0 0 0 0 4c2 0 4.5 1 4.5 1s2.5-1 4.5-1a2 2 0 0 0 0-4C13.5 4 12 9 12 9z"/></svg>
+        <h3>A housewarming gift</h3><p>For family or friends who just moved in, something they'll build together.</p>
+      </div>
+      <div class="moment">
+        <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V9l8-5 8 5v11"/><path d="M9 20v-6h6v6"/><path d="M2 20h20"/></svg>
+        <h3>Before you say goodbye</h3><p>Moving on or selling a family home? Keep a piece of it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how" style="padding-top:0">
+  <div class="wrap">
+    <h2>How it works</h2>
+    <p class="intro">No design skills needed. If you can take a photo, you can do this.</p>
     <ol class="steps">
-      <li><h3>Share the house</h3><p>Upload up to 12 photos of the outside, front first, or enter the address. A floor plan is optional and makes the walls exact.</p></li>
-      <li><h3>We design the model</h3><p>Claude studies the photos and designs the house brick by brick, then fixes anything the checker flags. It takes about 20 minutes, and you can close the tab.</p></li>
-      <li><h3>Build it</h3><p>Spin the finished model in 3D, follow the building guide step by step, and order the parts from BrickLink or GoBricks.</p></li>
+      <li><h3>Share the house</h3><p>Upload a few photos of the outside, front first, or just enter the address. A floor plan helps, but isn't needed.</p></li>
+      <li><h3>We design it</h3><p>We turn your photos into a brick model and show it to you in 3D. If the photos leave something out, you can answer a few quick questions about it first.</p></li>
+      <li><h3>Build it</h3><p>Get the parts, then follow the building guide step by step, just like a LEGO® set.</p></li>
     </ol>
   </div>
 </section>
 
 <section id="get" style="padding-top:0">
-  <div class="wrap">
-    <h2>What you get</h2>
-    <p class="intro">Everything needed to build it, not just a picture of it.</p>
-    <div class="cards">
-      <div><h3>A 3D model</h3><p>Turn it, zoom in, watch it build, and where the roof is made to lift off, look at the floors inside. Walls, roof, windows, fences and plants, as the photos show them.</p></div>
-      <div><h3>A building guide</h3><p>Step by step in build order, with the new pieces for each step called out. Every step is checked to rest on the ones before it.</p></div>
-      <div><h3>A parts list</h3><p>Only parts that are easy to buy, with a BrickLink wanted list, or compatible GoBricks parts at a fraction of the price with today's quote.</p></div>
-    </div>
-  </div>
-</section>
-
-<section id="samples" style="padding-top:0">
-  <div class="wrap">
-    <h2>Sample models</h2>
-    <p class="intro">Both made by the same engine that builds yours. Open one to spin it, play the build, and see its parts.</p>
-    <div class="samples">
-      <figure>
-        <div class="shot"><img src="/img/sample-634.jpg" width="1200" height="860" loading="lazy" alt="A brick model of a white two-story Spanish-style house with an orange tile roof, a green trimmed balcony and a long driveway."></div>
-        <figcaption><span><b>Spanish revival</b> &nbsp;827 pieces, from three listing photos</span><a href="/app?design=634-unit-a">Open in 3D</a></figcaption>
-      </figure>
-      <figure>
-        <div class="shot"><img src="/img/sample-savannah.jpg" width="1200" height="860" loading="lazy" alt="A brick model of a tan two-story house with a clay tile roof, chimney, palm trees and flower beds."></div>
-        <figcaption><span><b>Two-story with garden</b> &nbsp;1,266 pieces</span><a href="/app?design=savannah-dr">Open in 3D</a></figcaption>
-      </figure>
-    </div>
-  </div>
-</section>
-
-<section id="realtors" style="padding-top:0">
-  <div class="wrap">
-    <div class="band">
-      <div>
-        <h2>Made for realtors</h2>
-        <p class="intro">A closing gift that isn't another wine bottle. Your clients build the house they just bought, and it stays on the shelf long after the moving boxes are gone.</p>
-      </div>
-      <ul>
-        <li>Use the listing photos you already have the rights to</li>
-        <li>Add the floor plan for exact walls and rooms</li>
-        <li>Pick a size: about 1,200 pieces, or a larger model with the yard</li>
-        <li>Guesses are marked as guesses, so nothing is passed off as fact</li>
+  <div class="wrap feature">
+    <div class="frame"><img src="/img/sample-634-step.jpg" width="1200" height="860" loading="lazy" alt="The Spanish-style house model part way through its building guide, with the ground floor walls up and the earlier steps faded."></div>
+    <div>
+      <h2>Everything you need to build it</h2>
+      <p class="intro" style="margin-bottom:28px">Not just a picture: a model that really goes together.</p>
+      <ul class="checks">
+        <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><div><b>Your house in 3D</b><span>Turn it, zoom in, and watch it build itself before you start.</span></div></li>
+        <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><div><b>A step-by-step building guide</b><span>One layer at a time, with the pieces for each step shown. Follow it on your phone, tablet or computer.</span></div></li>
+        <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><div><b>Every piece listed</b><span>A complete parts list, ready to order in one go.</span></div></li>
+        <li><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><div><b>Checked to hold together</b><span>Every brick is checked to connect, so the finished model is sturdy enough to keep.</span></div></li>
       </ul>
     </div>
   </div>
 </section>
 
-<section class="start">
+<section id="examples" style="padding-top:0">
   <div class="wrap">
-    <h2>Start with the photos you have</h2>
-    <p class="intro" id="feeLine">Upload the photos, answer a few quick questions about what they don't show, and your model is ready in about 20 minutes.</p>
-    <div class="ctas">
-      <a class="btn primary" href="/app#design">Start a design</a>
-      <a class="btn" href="/app?design=634-unit-a">See a sample first</a>
+    <h2>Examples</h2>
+    <p class="intro">Two houses made from photos. Open one to spin it, play the build, and see every piece.</p>
+    <div class="examples">
+      <figure>
+        <div class="frame"><img src="/img/sample-634.jpg" width="1200" height="860" loading="lazy" alt="Brick model of a white Spanish-style house with an orange tile roof."></div>
+        <figcaption><div><b>Spanish revival</b><span>827 pieces · made from three listing photos</span></div><a href="/app?design=634-unit-a">See it in 3D →</a></figcaption>
+      </figure>
+      <figure>
+        <div class="frame"><img src="/img/sample-savannah.jpg" width="1200" height="860" loading="lazy" alt="Brick model of a tan two-story house with a tile roof, chimney, palm trees and a garden."></div>
+        <figcaption><div><b>Two-story with a garden</b><span>1,266 pieces</span></div><a href="/app?design=savannah-dr">See it in 3D →</a></figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section id="sizes" style="padding-top:0">
+  <div class="wrap">
+    <h2>Two sizes</h2>
+    <p class="intro">Both sit on a brick base; the bigger one has room for the yard, the garden and the street.</p>
+    <div class="sizes">
+      <div class="size">
+        <h3>Classic</h3>
+        <p class="dims">10 × 10 in (26 cm) base</p>
+        <dl><dt>Pieces</dt><dd>about 800 to 1,300</dd><dt>Build time</dt><dd>an evening or two</dd><dt>Bricks</dt><dd>about $50</dd></dl>
+      </div>
+      <div class="size">
+        <h3>Grand</h3>
+        <p class="dims">15 × 15 in (38 cm) base</p>
+        <dl><dt>Pieces</dt><dd>about 2,000 to 2,400</dd><dt>Build time</dt><dd>a weekend or two</dd><dt>Bricks</dt><dd>about $145</dd></dl>
+      </div>
+    </div>
+    <p class="note" id="priceNote">Brick prices are from our example houses, before shipping; yours depends on the house. You'll see the exact parts list and price before you order anything.</p>
+  </div>
+</section>
+
+<section id="faq" style="padding-top:0">
+  <div class="wrap faq">
+    <h2>Questions</h2>
+    <p class="intro">The things people ask first.</p>
+    <details><summary>Is it real LEGO?</summary><p>The bricks are GoBricks, a compatible brand that fits LEGO® bricks, at a fraction of the price. You can mix them with bricks you already have. LEGO is a trademark of the LEGO Group, which doesn't sponsor or endorse Brickhouse.</p></details>
+    <details><summary>What photos do I need?</summary><p>A clear photo of the front, plus the sides and back if you have them: up to twelve. Photos you took yourself are best. If a side isn't shown, you can answer a few quick questions about it, and anything we still have to guess is marked as a guess.</p></details>
+    <details><summary>Do I need building experience?</summary><p>No. The guide goes one layer at a time and shows exactly which pieces go in each step, like any LEGO® set. If you've built one of those, you can build this.</p></details>
+    <details><summary>How long does it take?</summary><p>The design is ready in about 20 minutes, and you can close the page while it works. Parts ship in about a week, plus delivery. Building takes an evening or two for the Classic size, a weekend or so for the Grand.</p></details>
+    <details><summary>Where do the bricks come from?</summary><p>You order them in one go from Brickwith, GoBricks' own store, using the parts list we give you. We're working on shipping complete kits.</p></details>
+    <details><summary>Can I make one as a gift?</summary><p>Of course. Use your own photos of their house, or theirs, and pick the size that suits them. It's a lovely one to build together.</p></details>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="closing">
+      <h2>Start with the photos you have</h2>
+      <p class="intro" id="feeLine">Upload a few photos, answer a couple of quick questions, and see your house in bricks in about 20 minutes.</p>
+      <div class="ctas">
+        <a class="btn primary" href="/app#design">Make yours</a>
+        <a class="btn" href="/app?design=634-unit-a">See an example first</a>
+      </div>
     </div>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
-    <p>Brickhouse designs brick models of houses from photos. Parts are bought separately from BrickLink or GoBricks.</p>
-    <p>LEGO is a trademark of the LEGO Group, which does not sponsor or endorse this site. BrickLink and GoBricks are independent sellers.</p>
+    <p>Brickhouse designs brick models of real homes from photos. Real estate agent? It makes a closing gift your clients will keep.</p>
+    <p>LEGO® is a trademark of the LEGO Group, which does not sponsor, authorize or endorse this site. GoBricks and Brickwith are independent companies.</p>
   </div>
 </footer>
 
@@ -218,7 +290,7 @@ footer p{margin:4px 0;max-width:80ch}
 fetch('/api/health').then(r=>r.ok?r.json():null).then(h=>{
   if(!h||!h.fee) return;
   const fee=(h.fee.amountCents/100).toLocaleString(undefined,{style:'currency',currency:h.fee.currency.toUpperCase()});
-  document.getElementById('feeLine').textContent=`Upload the photos, answer a few quick questions about what they don't show, and your model is ready in about 20 minutes. The design is ${fee}; the parts are bought separately.`;
+  document.getElementById('feeLine').textContent=`Upload a few photos, answer a couple of quick questions, and see your house in bricks in about 20 minutes. The design is ${fee}; you only buy the bricks if you love it.`;
 }).catch(()=>{});
 </script>
 </body>
