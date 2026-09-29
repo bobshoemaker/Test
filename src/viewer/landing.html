@@ -61,6 +61,14 @@ h1{font-size:clamp(50px,6.6vw,82px);line-height:.98}
 .frame{border-radius:24px;overflow:hidden;background:var(--sand);box-shadow:0 30px 70px -40px rgba(60,40,20,.45)}
 .frame img{width:100%;height:auto}
 .hero .frame img{aspect-ratio:1200/860;object-fit:cover}
+/* the live model: loads after the page, then fades in over the picture */
+.live{position:relative}
+.live iframe{position:absolute;inset:0;width:100%;height:100%;border:0;opacity:0;transition:opacity .8s ease;z-index:1}
+.live.ready iframe{opacity:1}
+.live .hint{position:absolute;left:14px;bottom:14px;z-index:2;background:rgba(255,253,249,.92);color:#27211B;border-radius:999px;padding:6px 12px;font-size:14px;font-weight:600;opacity:0;transition:opacity .6s ease .6s;pointer-events:none}
+.live.ready .hint{opacity:1}
+.h-tap{display:none}
+@media (hover:none){.h-hover{display:none}.h-tap{display:inline}}
 
 /* sections */
 section{padding:64px 0}
@@ -156,7 +164,9 @@ footer a{color:inherit}
       </div>
       <p class="small">Works with LEGO® bricks · Designed in about 20 minutes</p>
     </div>
-    <div class="frame">
+    <div class="frame live" id="heroFrame">
+      <iframe id="heroLive" title="The example house in 3D" aria-hidden="true" tabindex="-1" hidden></iframe>
+      <span class="hint" aria-hidden="true"><span class="h-hover">Hover to peek inside</span><span class="h-tap">Tap to peek inside</span></span>
       <img src="/img/sample-savannah-front.jpg" width="1200" height="860" alt="A brick model of a tan two-story house with an orange tile roof, two palm trees, a flowering tree, flower beds and a small red car in the driveway.">
     </div>
   </header>
@@ -286,6 +296,12 @@ footer a{color:inherit}
 </footer>
 
 <script>
+// The live model in the hero: after the page has loaded, and not for anyone who asks for less motion
+if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
+  const f=document.getElementById('heroLive'), load=()=>{ f.hidden=false; f.src='/app?design=savannah-dr&hero=1&bg=EFE6D8'; };
+  addEventListener('message',e=>{ if(e.origin===location.origin&&e.data&&e.data.brickhouse==='hero-ready') document.getElementById('heroFrame').classList.add('ready'); });
+  addEventListener('load',()=>'requestIdleCallback' in window?requestIdleCallback(load,{timeout:1500}):setTimeout(load,300));
+}
 // The design fee, when the server charges one
 fetch('/api/health').then(r=>r.ok?r.json():null).then(h=>{
   if(!h||!h.fee) return;
