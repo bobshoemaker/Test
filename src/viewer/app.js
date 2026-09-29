@@ -1,6 +1,11 @@
 // Brickhouse viewer: rendering, manual, parts, design editor, photo jobs.
 // Needs three.js r128 (global THREE) and src/engine/engine.js (global compile, COLORS).
 const $=id=>document.getElementById(id);
+// ?hero=1 is the landing page's live picture: only the model, turning slowly on the page's background
+// (?bg=rrggbb), its top story lifting a little while the pointer is over it (a tap on touch screens)
+const HERO=new URLSearchParams(location.search).get('hero')==='1';
+if(HERO){ document.documentElement.classList.add('hero'); const bg=new URLSearchParams(location.search).get('bg');
+  if(/^[0-9a-f]{6}$/i.test(bg||'')) document.documentElement.style.setProperty('--stage','#'+bg); }
 const canvas=$('cv'), stage=$('stage');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
@@ -238,7 +243,7 @@ function applyState(){
 
 // ---------- camera ----------
 let theta=0.62, phi=0.98, radius=70, target=new THREE.Vector3(0,3.5,0), goal={theta, phi, radius, t:target.clone()}, autoSpin=false, dirty=true, userZoom=false, lastMode='main';
-function fitRadius(){ const a=camera.aspect, k=PLATE/32; return Math.min(170*k,Math.max(82*k,77*k/Math.max(a,0.45))); }
+function fitRadius(){ const a=camera.aspect, k=PLATE/32*(HERO?0.78:1); return Math.min(170*k,Math.max(82*k,77*k/Math.max(a,0.45))); }
 function frame(){
   if(mode===lastMode) return; lastMode=mode;
   if(mode==='sub'){ const s=R.steps[stepIdx]; const ps=R.parts.filter(p=>p.sub===s.sub&&p.copy===0);
@@ -255,7 +260,11 @@ document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.data
 $('spin').onclick=()=>{ autoSpin=!autoSpin; $('spin').setAttribute('aria-pressed',autoSpin); dirty=true; };
 function placeCam(){ camera.position.set(target.x+radius*Math.sin(phi)*Math.sin(theta),target.y+radius*Math.cos(phi),target.z+radius*Math.sin(phi)*Math.cos(theta)); camera.lookAt(target); }
 const ptrs=new Map(); let pinch0=0,r0=0;
-canvas.addEventListener('pointerdown',e=>{ canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY}); document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed','false'));
+if(HERO){ // no dragging or zooming: the page scrolls past it; hovering (or tapping) lifts the top story
+  canvas.addEventListener('pointerenter',e=>{ if(e.pointerType==='mouse'){ liftGoal=1; dirty=true; } });
+  canvas.addEventListener('pointerleave',e=>{ if(e.pointerType==='mouse'){ liftGoal=0; dirty=true; } });
+  canvas.addEventListener('pointerdown',e=>{ if(e.pointerType!=='mouse'){ liftGoal=liftGoal?0:1; dirty=true; } }); }
+else canvas.addEventListener('pointerdown',e=>{ canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY}); document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed','false'));
   if(ptrs.size===2){ const [a,b]=[...ptrs.values()]; pinch0=Math.hypot(a.x-b.x,a.y-b.y); r0=goal.radius; } });
 canvas.addEventListener('pointermove',e=>{ if(!ptrs.has(e.pointerId)) return; const p=ptrs.get(e.pointerId);
   if(ptrs.size===1){ goal.theta-=(e.clientX-p.x)*0.008; goal.phi=Math.max(0.06,Math.min(1.5,goal.phi-(e.clientY-p.y)*0.006)); theta=goal.theta; phi=goal.phi; }
@@ -264,18 +273,35 @@ canvas.addEventListener('pointermove',e=>{ if(!ptrs.has(e.pointerId)) return; co
   dirty=true; });
 const endPtr=e=>{ ptrs.delete(e.pointerId); if(ptrs.size<2) pinch0=0; };
 canvas.addEventListener('pointerup',endPtr); canvas.addEventListener('pointercancel',endPtr);
-canvas.addEventListener('wheel',e=>{ e.preventDefault(); goal.radius=Math.max(10,Math.min(170,goal.radius*(1+e.deltaY*0.001))); radius=goal.radius; userZoom=true; dirty=true; },{passive:false});
+if(!HERO) canvas.addEventListener('wheel',e=>{ e.preventDefault(); goal.radius=Math.max(10,Math.min(170,goal.radius*(1+e.deltaY*0.001))); radius=goal.radius; userZoom=true; dirty=true; },{passive:false});
 function resize(){ const w=stage.clientWidth,h=stage.clientHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); if(!userZoom&&mode==='main'){ goal.radius=fitRadius(); } dirty=true; }
 new ResizeObserver(resize).observe(stage);
 const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function loop(){ requestAnimationFrame(loop);
   const k=reduceMotion?1:0.14; let moving=false;
   const ease=(a,b)=>{ const d=b-a; if(Math.abs(d)>1e-4){ moving=true; return a+d*k; } return b; };
-  if(autoSpin){ goal.theta+=0.004; moving=true; }
+  if(autoSpin){ goal.theta+=HERO?0.0028:0.004; moving=true; }
+  if(liftT!==liftGoal){ liftT=reduceMotion?liftGoal:liftT<liftGoal?Math.min(liftGoal,liftT+0.05):Math.max(liftGoal,liftT-0.05); liftTo(liftT); moving=true; }
   if(anims.size){ animFrame(performance.now()); moving=true; }
   theta=ease(theta,goal.theta); phi=ease(phi,goal.phi); radius=ease(radius,goal.radius);
   const tx=ease(target.x,goal.t.x), ty=ease(target.y,goal.t.y), tz=ease(target.z,goal.t.z); target.set(tx,ty,tz);
   if(moving||dirty){ placeCam(); renderer.render(scene,camera); dirty=false; } }
+
+// ---------- hero: the top story lifts a little ----------
+// the story whose walls stand highest on another, and the building above it (a one-story house: its roofs);
+// not trees and plants, whose tops only reach that high
+let liftT=0, liftGoal=0, liftParts=[];
+const GROWN=['plant','sub','lawn','fence'];
+function topStory(){ const ops=curDesign.ops||[], bases=ops.filter(o=>o.op==='walls'&&!o.context&&(o.base||0)>0).map(o=>o.base);
+  const built=R.parts.filter(p=>!GROWN.includes((ops[p.op]||{}).op));
+  return bases.length?built.filter(p=>p.y>=Math.max(...bases)):built.filter(p=>(ops[p.op]||{}).op==='roof'); }
+function liftTo(t){ const dy=7*PH*t*t*(3-2*t); m4.makeTranslation(0,dy,0);
+  for(const p of liftParts){ const r=recOf.get(p.id); if(!r) continue;
+    if(r.obj){ r.obj.position.set(r.pos0.x,r.pos0.y+dy,r.pos0.z); continue; }
+    r.mesh.setMatrixAt(r.i,p._v?m4b.copy(m4).multiply(r.m):ZERO); r.mesh.instanceMatrix.needsUpdate=true;
+    for(const e of r.extra||[]){ e.mesh.setMatrixAt(e.i,p._v?m4b.copy(m4).multiply(e.m):ZERO); e.mesh.instanceMatrix.needsUpdate=true; }
+    for(const si of studsOf.get(p.id)||[]){ const sr=studRecs[si]; if(sr.slot>=0) studs.setMatrixAt(sr.slot,m4b.copy(m4).multiply(sr.m)); } }
+  studs.instanceMatrix.needsUpdate=true; if(++shadowTick%3===0||t===0||t===1) renderer.shadowMap.needsUpdate=true; }
 
 // ---------- bricks in motion ----------
 // Play build drops each step's bricks straight down into place one after another; lifting a roof or floor
@@ -679,6 +705,10 @@ async function boot(){
   }catch(e){ DESIGN_TEXT='{"name":"No design loaded","phases":[],"ops":[]}'; }
   $('designSrc').value=DESIGN_TEXT; run(DESIGN_TEXT); $('compileOut').innerHTML='';
   resize(); goal.radius=fitRadius(); radius=goal.radius*1.25; loop();
+  if(HERO){ // start near the landing page's picture (from the front), then turn; tell the page it can show us
+    goal.theta=theta=-0.35; goal.phi=phi=1.1; radius=goal.radius; liftParts=topStory(); autoSpin=!reduceMotion;
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{ try{ parent.postMessage({brickhouse:'hero-ready'},location.origin); }catch(e){} }));
+    return; }
   if(embedded){ $('homeLink').hidden=true; $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }
   try{ health=await (await fetch('/api/health')).json(); }catch(e){ health=null; }
   loadDesignList();

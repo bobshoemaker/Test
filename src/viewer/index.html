@@ -133,6 +133,13 @@ textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-ra
 .pick{display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-size:14px;color:var(--muted)}
 .pick select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+/* ?hero=1: only the model, filling the frame (the landing page's live picture) */
+html.hero,html.hero body{background:var(--stage);overflow:hidden}
+html.hero .wrap{max-width:none;padding:0}
+html.hero header,html.hero .panel,html.hero .tools,html.hero .showcase,html.hero .modebadge{display:none!important}
+html.hero .grid{display:block}
+html.hero .stage{height:100vh;min-height:0;border-radius:0}
+html.hero canvas{cursor:default;touch-action:pan-y}
 </style>
 </head>
 <body>
