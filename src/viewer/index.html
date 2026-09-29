@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Brickhouse</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -106,6 +106,12 @@ textarea.xml{width:100%;height:140px;margin-top:10px;background:var(--code);colo
 .photos{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .photos img.flagged{outline:3px solid var(--accent);outline-offset:2px}
 .photos img{width:76px;height:76px;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
+#refPhotos img{width:112px;height:112px;cursor:zoom-in}
+.lightbox{position:fixed;inset:0;z-index:50;background:rgba(20,16,12,.88);display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
+.lightbox img{max-width:100%;max-height:100%;border-radius:10px;object-fit:contain}
+/* no page zoom on phones: no double-tap zoom, and inputs at 16px so focusing one doesn't zoom in */
+html{touch-action:manipulation}
+@media (max-width:760px){input,textarea,select{font-size:16px!important}}
 .target{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--muted)}
 .target input{width:78px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-variant-numeric:tabular-nums}
 .survey{margin-top:12px;display:grid;gap:10px}
@@ -214,6 +220,7 @@ html:not(.upload) .seeex{display:none}
         <p class="note" id="verdict" style="margin-top:0;color:var(--ink)"></p>
         <ul class="problems dev-only" id="problems"></ul>
         <div id="refWrap" hidden><h2>Your photos</h2><div class="photos" id="refPhotos"></div></div>
+        <div class="lightbox" id="lightbox" hidden role="dialog" aria-label="Photo"><img id="lightImg" alt=""></div>
         <ul class="credits" id="credits" hidden></ul>
         <h2 id="factsTitle">What we saw in your photos</h2>
         <ul class="facts" id="facts"></ul>

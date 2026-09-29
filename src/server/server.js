@@ -187,8 +187,16 @@ function limited(req, key, perHour) {
 }
 
 async function handleJobs(req, res, url) {
+  // GET /api/jobs/<id>/photos/<n>: the job's own photos, as private as the job's link
+  const ph = /^\/api\/jobs\/([a-f0-9-]{36})\/photos\/(\d{1,2})$/.exec(url.pathname);
+  if (req.method === 'GET' && ph) {
+    const img = JOBS.photo(ph[1], Number(ph[2]));
+    if (!img || !/^image\/(jpeg|png|webp|gif)$/.test(img.mediaType)) return send(res, 404, { error: 'No such photo' });
+    return send(res, 200, Buffer.from(img.data, 'base64'), img.mediaType);
+  }
   const m = /^\/api\/jobs(?:\/([a-f0-9-]{36})(?:\/(start|fix))?)?$/.exec(url.pathname);
   if (!m) return send(res, 404, { error: 'Not found' });
+
   const [, id, action] = m;
   try {
     if (req.method === 'POST' && !id) {

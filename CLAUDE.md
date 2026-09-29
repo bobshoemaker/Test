@@ -124,7 +124,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   it and calls an unfinished design a draft. Jobs run server-side and are saved to
   `designs/generated/jobs/`; results to `designs/generated/`, which are private: `/api/designs` and
   `/designs/generated/…` list and serve them only to a request made on the server's own machine (no proxy header),
-  and each customer sees theirs through its job link. The upload page and the home page's questions promise that we
+  and each customer sees theirs through its job link. `GET /api/jobs/<id>/photos/<n>` serves a job's own photos (as private
+  as its link), shown under "Your photos" on the Model tab and full size on a tap. Neither page zooms on phones
+  (viewport, `touch-action: manipulation`, 16px inputs, Safari's pinch stopped); the model's own pinch still works. The upload page and the home page's questions promise that we
   use photos and address only for the model and kit, never sell them or share them for advertising: keep it true. There is no unpaid design endpoint. `POST /api/quote {lots}` returns GoBricks' price and stock
   for a parts list today (cached a day per list; `BRICKHOUSE_GOBRICKS_QUOTES=0` turns it off, `BRICKHOUSE_CNY_PER_USD`
   sets the viewer's dollar rate). `POST /api/lookup {address}` returns the place and ranked candidate

@@ -591,6 +591,13 @@ function failed(res,j){ const e=new Error(j.error||`Server error ${res.status}`)
   if(res.status===422){ e.plain=true; flagPhotos((j.problems||[]).map(p=>p.photo)); } return e; }
 function flagPhotos(nums){ $('thumbs').querySelectorAll('img').forEach(im=>im.classList.toggle('flagged',nums.includes(+im.dataset.i+1))); }
 function setBusy(b){ $('planBtn').disabled=b; $('surveyBtn').disabled=b; $('designBtn').disabled=b; $('pickBtn').disabled=b; $('addrBtn').disabled=b; $('useCands').disabled=b; $('stopBtn').hidden=!b; $('compileBtn').disabled=b; $('revertBtn').disabled=b; }
+// No page zoom on phones: Safari ignores user-scalable=no, so its pinch gesture is stopped here (the model's
+// own pinch-to-zoom uses touch events, which this doesn't touch)
+document.addEventListener('gesturestart',e=>e.preventDefault());
+// A photo beside the model opens full size; a tap or Escape closes it
+$('refPhotos').addEventListener('click',e=>{ const im=e.target.closest('img'); if(!im) return; $('lightImg').src=im.src; $('lightImg').alt=im.alt; $('lightbox').hidden=false; });
+$('lightbox').onclick=()=>{ $('lightbox').hidden=true; };
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') $('lightbox').hidden=true; });
 // Few photos mean guessed sides: say so before they design (a note, not a block)
 const FEW_PHOTOS=3;
 function fewPhotosNote(){ const n=photos.length, el=$('fewPhotos'), described=$('notes').value.trim();
@@ -705,6 +712,9 @@ async function pollJob(){
   let j;
   try{ const r=await fetch(`/api/jobs/${jobId}?after=${jobAfter}&have=${jobHave}`); j=await r.json(); if(!r.ok) throw new Error(j.error||`Server error ${r.status}`); }
   catch(e){ status(DEV?esc(e.message):'Reconnecting… your design keeps going on our side.',DEV); setTimeout(pollJob,5000); return; } // a restart or a dropped connection
+  // the job's own photos beside the model, when this page didn't pick them (opened from the job's link)
+  if(j.photos&&!photos.length&&!$('refPhotos').children.length){
+    $('refPhotos').innerHTML=Array.from({length:j.photos},(_,i)=>`<img src="/api/jobs/${jobId}/photos/${i}" alt="Your photo ${i+1}" loading="lazy">`).join(''); $('refWrap').hidden=false; }
   if(j.draft){ jobHave=j.draftN; showOwn(); draftOnly=j.status!=='done'; showDesign(j.draft); $('designSrc').value=JSON.stringify(j.draft,null,2); }
   for(const ev of j.events) handleEvent(ev.type==='done'&&j.result?j.result:ev,jobT0);
   jobAfter=j.next;

@@ -95,11 +95,18 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       return ids;
     },
 
+    // One of the job's own photos, by index (the viewer shows them beside the model): {mediaType, data}.
+    photo(id, n) {
+      const j = load(id), ph = j && j.params && Array.isArray(j.params.photos) ? j.params.photos[n] : null;
+      return ph && typeof ph.data === 'string' ? { mediaType: ph.mediaType, data: ph.data } : null;
+    },
+
     // Progress since event index `after`, plus the latest draft when the viewer doesn't have it yet.
     get(id, { after = 0, have = 0 } = {}) {
       const j = load(id);
       if (!j) return null;
       return { id: j.id, status: j.status, paid: !!j.paid || !feeOn, fixesLeft: MAX_FIXES - j.fixes,
+        photos: j.params && Array.isArray(j.params.photos) ? j.params.photos.length : 0,
         events: j.events.slice(after), next: j.events.length,
         ...(j.draftN > have ? { draft: j.draft, draftN: j.draftN } : {}), ...(j.status === 'done' && j.result ? { result: j.result } : {}) };
     },
