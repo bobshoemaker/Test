@@ -732,8 +732,16 @@ async function askServer(mode){
     watchJob(j.id,false);
   }catch(e){ status(esc(e.message),true,e.plain); setBusy(false); }
 }
+// Designs made in this browser, remembered on the device (no account): listed on the upload page
+const MINE='brickhouse-designs';
+function myDesigns(){ try{ const a=JSON.parse(localStorage.getItem(MINE)||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+function rememberDesign(id,name){ try{ const a=myDesigns(), old=a.find(d=>d.id===id), e={id,name:name||(old&&old.name)||'',at:old?old.at:Date.now()};
+  localStorage.setItem(MINE,JSON.stringify([e,...a.filter(d=>d.id!==id)].slice(0,20))); }catch(e){} renderMine(); }
+function renderMine(){ const a=myDesigns(); $('myDesigns').hidden=!a.length;
+  $('myDesignList').innerHTML=a.map(d=>`<li><a href="/app?job=${encodeURIComponent(d.id)}">${esc(d.name||'Your house')}</a><small>${new Date(d.at).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</small></li>`).join(''); }
+renderMine();
 function watchJob(id,keep){
-  jobId=id; if(!keep){ jobAfter=0; jobHave=0; } jobT0=Date.now(); setBusy(true); $('stopBtn').hidden=true;
+  jobId=id; rememberDesign(id); if(!keep){ jobAfter=0; jobHave=0; } jobT0=Date.now(); setBusy(true); $('stopBtn').hidden=true;
   try{ history.replaceState(null,'','?job='+id); }catch(e){}
   status(DEV?'Claude is studying the photos. This usually takes 15 to 25 minutes; you can close this page and come back with the same address.'
     :'We\'re designing your house from the photos. It takes a while to get right; you can close this page and come back to this link any time.');
@@ -744,6 +752,7 @@ async function pollJob(){
   try{ const r=await fetch(`/api/jobs/${jobId}?after=${jobAfter}&have=${jobHave}`); j=await r.json(); if(!r.ok) throw new Error(j.error||`Server error ${r.status}`); }
   catch(e){ status(DEV?esc(e.message):'Reconnecting… your design keeps going on our side.',DEV); setTimeout(pollJob,5000); return; } // a restart or a dropped connection
   kitInfo={kit:j.kit,kitCents:j.kitCents,kitCurrency:j.kitCurrency}; if(R) refreshOrderUI();
+  { const d=(j.result&&j.result.design)||j.draft; if(d&&d.name) rememberDesign(jobId,d.name); }
   // the job's own photos beside the model, when this page didn't pick them (opened from the job's link)
   if(j.photos&&!photos.length&&!$('refPhotos').children.length){
     $('refPhotos').innerHTML=Array.from({length:j.photos},(_,i)=>`<img src="/api/jobs/${jobId}/photos/${i}" alt="Your photo ${i+1}" loading="lazy">`).join(''); $('refWrap').hidden=false; }
