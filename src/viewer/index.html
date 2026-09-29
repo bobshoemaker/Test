@@ -140,7 +140,8 @@ html.hero .wrap{max-width:none;padding:0}
 html.hero header,html.hero .panel,html.hero .tools,html.hero .showcase,html.hero .modebadge{display:none!important}
 html.hero .grid{display:block}
 html.hero .stage{height:100vh;min-height:0;border-radius:0}
-html.hero canvas{cursor:default;touch-action:pan-y}
+html.hero canvas{cursor:grab;touch-action:pan-y}
+html.hero canvas:active{cursor:grabbing}
 </style>
 </head>
 <body>
