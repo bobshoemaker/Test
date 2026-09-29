@@ -31,7 +31,7 @@ function playwright() {
     await page.route('**/three.min.js', (r) => r.fulfill({ body: three, contentType: 'text/javascript' }));
     await page.setContent(bundleHtml(fs.readFileSync(path.join(ROOT, 'designs', name + '.json'), 'utf8')), { waitUntil: 'load' });
     await page.waitForFunction(() => document.querySelector('#cv') && document.querySelector('#cv').width > 0);
-    await page.addStyleTag({ content: `.tools,.showcase,.modebadge{visibility:hidden!important} .grid{grid-template-columns:1fr!important} .panel,header{display:none!important} .stage{height:860px!important;border-radius:0!important} :root{--stage:${BACKGROUND}!important}` });
+    await page.addStyleTag({ content: `.tools,.showcase,.modebadge{visibility:hidden!important} .grid{grid-template-columns:1fr!important} .panel,header,.topbar{display:none!important} .stage{height:860px!important;border-radius:0!important} :root{--stage:${BACKGROUND}!important}` });
     await page.evaluate(([v, z, st]) => { // eslint-disable-line no-undef
       window.dispatchEvent(new Event('resize')); applyTheme(); setView(v); goal.radius *= z;
       if (st != null) { document.querySelector('[data-tab="manual"]').click(); const s = document.getElementById('slider');

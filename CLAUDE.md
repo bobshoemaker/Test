@@ -142,7 +142,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   loop (the "Everything you need" section, `634-unit-a`, still `build-house.png`), loaded as it scrolls near, paused
   offscreen, posting its step to the page. Neither loads with reduced motion.
 - The app at `/app` is consumer-facing in the home page's theme (warm palette, Jersey 10 headings, pill buttons;
-  tabs Model, Guide, Kit, Make yours). "Make yours" (`/app#design`) is an upload page of its own, the sample house hidden,
+  tabs Model, Guide, Kit, Make yours), under the home page's own top bar (`.topbar`, the same size and place as
+  landing.html's `.bar`, so it doesn't move between pages; its button reads "See an example" on the upload page). "Make yours" (`/app#design`) is an upload page of its own, the sample house hidden,
   until the first draft of their house comes back. With one or two photos (or none, only a description) it notes above the Design button that
   the sides we can't see get guessed, so the model won't be as accurate (not a block). `?dev=1` turns on the technical view in that browser (`?dev=0` off): the design
   list (samples only, unless the server is on your own machine), checker counts and problems, connection colors, part numbers, suppliers and

@@ -788,6 +788,8 @@ let tab='model', ownShown=false; // ownShown: a draft or design of theirs is on 
 function uploadMode(){ const on=tab==='design'&&!ownShown&&!HERO_MODE; document.documentElement.classList.toggle('upload',on);
   if(on){ if(location.hash!=='#design') try{ history.replaceState(null,'','#design'); }catch(e){} }
   else if(location.hash==='#design') try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
+  // the top bar's button: to the upload page, or from it to the example
+  $('topCta').textContent=on?'See an example':'Make yours'; $('topCta').setAttribute('href',on?'#':'#design');
   if(on||tab!=='design') dirty=true; }
 function showOwn(){ if(ownShown) return; ownShown=true; uploadMode(); requestAnimationFrame(resize); }
 function showTab(t){ tab=t;
@@ -798,6 +800,7 @@ function showTab(t){ tab=t;
   if(was&&!document.documentElement.classList.contains('upload')){ scrollTo(0,0); requestAnimationFrame(resize); } }
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 $('seeExample').onclick=e=>{ e.preventDefault(); showTab('model'); };
+$('topCta').onclick=e=>{ e.preventDefault(); showTab(document.documentElement.classList.contains('upload')?'model':'design'); if(innerWidth<960&&tab==='design') document.querySelector('.panel').scrollIntoView(); };
 // /app#design (the landing page's "Make yours") opens on the upload page
 if(location.hash==='#design') showTab('design');
 function applyTheme(){ const c=getComputedStyle(document.documentElement).getPropertyValue('--stage').trim()||'#D9E2EB'; stageLin=lin(c); scene.background=HERO?null:new THREE.Color(c); if(R) applyState(); dirty=true; }
@@ -817,7 +820,7 @@ async function boot(){
     requestAnimationFrame(()=>requestAnimationFrame(()=>{ try{ parent.postMessage({brickhouse:'hero-ready'},location.origin); }catch(e){} }));
     if(BUILD&&!window.BRICKHOUSE_STILL) playBuildLoop();
     return; }
-  if(embedded){ $('homeLink').hidden=true; $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }
+  if(embedded){ $('homeLink').hidden=true; $('topCta').hidden=true; $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }
   try{ health=await (await fetch('/api/health')).json(); }catch(e){ health=null; }
   loadDesignList();
   const closed='Designing new houses isn\'t open just yet. Please check back soon.';
