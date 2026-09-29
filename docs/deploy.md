@@ -17,6 +17,11 @@ the Node server (it calls Claude and renders drafts in headless Chromium).
      design only starts after its design fee is paid; without it, designs are free to start. Try it
      first with a test key (`sk_test_...`) and Stripe's test card 4242 4242 4242 4242.
    - `BRICKHOUSE_DESIGN_FEE_CENTS`: the fee in cents (1500 = $15), credited toward the kit if you like.
+   - `BRICKHOUSE_KIT_CLASSIC_CENTS` and `BRICKHOUSE_KIT_GRAND_CENTS`: the kit's price in cents for each size.
+     Until a kit is ordered, customers see a preview of their design (the model, the first few guide steps and
+     the kit's totals); a kit order through Stripe Checkout (with their shipping address) unlocks the full guide
+     and parts list. Without a Stripe key, "Order your kit" is a test order that unlocks at once, so set Stripe up
+     before launch. `node scripts/orders.js` (in the Render Shell) lists kit orders to fulfill.
    - `MAPILLARY_TOKEN`: optional, for street photos from the address box.
    It also sets `BRICKHOUSE_GOBRICKS_QUOTES` (`0` turns off live GoBricks quotes on the Parts tab) and
    `BRICKHOUSE_CNY_PER_USD` (how many of GoBricks' yuan make a dollar at Brickwith, its store: about 3.5); change them

@@ -11,7 +11,10 @@ const MAX_FIXES = 2; // "ask Claude to fix these" rounds included with a paid jo
 const RESUME_WITHIN_MS = 24 * 3600e3; // older cut-off jobs are left alone (no surprise API spend on stale ones)
 const MAX_RESUMES = 2; // times a job cut off by a restart is picked up again (a crash that recurs stops there)
 
-function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, fixRun = null, now = () => Date.now() }) {
+// kitCents(plate): the kit's price for a design on that baseplate, or null when kits aren't on sale.
+// preview(design): what a customer sees before ordering the kit (preview.js); the full design after.
+function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, fixRun = null, now = () => Date.now(),
+  kitCents = () => null, preview = null }) {
   fs.mkdirSync(dir, { recursive: true });
   const jobs = new Map();
   const file = (id) => path.join(dir, `${id}.json`);
@@ -26,6 +29,12 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     return j;
   };
   const feeOn = !!(stripe && feeCents > 0);
+  // previews by the design object they were made from (drafts and results), so polling doesn't recompile
+  const previews = new WeakMap();
+  const shown = (design, full) => { if (!design || full || !preview) return design;
+    if (!previews.has(design)) { try { previews.set(design, preview(design)); } catch (e) { previews.set(design, { preview: true, name: design.name, parts: [], steps: [], subs: [], stats: {}, errors: [], warnings: [] }); } }
+    return previews.get(design); };
+  const plateOf = (j) => (j.result && j.result.design && j.result.design.plate) || (j.params && j.params.plate) || 32;
 
   function emit(j, ev) {
     const { design, renders, overlay, ...rest } = ev; // drafts are served separately; images stay on the server
@@ -102,13 +111,44 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     },
 
     // Progress since event index `after`, plus the latest draft when the viewer doesn't have it yet.
-    get(id, { after = 0, have = 0 } = {}) {
+    // full: the whole design even without a kit order (the server's own machine, for the owner)
+    get(id, { after = 0, have = 0, full = false } = {}) {
       const j = load(id);
       if (!j) return null;
+      const open = full || !!j.kit;
       return { id: j.id, status: j.status, paid: !!j.paid || !feeOn, fixesLeft: MAX_FIXES - j.fixes,
+        kit: j.kit ? { at: j.kit.at, test: !!j.kit.test } : null, kitCents: kitCents(plateOf(j)), kitCurrency: currency,
         photos: j.params && Array.isArray(j.params.photos) ? j.params.photos.length : 0,
         events: j.events.slice(after), next: j.events.length,
-        ...(j.draftN > have ? { draft: j.draft, draftN: j.draftN } : {}), ...(j.status === 'done' && j.result ? { result: j.result } : {}) };
+        ...(j.draftN > have ? { draft: shown(j.draft, open), draftN: j.draftN } : {}),
+        ...(j.status === 'done' && j.result ? { result: { ...j.result, design: shown(j.result.design, open) } } : {}) };
+    },
+
+    // Order the kit for a finished design: a Stripe Checkout (with the shipping address) for the kit's price,
+    // or, with no Stripe key (local, demo, a test site), a test order that unlocks it at once. With {session}
+    // (back from Stripe), confirm that this job's own kit session is paid and record the order.
+    async kit(id, { origin, session } = {}) {
+      const j = load(id);
+      if (!j) return { code: 404, error: 'No such job' };
+      if (j.status !== 'done' || !j.result) return { code: 409, error: 'The design is not finished yet.' };
+      if (j.kit) return { code: 200, ordered: true };
+      if (!stripe) { j.kit = { at: now(), test: true }; save(j); return { code: 200, ordered: true, test: true }; }
+      if (session) {
+        if (session !== j.kitSession) return { code: 402, error: 'This payment link is not for this kit.' };
+        const s = await stripe.getSession(session);
+        if (s.payment_status !== 'paid' || !s.metadata || s.metadata.job !== id || s.metadata.kind !== 'kit') return { code: 402, error: 'The kit has not been paid for yet.' };
+        const cd = s.customer_details || {}, ship = (s.collected_information && s.collected_information.shipping_details) || s.shipping_details || null;
+        j.kit = { at: now(), amount: s.amount_total, currency: s.currency, session, email: cd.email || null, name: (ship && ship.name) || cd.name || null, shipping: ship ? ship.address : cd.address || null };
+        save(j);
+        return { code: 200, ordered: true };
+      }
+      const cents = kitCents(plateOf(j));
+      if (!cents) return { code: 503, error: 'Kit orders are not open yet.' };
+      const s = await stripe.createCheckout({ jobId: j.id, amountCents: cents, currency, kind: 'kit', shipping: true,
+        name: `Brick model kit: ${(j.result.design && j.result.design.name) || 'your house'}`,
+        successUrl: `${origin}/app?job=${j.id}&kit={CHECKOUT_SESSION_ID}`, cancelUrl: `${origin}/app?job=${j.id}` });
+      j.kitSession = s.id; save(j);
+      return { code: 200, checkout: s.url };
     },
 
     // One more round on a finished paid job's design ("fix these"), limited per job.

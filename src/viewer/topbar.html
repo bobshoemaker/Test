@@ -1,0 +1,23 @@
+<!-- The top bar, one component for the home page and the app: the server puts it in place of each page's
+     "topbar" placeholder comment (withTopbar in server.js), and bundle.js does the same for standalone copies.
+     Colors come from each page's own tokens (ink, muted, accent, accent-ink). -->
+<style>
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 0;font-size:17px;line-height:1.55}
+.toplogo{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;font-size:28px;font-variant-ligatures:none;font-feature-settings:"liga" 0,"clig" 0}
+.topnav{display:flex;align-items:center;gap:24px;font-size:15px}
+.toplink{text-decoration:none;color:var(--muted)}
+.toplink:hover{color:var(--ink)}
+@media (max-width:760px){.toplink{display:none}}
+.topcta{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;font-weight:600;font-size:15px;border-radius:999px;padding:9px 16px;border:1.5px solid var(--accent);background:var(--accent);color:var(--accent-ink)}
+.topcta:hover{filter:brightness(1.07)}
+</style>
+<div class="topbar">
+  <a class="toplogo" id="homeLink" href="/" aria-label="Brickhouse home"><svg width="30" height="28" viewBox="0 0 30 28" aria-hidden="true"><path d="M3 13 15 3l12 10v13H3z" fill="#B4462A"/><rect x="7" y="0.5" width="5" height="4" rx="1.2" fill="#B4462A"/><rect x="11.5" y="16" width="7" height="10" rx="1" fill="#F7F1E8"/></svg>Brickhouse</a>
+  <nav class="topnav" aria-label="Main">
+    <a class="toplink" href="/#how">How it works</a>
+    <a class="toplink" href="/#examples">Examples</a>
+    <a class="toplink" href="/#sizes">Sizes</a>
+    <a class="toplink" href="/#faq">Questions</a>
+    <a class="topcta" id="topCta" href="/app#design">Make yours</a>
+  </nav>
+</div>

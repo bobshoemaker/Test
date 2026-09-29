@@ -127,7 +127,13 @@ closing gift that realtors give clients: a brick model of the house they just bo
   and each customer sees theirs through its job link. `GET /api/jobs/<id>/photos/<n>` serves a job's own photos (as private
   as its link), shown under "Your photos" on the Model tab and full size on a tap. Neither page zooms on phones
   (viewport, `touch-action: manipulation`, 16px inputs, Safari's pinch stopped); the model's own pinch still works. The upload page and the home page's questions promise that we
-  use photos and address only for the model and kit, never sell them or share them for advertising: keep it true. There is no unpaid design endpoint. `POST /api/quote {lots}` returns GoBricks' price and stock
+  use photos and address only for the model and kit, never sell them or share them for advertising: keep it true. There is no unpaid design endpoint. Before the kit is ordered a customer sees a preview, not the design (`src/server/preview.js`,
+  served by `GET /api/jobs/<id>` unless the job has a kit order or the request is from the server's own machine): the
+  whole model with plain bricks, plates and tiles merged into made-up blocks, special parts as themselves, the first 3
+  guide steps, and the Kit tab's totals and colors, no list. `POST /api/jobs/<id>/kit` orders the kit (Stripe Checkout
+  for `BRICKHOUSE_KIT_CLASSIC_CENTS` / `BRICKHOUSE_KIT_GRAND_CENTS` with a US shipping address, metadata kind "kit";
+  `{session}` confirms it on return, which unlocks the full design); with no Stripe key it's a test order that unlocks
+  at once. `scripts/orders.js` lists kit orders to fulfill. `POST /api/quote {lots}` returns GoBricks' price and stock
   for a parts list today (cached a day per list; `BRICKHOUSE_GOBRICKS_QUOTES=0` turns it off, `BRICKHOUSE_CNY_PER_USD`
   sets the viewer's dollar rate). `POST /api/lookup {address}` returns the place and ranked candidate
   photos (the dev view's Find photos); `GET /api/photo/<mapillary id>` proxies one image.
@@ -142,8 +148,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   loop (the "Everything you need" section, `634-unit-a`, still `build-house.png`), loaded as it scrolls near, paused
   offscreen, posting its step to the page. Neither loads with reduced motion.
 - The app at `/app` is consumer-facing in the home page's theme (warm palette, Jersey 10 headings, pill buttons;
-  tabs Model, Guide, Kit, Make yours), under the home page's own top bar (`.topbar`, the same size and place as
-  landing.html's `.bar`, so it doesn't move between pages; its button reads "See an example" on the upload page). "Make yours" (`/app#design`) is an upload page of its own, the sample house hidden,
+  tabs Model, Guide, Kit, Make yours), under the same top bar as the home page: one component, `src/viewer/topbar.html`, that the server (and
+  `bundle.js`) puts in place of each page's `<!-- topbar -->`, so it doesn't move between pages; its button reads
+  "See an example" on the upload page). "Make yours" (`/app#design`) is an upload page of its own, the sample house hidden,
   until the first draft of their house comes back. With one or two photos (or none, only a description) it notes above the Design button that
   the sides we can't see get guessed, so the model won't be as accurate (not a block). `?dev=1` turns on the technical view in that browser (`?dev=0` off): the design
   list (samples only, unless the server is on your own machine), checker counts and problems, connection colors, part numbers, suppliers and

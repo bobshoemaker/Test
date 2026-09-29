@@ -16,9 +16,9 @@ function fakeStripe() {
   return {
     sessions,
     pay: (id) => { sessions.get(id).payment_status = 'paid'; },
-    createCheckout: async ({ jobId, amountCents, successUrl }) => {
+    createCheckout: async ({ jobId, amountCents, successUrl, kind = 'fee' }) => {
       const id = `cs_test_${sessions.size + 1}`;
-      sessions.set(id, { id, url: `https://checkout.stripe.test/${id}`, payment_status: 'unpaid', metadata: { job: jobId }, amount_total: amountCents, currency: 'usd', successUrl });
+      sessions.set(id, { id, url: `https://checkout.stripe.test/${id}`, payment_status: 'unpaid', metadata: { job: jobId, kind }, amount_total: amountCents, currency: 'usd', successUrl });
       return sessions.get(id);
     },
     getSession: async (id) => sessions.get(id),
@@ -72,7 +72,10 @@ test('the Stripe client sends a form-encoded one-off Checkout Session for the jo
   await stripe.createCheckout({ jobId: 'j1', amountCents: 1500, name: 'Brick model design fee', successUrl: 's', cancelUrl: 'c' });
   assert.equal(sent.url, 'https://api.stripe.com/v1/checkout/sessions');
   assert.equal(sent.headers.authorization, 'Bearer sk_test_x');
-  assert.match(decodeURIComponent(sent.body), /mode=payment&client_reference_id=j1&metadata\[job\]=j1&line_items\[0\]\[quantity\]=1&line_items\[0\]\[price_data\]\[currency\]=usd&line_items\[0\]\[price_data\]\[unit_amount\]=1500/);
+  assert.match(decodeURIComponent(sent.body), /mode=payment&client_reference_id=j1&metadata\[job\]=j1&metadata\[kind\]=fee&line_items\[0\]\[quantity\]=1&line_items\[0\]\[price_data\]\[currency\]=usd&line_items\[0\]\[price_data\]\[unit_amount\]=1500/);
+  // a kit asks for a US shipping address and says it's a kit
+  await stripe.createCheckout({ jobId: 'j1', amountCents: 9900, name: 'Kit', successUrl: 's', cancelUrl: 'c', kind: 'kit', shipping: true });
+  assert.match(decodeURIComponent(sent.body), /metadata\[kind\]=kit&shipping_address_collection\[allowed_countries\]\[0\]=US/);
   assert.equal(makeStripe({ secretKey: '' }), null);
 });
 
@@ -125,4 +128,39 @@ test("a job serves its own photos by index, for the viewer to show beside the mo
   assert.deepEqual(jobs.photo(id, 1), { mediaType: 'image/png', data: 'BBBB' });
   assert.equal(jobs.photo(id, 2), null);
   assert.equal(jobs.photo('not-a-job', 0), null);
+});
+
+test('the design is a preview until its kit is ordered and paid; a design-fee payment doesn\'t unlock it', async () => {
+  const stripe = fakeStripe(), design = { name: 'house', plate: 32 };
+  const run = async (p, emit) => { emit({ type: 'draft', n: 1, design }); emit({ type: 'done', design }); };
+  const jobs = createJobs({ dir: tmp(), stripe, feeCents: 0, run, kitCents: (plate) => (plate === 32 ? 9900 : null), preview: (d) => ({ preview: true, name: d.name }) });
+  const { id } = await jobs.create({ notes: 'x', photos: [] }, 'https://site.test');
+  await until(() => jobs.get(id).status === 'done');
+  let g = jobs.get(id);
+  assert.deepEqual([g.result.design, g.draft, g.kit, g.kitCents], [{ preview: true, name: 'house' }, { preview: true, name: 'house' }, null, 9900]);
+  assert.deepEqual(jobs.get(id, { full: true }).result.design, design, "the owner's own machine sees it all");
+  // ordering: a Stripe Checkout for the kit's price, with its return link
+  const k = await jobs.kit(id, { origin: 'https://site.test' });
+  const sess = [...stripe.sessions.values()].at(-1);
+  assert.deepEqual([k.code, k.checkout, sess.amount_total], [200, sess.url, 9900]);
+  assert.equal(sess.successUrl, `https://site.test/app?job=${id}&kit={CHECKOUT_SESSION_ID}`);
+  // not paid, or another session: still a preview
+  assert.equal((await jobs.kit(id, { session: sess.id })).code, 402);
+  assert.equal((await jobs.kit(id, { session: 'cs_other' })).code, 402);
+  assert.equal(jobs.get(id).result.design.preview, true);
+  // paid: the order is kept (with where to ship it) and the full design is served
+  stripe.pay(sess.id); Object.assign(sess, { customer_details: { email: 'a@b.test', name: 'A' }, shipping_details: { name: 'A B', address: { city: 'LA' } } });
+  assert.equal((await jobs.kit(id, { session: sess.id })).code, 200);
+  g = jobs.get(id);
+  assert.deepEqual([g.result.design, g.kit.test], [design, false]);
+});
+
+test('without Stripe a kit order is a test order that unlocks at once; kits need a finished design', async () => {
+  let finish; const run = (p, emit) => new Promise((r) => { finish = () => { emit({ type: 'done', design: { name: 'h' } }); r(); }; });
+  const jobs = createJobs({ dir: tmp(), run, preview: () => ({ preview: true }) });
+  const { id } = await jobs.create({ notes: 'x', photos: [] }, 'https://site.test');
+  assert.equal((await jobs.kit(id, {})).code, 409);
+  finish(); await until(() => jobs.get(id).status === 'done');
+  assert.deepEqual(await jobs.kit(id, {}), { code: 200, ordered: true, test: true });
+  assert.deepEqual([jobs.get(id).kit.test, jobs.get(id).result.design], [true, { name: 'h' }]);
 });

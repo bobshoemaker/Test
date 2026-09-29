@@ -34,16 +34,10 @@ img{max-width:100%;display:block}
 @media (min-width:720px){.wrap{padding:0 28px}}
 :focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:6px}
 /* pixel type: keep letters apart (some pixel fonts' "fi" ligature reads as an "A") */
-h1,h2,h3,.logo,summary,figcaption b{font-variant-ligatures:none;font-feature-settings:"liga" 0,"clig" 0}
+h1,h2,h3,summary,figcaption b{font-variant-ligatures:none;font-feature-settings:"liga" 0,"clig" 0}
 h1,h2,h3{font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;letter-spacing:0;text-wrap:balance;margin:0}
 
 /* top bar */
-.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 0}
-.logo{display:flex;align-items:center;gap:10px;text-decoration:none;font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;font-size:28px}
-.nav{display:flex;align-items:center;gap:24px;font-size:15px}
-.nav a.link{text-decoration:none;color:var(--muted)}
-.nav a.link:hover{color:var(--ink)}
-@media (max-width:760px){.nav a.link{display:none}}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;text-decoration:none;font-weight:600;font-size:16px;border-radius:999px;padding:13px 22px;border:1.5px solid var(--line);background:var(--panel);color:var(--ink)}
 .btn:hover{border-color:var(--muted)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
@@ -144,19 +138,7 @@ html{touch-action:manipulation}
 </head>
 <body>
 <div class="wrap">
-  <div class="bar">
-    <a class="logo" href="/" aria-label="Brickhouse home">
-      <svg width="30" height="28" viewBox="0 0 30 28" aria-hidden="true"><path d="M3 13 15 3l12 10v13H3z" fill="#B4462A"/><rect x="7" y="0.5" width="5" height="4" rx="1.2" fill="#B4462A"/><rect x="11.5" y="16" width="7" height="10" rx="1" fill="#F7F1E8"/></svg>
-      Brickhouse
-    </a>
-    <nav class="nav" aria-label="Main">
-      <a class="link" href="#how">How it works</a>
-      <a class="link" href="#examples">Examples</a>
-      <a class="link" href="#sizes">Sizes</a>
-      <a class="link" href="#faq">Questions</a>
-      <a class="btn primary sm" href="/app#design">Make yours</a>
-    </nav>
-  </div>
+  <!-- topbar -->
 
   <header class="hero">
     <div>
