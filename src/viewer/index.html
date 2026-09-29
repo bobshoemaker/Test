@@ -190,7 +190,7 @@ html.hero .wrap{max-width:none;padding:0}
 html.hero .topbar,html.hero header,html.hero .panel,html.hero .tools,html.hero .showcase,html.hero .modebadge{display:none!important}
 html.hero .grid{display:block}
 html.hero .stage{height:100vh;min-height:0;border-radius:0}
-html.hero canvas{cursor:grab;touch-action:pan-y}
+html.hero canvas{cursor:grab;touch-action:none} /* drags turn the model; a clear up-or-down swipe scrolls the page (app.js handoff) */
 html.hero canvas:active{cursor:grabbing}
 /* the upload page ("Make yours" before a design of their own exists): no sample house beside it */
 html.upload .stagecol,html.upload header h1,html.upload header .sub,html.upload header .chips,html.upload .tabs{display:none!important}
