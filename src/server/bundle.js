@@ -4,8 +4,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const ROOT = path.resolve(__dirname, '../..');
 
+// The top bar (src/viewer/topbar.html) in place of a page's placeholder: one component for both pages.
+function withTopbar(html) {
+  const bar = fs.readFileSync(path.join(ROOT, 'src/viewer/topbar.html'), 'utf8');
+  return html.replace('<!-- topbar -->', () => bar);
+}
+
 function bundleHtml(designText) {
-  const html = fs.readFileSync(path.join(ROOT, 'src/viewer/index.html'), 'utf8');
+  const html = withTopbar(fs.readFileSync(path.join(ROOT, 'src/viewer/index.html'), 'utf8'));
   const engine = ['parts-availability.js', 'suppliers.js', 'engine.js'].map((f) => fs.readFileSync(path.join(ROOT, 'src/engine', f), 'utf8')).join('\n');
   const app = fs.readFileSync(path.join(ROOT, 'src/viewer/app.js'), 'utf8');
   const ldraw = fs.readFileSync(path.join(ROOT, 'src/viewer/ldraw-parts.js'), 'utf8');
@@ -15,4 +21,4 @@ function bundleHtml(designText) {
     () => `<script type="application/json" id="designJson">\n${safe(designText)}\n</script>\n<script>\n${safe(engine)}\n</script>\n<script>\n${safe(ldraw)}\n</script>\n<script>\n${safe(app)}\n</script>`);
 }
 
-module.exports = { bundleHtml };
+module.exports = { withTopbar, bundleHtml };

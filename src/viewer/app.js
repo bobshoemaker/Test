@@ -138,7 +138,7 @@ const anims=new Map(); // part id -> {t0, dur, from, to, spin, ease, hideBefore,
 let stepIdx=0, showAll=true, stress=false, mode='main', lifted=0; // lift-off groups taken off, top first
 let DESIGN_TEXT='';
 
-function strengthHex(p){ const area=p.shape==='arch'?4:p.w*p.d; const r=R.jn.get(p.id)/area; return r<0.5?'#D64B34':r<1?'#E8A93A':'#3E9E68'; }
+function strengthHex(p){ if(!R.jn.has(p.id)) return COLORS[p.color].hex; const area=p.shape==='arch'?4:p.w*p.d; const r=R.jn.get(p.id)/area; return r<0.5?'#D64B34':r<1?'#E8A93A':'#3E9E68'; }
 
 function makeInstanced(geo,mat,list,cast){ const m=new THREE.InstancedMesh(geo,mat,Math.max(1,list.length)); m.castShadow=!!cast; m.receiveShadow=true;
   m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); list.forEach((r,i)=>{ r.mesh=m; r.i=i; m.setMatrixAt(i,r.m); m.setColorAt(i,col.set(0xffffff)); });
@@ -412,7 +412,7 @@ function flyGroups(names,home){
 }
 
 // ---------- manual ----------
-const inventoryPages=()=>Math.ceil(R.inventory.length/24);
+const inventoryPages=()=>Math.ceil((R.stats.lots||R.inventory.length)/24);
 let shownIdx=-1, shownAll=true;
 function renderStep(){
   // one step on (Play skips sub-build steps: their bricks come down with the placed sub-build)
@@ -421,13 +421,15 @@ function renderStep(){
   if(!forward&&!fromStart) anims.clear();
   shownIdx=stepIdx; shownAll=showAll;
   const n=R.steps.length; $('slider').max=n-1; $('slider').value=showAll?n-1:stepIdx;
+  const total=R.preview?R.stats.steps:n; // a preview carries only its first few steps
   const box=$('stepParts'); box.innerHTML=''; const tag=$('subTag');
-  if(showAll||!n){ $('stepNum').textContent='✓'; $('stepTitle').textContent='Finished model'; $('stepOf').textContent=`${R.stats.pieces.toLocaleString()} pieces in ${n} steps`; tag.style.visibility=''; tag.textContent='\u00a0';
-    box.innerHTML='<span class="note" style="margin:0">Press Next or Start from step 1 to walk through the build.</span>'; }
+  if(showAll||!n){ $('stepNum').textContent='✓'; $('stepTitle').textContent='Finished model'; $('stepOf').textContent=`${R.stats.pieces.toLocaleString()} pieces in ${total} steps`; tag.style.visibility=''; tag.textContent='\u00a0';
+    box.innerHTML=R.preview?`<div class="guidelock"><p>This preview shows the first ${n} step${n===1?'':'s'}. The other ${total-n} come with your kit, along with every piece.</p><button class="btn primary" data-order>${orderLabel()}</button><p class="note kitordernote" data-ordernote></p></div>`
+      :'<span class="note" style="margin:0">Press Next or Start from step 1 to walk through the build.</span>'; }
   else {
     const s=R.steps[stepIdx]; $('stepNum').textContent=stepIdx+1;
     $('stepTitle').textContent=s.kind==='main'?s.title:(s.kind==='sub'?R.subs[s.sub].name:s.title);
-    $('stepOf').textContent=`Step ${stepIdx+1} of ${n}, page ${stepIdx+2+inventoryPages()}`;
+    $('stepOf').textContent=`Step ${stepIdx+1} of ${total}, page ${stepIdx+2+inventoryPages()}`;
     if(s.kind==='sub'){ const sub=R.subs[s.sub]; tag.style.visibility='visible'; tag.textContent=`Sub-build ${s.n} of ${s.of}`+(sub.copies>1?`, make ${sub.copies}`:''); }
     else if(s.kind==='main'&&s.of>1){ tag.style.visibility='visible'; tag.textContent=`${s.n} of ${s.of} in this section`; } else { tag.style.visibility=''; tag.textContent='\u00a0'; }
     if(s.kind==='attach'){ const sub=R.subs[s.sub]; const d=document.createElement('div'); d.className='chip'; d.innerHTML=`<span>${sub.name}</span><span class="q">×${sub.copies}</span>`; box.appendChild(d); }
@@ -458,7 +460,7 @@ function updateShowLabel(){
   $('showWhole').hidden=showAll;
   if(showAll){ lbl.innerHTML=(draftOnly?'<b>Draft</b> so far, ':'<b>Finished</b> ')+R.stats.pieces.toLocaleString()+' pieces'; bar.style.width='100%'; return; }
   const s=R.steps[stepIdx], k=mainSteps.indexOf(s);
-  lbl.innerHTML=`<b>${stepIdx+1} / ${R.steps.length}</b> ${s.kind==='main'?s.title:(s.kind==='sub'?R.subs[s.sub].name:s.title)}`;
+  lbl.innerHTML=`<b>${stepIdx+1} / ${R.preview?R.stats.steps:R.steps.length}</b> ${s.kind==='main'?s.title:(s.kind==='sub'?R.subs[s.sub].name:s.title)}`;
   bar.style.width=((stepIdx+1)/R.steps.length*100).toFixed(1)+'%';
 }
 function stopPlay(){ if(playTimer){ clearInterval(playTimer); playTimer=null; $('play').textContent='Play build'; } }
@@ -491,6 +493,13 @@ async function fetchQuote(){
   catch(e){ if(gq.key===key) gq.err=e.message; }
   if(gq.key===key){ gq.busy=false; renderParts(); } }
 function renderParts(){
+  // before the kit is ordered: what's in it (a preview has no list)
+  $('kitLock').hidden=!R.preview; $('kitList').hidden=!!R.preview;
+  if(R.preview){ const st=R.stats, cs=st.colors||[];
+    $('pLots').textContent=st.lots; $('pPieces').textContent=st.pieces.toLocaleString();
+    $('kitLead').innerHTML=`Your kit: <b>${st.pieces.toLocaleString()}</b> pieces in <b>${st.lots}</b> kinds and <b>${cs.length}</b> colors, on a ${st.plate>32?'Grand':'Classic'} baseplate.`;
+    $('kitSwatches').innerHTML=cs.map(c=>`<span title="${esc(c.color)}"><i style="background:${COLORS[c.color]?COLORS[c.color].hex:'#999'}"></i>${esc(c.color)}</span>`).join('');
+    $('partsBody').innerHTML=''; xml=''; refreshOrderUI(); return; } // nothing of a list left in the page
   const rows=R.inventory.slice().sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true})||b.q-a.q);
   $('pLots').textContent=rows.length; $('pPieces').textContent=R.stats.pieces.toLocaleString(); $('pCost').textContent='$'+Math.round(R.stats.cost);
   const live=GB&&gq.q&&gq.key===lotsKey(gdsLots())?gq.q:null, K=r=>r.no+'|'+r.color;
@@ -535,6 +544,22 @@ $('copyXml').onclick=async()=>{ const b=$('copyXml');
   try{ await navigator.clipboard.writeText(xml); b.textContent='Copied wanted list'; setTimeout(()=>b.textContent='Copy BrickLink wanted list',1800); }
   catch(e){ const t=$('xmlOut'); t.value=xml; t.hidden=false; t.select(); b.textContent='Select and copy below'; } };
 
+// ---------- the kit order: unlocks the full guide and parts list ----------
+let kitInfo=null; // from the job: {kit, kitCents, kitCurrency}
+function orderLabel(){ const c=kitInfo&&kitInfo.kitCents; return c?`Order your kit, ${(c/100).toLocaleString(undefined,{style:'currency',currency:(kitInfo.kitCurrency||'usd').toUpperCase(),maximumFractionDigits:c%100?2:0})}`:'Order your kit'; }
+function refreshOrderUI(){ document.querySelectorAll('[data-order]').forEach(b=>{ b.textContent=orderLabel(); b.hidden=!jobId; });
+  const k=kitInfo&&kitInfo.kit, done=$('kitDone'); done.hidden=!k||!!R.preview;
+  if(k) done.textContent=k.test?'Test order: this site takes no payments yet, so the full guide and parts list are unlocked.':'Your kit is ordered. Thank you! The full guide and parts list are unlocked.'; }
+async function orderKit(b){
+  const notes=document.querySelectorAll('[data-ordernote]'), say=t=>notes.forEach(n=>n.textContent=t);
+  b.disabled=true; say('Taking you to the secure checkout…');
+  try{ const r=await fetch(`/api/jobs/${jobId}/kit`,{method:'POST',headers:{'content-type':'application/json'},body:'{}'}), j=await r.json();
+    if(!r.ok) throw new Error(j.error||`Server error ${r.status}`);
+    if(j.checkout){ location.href=j.checkout; return; }
+    location.href=`/app?job=${jobId}`; } // a test order: reload with the full design
+  catch(e){ say(DEV||!TECHNICAL.test(e.message)?e.message:'We couldn\'t start the order just now. Please try again in a little while.'); b.disabled=false; } }
+document.addEventListener('click',e=>{ const b=e.target.closest('[data-order]'); if(b&&!b.disabled) orderKit(b); });
+
 // ---------- model report ----------
 function renderReport(){
   const st=R.stats;
@@ -555,7 +580,7 @@ $('stress').onchange=e=>{ stress=e.target.checked; applyState(); };
 let curDesign=null;
 function esc(t){ return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function showDesign(d){
-  curDesign=d; R=compile(d); lifted=0; $('lift').hidden=!(R.stats.liftoff&&R.stats.liftoff.length); $('lift').textContent=liftLabel(); $('lift').setAttribute('aria-pressed','false'); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,R.stats.baseThick?PH/0.14:1,PLATE/32); base.position.y=R.stats.baseThick?-PH/2:-0.07; base.material.color.copy(lin(COLORS[R.stats.baseColor||'Green'].hex)); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
+  curDesign=d; R=d.preview?previewR(d):compile(d); lifted=0; $('lift').hidden=!(R.stats.liftoff&&R.stats.liftoff.length); $('lift').textContent=liftLabel(); $('lift').setAttribute('aria-pressed','false'); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,R.stats.baseThick?PH/0.14:1,PLATE/32); base.position.y=R.stats.baseThick?-PH/2:-0.07; base.material.color.copy(lin(COLORS[R.stats.baseColor||'Green'].hex)); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
   buildScene(); renderReport(); renderParts(); renderStep(); frame();
   $('title').textContent=d.name||'Brick house'; document.title=(d.name||'Brick house')+', brick model';
   $('subline').textContent=(d.place?d.place+'. ':'')+(d.unit?`Unit ${d.unit}, cut from its building. `:'')+'A brick model with a step-by-step building guide.';
@@ -566,6 +591,12 @@ function showDesign(d){
   $('credits').innerHTML=cr.map(c=>`<li>Photo: ${/^https:\/\//.test(c.page||'')?`<a href="${esc(c.page)}" target="_blank" rel="noopener">${esc(c.credit)}</a>`:esc(c.credit)}${c.license?', '+esc(c.license):''}</li>`).join('');
   return R;
 }
+// A design before its kit is ordered comes from the server as a preview (src/server/preview.js): parts to draw
+// (plain bricks merged into made-up blocks), the first few guide steps, and totals. This fills in what the
+// viewer reads from a compiled design.
+function previewR(pv){ const occ=new Map();
+  for(const p of pv.parts){ p.studs=p.studs||[]; for(let i=0;i<p.w;i++) for(let j=0;j<p.d;j++) for(let q=0;q<p.h;q++) occ.set((p.x+i)+','+(p.z+j)+','+(p.y+q),p.id); }
+  return {preview:true,parts:pv.parts,steps:pv.steps,subs:pv.subs,stats:{...pv.stats,cost:0,ms:0},errors:pv.errors||[],warnings:pv.warnings||[],hints:[],joints:[],jn:new Map(),inventory:[],occ}; }
 function problemsHtml(){ return [...R.errors.map(x=>`<li class="e">${esc(x.msg)}${x.op!=null?` (design step ${x.op+1})`:''}</li>`),...R.warnings.map(x=>`<li>${esc(x.msg)}</li>`)].slice(0,15).join(''); }
 function run(text){
   let d; try{ d=JSON.parse(text); }catch(err){ $('compileOut').innerHTML=`<span class="status-err">The design isn't valid JSON: ${esc(err.message)}</span>`; return false; }
@@ -712,6 +743,7 @@ async function pollJob(){
   let j;
   try{ const r=await fetch(`/api/jobs/${jobId}?after=${jobAfter}&have=${jobHave}`); j=await r.json(); if(!r.ok) throw new Error(j.error||`Server error ${r.status}`); }
   catch(e){ status(DEV?esc(e.message):'Reconnecting… your design keeps going on our side.',DEV); setTimeout(pollJob,5000); return; } // a restart or a dropped connection
+  kitInfo={kit:j.kit,kitCents:j.kitCents,kitCurrency:j.kitCurrency}; if(R) refreshOrderUI();
   // the job's own photos beside the model, when this page didn't pick them (opened from the job's link)
   if(j.photos&&!photos.length&&!$('refPhotos').children.length){
     $('refPhotos').innerHTML=Array.from({length:j.photos},(_,i)=>`<img src="/api/jobs/${jobId}/photos/${i}" alt="Your photo ${i+1}" loading="lazy">`).join(''); $('refWrap').hidden=false; }
@@ -789,7 +821,7 @@ function uploadMode(){ const on=tab==='design'&&!ownShown&&!HERO_MODE; document.
   if(on){ if(location.hash!=='#design') try{ history.replaceState(null,'','#design'); }catch(e){} }
   else if(location.hash==='#design') try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
   // the top bar's button: to the upload page, or from it to the example
-  $('topCta').textContent=on?'See an example':'Make yours'; $('topCta').setAttribute('href',on?'#':'#design');
+  $('topCta').textContent=on?'See an example':'Make yours'; $('topCta').setAttribute('href',on?'/app':'/app#design');
   if(on||tab!=='design') dirty=true; }
 function showOwn(){ if(ownShown) return; ownShown=true; uploadMode(); requestAnimationFrame(resize); }
 function showTab(t){ tab=t;
@@ -834,6 +866,10 @@ async function boot(){
   // picks up a design in progress or finished.
   const q=new URLSearchParams(location.search), qj=q.get('job');
   if(qj&&q.get('canceled')){ status('Payment canceled; nothing was charged. Your photos are still here if you want to try again.'); try{ history.replaceState(null,'','/app'); }catch(e){} }
+  else if(qj&&q.get('kit')){ status('Confirming your kit order…'); // back from the kit's checkout
+    try{ const r=await fetch(`/api/jobs/${qj}/kit`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({session:q.get('kit')})}), j=await r.json();
+      if(!r.ok) status(esc(j.error||'The kit order could not be confirmed.'),true); }catch(e){}
+    try{ history.replaceState(null,'','/app?job='+qj); }catch(e){} watchJob(qj,false); }
   else if(qj&&q.get('session')){ status('Confirming the payment…');
     const r=await fetch(`/api/jobs/${qj}/start`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({session:q.get('session')})}), j=await r.json();
     if(!r.ok) status(esc(j.error||'The payment could not be confirmed.'),true); else watchJob(qj,false); }

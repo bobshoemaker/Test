@@ -5,6 +5,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { designHouse, surveyHouse, checkPhotos } = require('./designer');
+const { makePreview } = require('./preview');
 const { scaleFor } = require('./scale');
 const { lookupAddress, fetchMapillaryImage } = require('./lookup');
 const { lookupTerrain } = require('./terrain');
@@ -40,6 +41,9 @@ function makeClient() {
   if (FAKE) return require('./fakeClient').makeFakeClient();
   return makeAnthropicClient();
 }
+
+// the top bar, one component for both pages (src/viewer/topbar.html), put in place of each page's placeholder
+const { withTopbar } = require('./bundle');
 
 const STATIC = {
   '/': ['src/viewer/landing.html', 'text/html; charset=utf-8'],
@@ -174,6 +178,9 @@ const JOBS = createJobs({
   stripe: makeStripe({ secretKey: process.env.STRIPE_SECRET_KEY, ...(process.env.BRICKHOUSE_STRIPE_API ? { apiBase: process.env.BRICKHOUSE_STRIPE_API } : {}) }), // the override is for local tests
   feeCents: Number(process.env.BRICKHOUSE_DESIGN_FEE_CENTS || 1500), currency: process.env.BRICKHOUSE_CURRENCY || 'usd',
   run: runDesign, fixRun: runFix,
+  // the kit's price by baseplate: Classic (32) and Grand (48); unset means kits aren't on sale yet
+  kitCents: (plate) => Number(plate === 48 ? process.env.BRICKHOUSE_KIT_GRAND_CENTS : process.env.BRICKHOUSE_KIT_CLASSIC_CENTS) || null,
+  preview: makePreview,
 });
 const originOf = (req) => `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers['x-forwarded-host'] || req.headers.host}`;
 
@@ -194,7 +201,7 @@ async function handleJobs(req, res, url) {
     if (!img || !/^image\/(jpeg|png|webp|gif)$/.test(img.mediaType)) return send(res, 404, { error: 'No such photo' });
     return send(res, 200, Buffer.from(img.data, 'base64'), img.mediaType);
   }
-  const m = /^\/api\/jobs(?:\/([a-f0-9-]{36})(?:\/(start|fix))?)?$/.exec(url.pathname);
+  const m = /^\/api\/jobs(?:\/([a-f0-9-]{36})(?:\/(start|fix|kit))?)?$/.exec(url.pathname);
   if (!m) return send(res, 404, { error: 'Not found' });
 
   const [, id, action] = m;
@@ -215,8 +222,15 @@ async function handleJobs(req, res, url) {
       return send(res, r.code, r);
     }
     if (req.method === 'POST' && action === 'fix') { const r = JOBS.fix(id); return send(res, r.code, r); }
+    // order the kit (a Stripe Checkout link), or confirm it on return from Stripe ({session})
+    if (req.method === 'POST' && action === 'kit') {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      const r = await JOBS.kit(id, { origin: originOf(req), session: body.session ? String(body.session) : null });
+      return send(res, r.code, r);
+    }
     if (req.method === 'GET' && !action) {
-      const r = JOBS.get(id, { after: Number(url.searchParams.get('after')) || 0, have: Number(url.searchParams.get('have')) || 0 });
+      // before the kit is ordered, the design comes as a preview (preview.js); the owner's own machine sees it all
+      const r = JOBS.get(id, { after: Number(url.searchParams.get('after')) || 0, have: Number(url.searchParams.get('have')) || 0, full: onThisMachine(req) });
       return r ? send(res, 200, r) : send(res, 404, { error: 'No such job' });
     }
     send(res, 405, { error: 'Method not allowed' });
@@ -279,6 +293,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && STATIC[url.pathname]) {
       const [file, type] = STATIC[url.pathname];
+      if (file.endsWith('.html')) return send(res, 200, withTopbar(fs.readFileSync(path.join(ROOT, file), 'utf8')), type);
       return send(res, 200, fs.readFileSync(path.join(ROOT, file)), type);
     }
     if (req.method === 'GET' && url.pathname === '/api/health') {

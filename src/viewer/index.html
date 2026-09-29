@@ -29,11 +29,6 @@ html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
 .wrap{max-width:1140px;margin:0 auto;padding:0 16px 40px}
 @media (min-width:720px){.wrap{padding:0 28px 40px}}
-/* top bar: the home page's, to the pixel (landing.html .bar, .logo, .btn.primary.sm) */
-.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 0;font-size:17px;line-height:1.55}
-.toplogo{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;font-size:28px;font-variant-ligatures:none}
-.topcta{display:inline-flex;align-items:center;justify-content:center;white-space:nowrap;text-decoration:none;font-weight:600;font-size:15px;border-radius:999px;padding:9px 16px;border:1.5px solid var(--accent);background:var(--accent);color:var(--accent-ink)}
-.topcta:hover{filter:brightness(1.07)}
 header{margin-bottom:12px}
 h1{margin:0;font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;font-size:clamp(40px,6vw,60px);line-height:1;letter-spacing:0}
 .sub{margin:4px 0 10px;color:var(--muted);font-size:15px;max-width:64ch}
@@ -135,6 +130,15 @@ textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-ra
 .addrlabel{display:block;margin-top:14px;font-weight:700;font-size:14px}
 .privacy{margin:14px 0 0;padding:10px 12px;border-radius:10px;background:var(--stage);font-size:13px;line-height:1.45}
 .fewphotos{margin:12px 0 0;padding:9px 12px;border-radius:10px;border:1.5px solid var(--accent);font-size:13.5px;line-height:1.45}
+.kitlock{border:2px solid var(--ink);border-radius:14px;padding:14px 16px;margin:4px 0 14px}
+.kitlock p{margin:0 0 10px}
+.kitlead{font-size:17px}
+.swatches{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.swatches span{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--muted)}
+.swatches i{width:18px;height:18px;border-radius:5px;border:1px solid rgba(0,0,0,.25);display:inline-block}
+.kitordernote{margin:8px 0 0}
+.kitdone{color:var(--ink)!important;font-weight:600}
+.guidelock p{margin:0 0 10px}
 .addrwhy{margin:6px 0 0;font-size:13px;color:var(--muted)}
 .addr input{flex:1;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-size:15px}
 .cands{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:10px}
@@ -178,11 +182,7 @@ html:not(.upload) .seeex{display:none}
 </head>
 <body>
 <div class="wrap">
-  <!-- the same top bar as the home page (landing.html .bar), so it doesn't move or resize between pages -->
-  <div class="topbar">
-    <a class="toplogo" id="homeLink" href="/" aria-label="Brickhouse home"><svg width="30" height="28" viewBox="0 0 30 28" aria-hidden="true"><path d="M3 13 15 3l12 10v13H3z" fill="#B4462A"/><rect x="7" y="0.5" width="5" height="4" rx="1.2" fill="#B4462A"/><rect x="11.5" y="16" width="7" height="10" rx="1" fill="#F7F1E8"/></svg>Brickhouse</a>
-    <a class="topcta" id="topCta" href="#design">Make yours</a>
-  </div>
+  <!-- topbar -->
   <header>
     <h1 id="title">Loading…</h1>
     <p class="sub" id="subline"></p>
@@ -257,11 +257,22 @@ html:not(.upload) .seeex{display:none}
           <div class="dev-only"><b id="pCost">$0</b><span>rough LEGO parts cost</span></div>
           <div id="pGdsBox" class="dev-only" hidden><b id="pGds">¥0</b><span id="pGdsLabel">at GoBricks</span></div>
         </div>
+        <!-- before the kit is ordered: what's in it, not the list (the server sends only a preview) -->
+        <div class="kitlock" id="kitLock" hidden>
+          <p class="kitlead" id="kitLead"></p>
+          <div class="swatches" id="kitSwatches" aria-label="Colors in the kit"></div>
+          <p>The full parts list and the rest of the step-by-step guide unlock when you order your kit. We sort every piece into bags and ship it to your door, baseplate included.</p>
+          <button class="btn primary" data-order>Order your kit</button>
+          <p class="note kitordernote" data-ordernote></p>
+        </div>
+        <p class="note kitdone" id="kitDone" hidden></p>
+        <div id="kitList">
         <p class="note kitnote" style="margin-top:0;color:var(--ink)">Everything below comes in your kit.</p>
         <div class="row dev-only" style="margin-top:0"><button class="btn primary" id="copyXml">Copy BrickLink wanted list</button><button class="btn" id="gdsOrder">Order from GoBricks</button></div>
         <p class="note dev-only" id="gdsNote" hidden></p>
         <textarea class="xml dev-only" id="xmlOut" hidden readonly aria-label="BrickLink wanted list XML"></textarea>
         <div class="tablewrap"><table><thead><tr><th></th><th>Piece</th><th class="dev-only">No.</th><th>Color</th><th style="text-align:right">Qty</th><th style="text-align:right" id="gdsHead" class="dev-only">GoBricks</th></tr></thead><tbody id="partsBody"></tbody></table></div>
+        </div>
         <p class="note dev-only">The LEGO cost uses placeholder per-piece prices by part type; paste the wanted list into BrickLink for real quotes. GoBricks prices are in yuan, before shipping.</p>
         <p class="note">Part shapes (plants, slopes, rounds, windows, arches, fence): <a href="https://library.ldraw.org" target="_blank" rel="noopener">LDraw Parts Library</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>; part authors are credited in <a href="/viewer/ldraw-parts.js" target="_blank" rel="noopener">the part files</a>. LEGO is a trademark of the LEGO Group, which does not sponsor or endorse this site.</p>
       </section>

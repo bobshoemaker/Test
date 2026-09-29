@@ -1,4 +1,4 @@
-// Stripe Checkout for the design fee, over Stripe's REST API with fetch (no SDK, no dependency).
+// Stripe Checkout for the design fee and the kit, over Stripe's REST API with fetch (no SDK, no dependency).
 // The server creates a Checkout Session for a job, the owner pays on Stripe's page, and on return
 // the server reads the session back from Stripe to confirm it's paid before any design runs.
 
@@ -29,10 +29,12 @@ function makeStripe({ secretKey, fetchImpl = fetch, apiBase = API }) {
   }
   return {
     // One-off payment for one job; the job id rides in metadata and client_reference_id.
-    createCheckout: ({ jobId, amountCents, currency = 'usd', name, successUrl, cancelUrl }) => call('POST', '/checkout/sessions', {
+    // kind: 'fee' (the design fee) or 'kit'; shipping asks for a US shipping address (a kit is shipped)
+    createCheckout: ({ jobId, amountCents, currency = 'usd', name, successUrl, cancelUrl, kind = 'fee', shipping = false }) => call('POST', '/checkout/sessions', {
       mode: 'payment',
       client_reference_id: jobId,
-      metadata: { job: jobId },
+      metadata: { job: jobId, kind },
+      ...(shipping ? { shipping_address_collection: { allowed_countries: ['US'] } } : {}),
       line_items: [{ quantity: 1, price_data: { currency, unit_amount: amountCents, product_data: { name } } }],
       success_url: successUrl,
       cancel_url: cancelUrl,
