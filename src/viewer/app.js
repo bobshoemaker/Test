@@ -272,50 +272,29 @@ document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.data
 $('spin').onclick=()=>{ autoSpin=!autoSpin; $('spin').setAttribute('aria-pressed',autoSpin); dirty=true; };
 function placeCam(){ camera.position.set(target.x+radius*Math.sin(phi)*Math.sin(theta),target.y+radius*Math.cos(phi),target.z+radius*Math.sin(phi)*Math.cos(theta)); camera.lookAt(target); }
 const ptrs=new Map(); let pinch0=0,r0=0;
-// On the home page (hero modes, in an iframe) a touch drag turns the model, and once it has clearly gone up or down
-// past SCROLL_AFTER it scrolls the page instead, with a little momentum on release: the model takes drags in every
-// direction without trapping the page. (The canvas takes all touches there: touch-action none.)
-const SCROLL_AFTER=36, page=(()=>{ try{ return window.parent&&window.parent!==window?window.parent:window; }catch(e){ return window; } })();
-const handoff={id:null,x0:0,y0:0,ly:0,lt:0,v:0,on:false};
-// (in the page's own coordinates: the frame moves as the page scrolls, so its coordinates alone would lag the finger)
-const frameTop=()=>{ try{ return window.frameElement?window.frameElement.getBoundingClientRect().top:0; }catch(e){ return 0; } };
-const pageY=e=>e.clientY+frameTop();
-function handStart(e){ if(!HERO||e.pointerType!=='touch') return; Object.assign(handoff,{id:e.pointerId,x0:e.clientX,y0:pageY(e),ly:pageY(e),lt:e.timeStamp,v:0,on:false}); flingStop(); }
-// true while the page is scrolling, so the model stops following the finger up and down
-function handMove(e){ if(!HERO||e.pointerId!==handoff.id) return false; const y=pageY(e), dy=y-handoff.ly, dt=Math.max(1,e.timeStamp-handoff.lt);
-  if(!handoff.on&&Math.abs(y-handoff.y0)>SCROLL_AFTER&&Math.abs(y-handoff.y0)>Math.abs(e.clientX-handoff.x0)) handoff.on=true;
-  if(handoff.on){ scrollPage(-dy); handoff.v=0.8*handoff.v+0.2*(dy/dt); }
-  handoff.ly=y; handoff.lt=e.timeStamp; return handoff.on; }
-let flingRaf=0; const flingStop=()=>{ if(flingRaf) cancelAnimationFrame(flingRaf); flingRaf=0; };
-// scroll the page at once (the home page scrolls smoothly, which would turn each step into its own animation), in
-// whole pixels, carrying the fraction over
-let carry=0; const scrollPage=d=>{ carry+=d; const n=Math.trunc(carry); if(!n) return; carry-=n; try{ page.scrollBy({top:n,left:0,behavior:'instant'}); }catch(err){} };
-function handEnd(e){ if(!HERO||e.pointerId!==handoff.id) return; handoff.id=null; if(!handoff.on||reduceMotion) return;
-  // speed decays by 0.5% a millisecond; each frame scrolls the exact distance covered, so a flick goes as far at any frame rate
-  const K=0.995, LK=Math.log(K); let v=handoff.v, last=performance.now();
-  const step=now=>{ const dt=now-last; last=now; const nv=v*Math.pow(K,dt), dist=(nv-v)/LK; v=nv;
-    scrollPage(-dist); flingRaf=Math.abs(v)<0.02?0:requestAnimationFrame(step); }; flingRaf=requestAnimationFrame(step); }
-if(HERO&&!BUILD){ // hovering (or tapping) lifts the top story; dragging tilts the house a little, which springs back
-  // on release; no zooming, and an up-and-down swipe scrolls the page as usual
+if(HERO&&!BUILD){ // hovering (or tapping) lifts the top story; a mouse drag tilts the house a little, which springs back
+  // on release; no zooming. On touch the house doesn't follow the finger: a swipe scrolls the page, a tap lifts.
   canvas.addEventListener('pointerenter',e=>{ if(e.pointerType==='mouse'){ liftGoal=1; dirty=true; } });
   canvas.addEventListener('pointerleave',e=>{ if(e.pointerType==='mouse'&&!drag){ liftGoal=0; dirty=true; } });
-  canvas.addEventListener('pointerdown',e=>{ handStart(e); drag={id:e.pointerId,x:e.clientX,y:e.clientY,t0:tilt.t,p0:tilt.p,moved:false,type:e.pointerType}; tilt.vt=tilt.vp=0;
-    try{ canvas.setPointerCapture(e.pointerId); }catch(err){} });
+  canvas.addEventListener('pointerdown',e=>{ drag={id:e.pointerId,x:e.clientX,y:e.clientY,t0:tilt.t,p0:tilt.p,moved:false,type:e.pointerType}; tilt.vt=tilt.vp=0;
+    if(e.pointerType!=='touch') try{ canvas.setPointerCapture(e.pointerId); }catch(err){} });
   // rubber band: the further the drag, the less it turns
   const band=(v,m)=>m*Math.tanh(v/m);
   canvas.addEventListener('pointermove',e=>{ if(!drag||e.pointerId!==drag.id) return; const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
-    if(Math.hypot(dx,dy)>6) drag.moved=true; tilt.t=band(drag.t0-dx*0.006,0.5); if(!handMove(e)) tilt.p=band(drag.p0-dy*0.005,0.3); dirty=true; });
-  const endDrag=e=>{ handEnd(e); if(!drag||e.pointerId!==drag.id) return; const d=drag; drag=null;
+    if(Math.hypot(dx,dy)>6) drag.moved=true; if(drag.type==='touch') return; // a touch only taps
+    tilt.t=band(drag.t0-dx*0.006,0.5); tilt.p=band(drag.p0-dy*0.005,0.3); dirty=true; });
+  const endDrag=e=>{ if(!drag||e.pointerId!==drag.id) return; const d=drag; drag=null;
     if(e.type==='pointerup'&&!d.moved&&d.type!=='mouse') liftGoal=liftGoal?0:1; dirty=true; };
   canvas.addEventListener('pointerup',endDrag); canvas.addEventListener('pointercancel',endDrag); }
-else canvas.addEventListener('pointerdown',e=>{ handStart(e); canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY}); document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed','false'));
+else canvas.addEventListener('pointerdown',e=>{ if(HERO&&e.pointerType==='touch') return; // the home page's build loop: touch scrolls the page
+  canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY}); document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed','false'));
   if(ptrs.size===2){ const [a,b]=[...ptrs.values()]; pinch0=Math.hypot(a.x-b.x,a.y-b.y); r0=goal.radius; } });
 canvas.addEventListener('pointermove',e=>{ if(!ptrs.has(e.pointerId)) return; const p=ptrs.get(e.pointerId);
-  if(ptrs.size===1){ const scrolling=handMove(e); goal.theta-=(e.clientX-p.x)*0.008; if(!scrolling) goal.phi=Math.max(0.06,Math.min(1.5,goal.phi-(e.clientY-p.y)*0.006)); theta=goal.theta; phi=goal.phi; }
+  if(ptrs.size===1){ goal.theta-=(e.clientX-p.x)*0.008; goal.phi=Math.max(0.06,Math.min(1.5,goal.phi-(e.clientY-p.y)*0.006)); theta=goal.theta; phi=goal.phi; }
   p.x=e.clientX; p.y=e.clientY;
   if(ptrs.size===2){ const [a,b]=[...ptrs.values()], d=Math.hypot(a.x-b.x,a.y-b.y); if(pinch0){ goal.radius=Math.max(10,Math.min(170,r0*pinch0/d)); radius=goal.radius; userZoom=true; } }
   dirty=true; });
-const endPtr=e=>{ handEnd(e); ptrs.delete(e.pointerId); if(ptrs.size<2) pinch0=0; };
+const endPtr=e=>{ ptrs.delete(e.pointerId); if(ptrs.size<2) pinch0=0; };
 canvas.addEventListener('pointerup',endPtr); canvas.addEventListener('pointercancel',endPtr);
 if(!HERO) canvas.addEventListener('wheel',e=>{ e.preventDefault(); goal.radius=Math.max(10,Math.min(170,goal.radius*(1+e.deltaY*0.001))); radius=goal.radius; userZoom=true; dirty=true; },{passive:false});
 function resize(){ const w=stage.clientWidth,h=stage.clientHeight; if(!w||!h) return; // hidden (the upload page)

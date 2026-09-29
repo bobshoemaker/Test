@@ -145,9 +145,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   the parts from Brickwith, pack them and reship; the app's kit checkout isn't built yet) and names no prices in its questions.
 - The landing hero is the viewer itself in an iframe (`/app?design=savannah-dr&hero=1`): only the model, from one
   view, on a transparent background, its top story (not plants) springing up on hover or tap and falling back with a
-  bounce; a drag tilts it a little (rubber-banded) and it springs back on release. On touch it takes every drag
-  (`touch-action: none`), and once a finger has gone clearly up or down past 36px the rest of the swipe scrolls the home
-  page, with momentum (app.js `handoff`; the build loop's model too). It loads after the page and
+  bounce; a drag tilts it a little (rubber-banded) and it springs back on release. On touch the models don't follow the finger (a
+  swipe scrolls the page natively, a tap on the hero lifts its top story); only a mouse drags them (the build loop too). It loads after the page and
   crossfades with its still picture (`hero-house.png`, the same view). `?hero=build` plays the building guide in a
   loop (the "Everything you need" section, `634-unit-a`, still `build-house.png`), loaded as it scrolls near, paused
   offscreen, posting its step to the page. Neither loads with reduced motion.
