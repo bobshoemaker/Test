@@ -12,6 +12,29 @@ const clone = (x) => JSON.parse(JSON.stringify(x));
 // warnings other than the bare-floor one, for small test houses built without a floor
 const roofWarnings = (r) => r.warnings.map((w) => w.msg).filter((m) => !/baseplate shows/.test(m));
 
+test('634-unit-a-mini compiles clean on the Mini\'s 16 x 16 plate, and under GoBricks for about $15 of parts', () => {
+  const d = load('634-unit-a-mini'), r = compile(d);
+  assert.deepEqual(r.errors.map((e) => e.msg), []);
+  assert.deepEqual(r.warnings.map((e) => e.msg), []);
+  assert.equal(r.stats.pieces, 289);
+  assert.deepEqual([r.stats.plate, r.stats.baseThick], [16, 1], 'an ordinary plate, a plate thick');
+  const g = compile({ ...clone(d), supplier: 'gobricks' }), plate = g.inventory.find((e) => e.kind === 'baseplate');
+  assert.deepEqual([g.errors, g.warnings], [[], []]);
+  assert.deepEqual([plate.no, plate.color], ['91405', 'Green'], 'GoBricks makes the 16 x 16 plate in green');
+  const G = engine.SUPPLY.gobricks, yuan = g.inventory.reduce((t, e) => t + e.q * G.made[e.no][e.color], 0);
+  assert.ok(yuan / 3.5 < 20, `parts about $${(yuan / 3.5).toFixed(2)}`);
+});
+
+test('the Mini counts 2 courses as a story: its one-story walls enclose a floor', () => {
+  const walls = { op: 'walls', phase: 'p', color: 'White', courses: [0, 1], base: 0, segments: [[2, 2, 7, 2], [2, 7, 7, 7], [2, 3, 2, 6], [7, 3, 7, 6]] };
+  const floor = { op: 'floor', phase: 'p', kind: 'tile', color: 'Tan' };
+  const mini = compile({ name: 'm', plate: 16, lot: false, phases: ['p'], ops: [walls, floor] });
+  assert.deepEqual(mini.warnings.map((w) => w.msg), []);
+  const classic = compile({ name: 'c', lot: false, phases: ['p'], ops: [walls, floor] });
+  assert.match(classic.warnings.map((w) => w.msg).join(), /found no studs inside walls \(it floors what walls at least 4 courses tall enclose\)/);
+  assert.match(compile({ name: 'x', plate: 24, phases: ['p'], ops: [] }).errors[0].msg, /plate must be 16, 32 or 48/);
+});
+
 for (const [name, pieces] of [['savannah-dr', 1266], ['634-unit-a', 827]]) {
   test(`${name} compiles clean`, () => {
     const r = compile(load(name));

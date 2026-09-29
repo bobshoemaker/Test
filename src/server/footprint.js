@@ -299,8 +299,8 @@ function footprintFromOutline({ buildings, toStreet, sideStreet = null, ftPerStu
 }
 
 // Walls ops for the locked footprint: one per block, heights and fills as defaults for Claude to set.
-// Courses per story: about 9 ft at the layout's scale (4 at 2 ft per stud, 5 at 1.5).
-const storyCourses = (locked) => Math.max(3, Math.round(9 / (1.2 * ((locked.scale && locked.scale.ftPerStud) || 2))));
+// Courses per story: about 9 ft at the layout's scale (4 at 2 ft per stud, 5 at 1.5, 2 at the Mini's 4).
+const storyCourses = (locked) => Math.max(2, Math.round(9 / (1.2 * ((locked.scale && locked.scale.ftPerStud) || 2))));
 function skeletonOps(locked) {
   const sc = storyCourses(locked);
   return locked.blocks.filter((b) => b.cells.length).map((b) => ({

@@ -164,6 +164,19 @@ test('the 48 x 48 plate is set on drafts and explained in the task', async () =>
   assert.equal(draft.plate, 48);
 });
 
+test('the Mini (16 x 16) is set on drafts, and the task says how to build at its scale', async () => {
+  const client = makeFakeClient({ delayMs: 0 });
+  const sent = [];
+  const create = client.messages.create.bind(client.messages);
+  client.messages.create = async (params) => { sent.push(JSON.parse(JSON.stringify(params.messages))); return create(params); };
+  let draft = null;
+  await designHouse({ client, model: 'fake', mode: 'parts', partsLimit: 1, plate: 16, photos: [{ mediaType: 'image/jpeg', data: 'A' }], onEvent: (ev) => { if (ev.type === 'draft') draft = ev.design; } });
+  const task = sent[0][0].content.at(-1).text;
+  assert.match(task, /on the 16 x 16 baseplate: set "plate": 16 in the design\. x and z run 0\.\.15 and the street is along z = 15\. The scale is about 4 ft per stud/);
+  assert.match(task, /This is the Mini[\s\S]*transparent bricks/);
+  assert.equal(draft.plate, 16);
+});
+
 test('extractJson accepts fenced and surrounded JSON', () => {
   assert.deepEqual(extractJson('```json\n{"a":1}\n```'), { a: 1 });
   assert.deepEqual(extractJson('Here it is: {"a":2} done'), { a: 2 });

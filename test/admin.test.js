@@ -2,7 +2,7 @@
 process.env.BRICKHOUSE_ADMIN_PASSWORD = 'correct horse battery';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { server } = require('../src/server/server');
+const { server, partsXml } = require('../src/server/server');
 
 test('the admin API needs the sign-in cookie, and the cookie is HttpOnly and SameSite=Strict', async () => {
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -26,4 +26,11 @@ test('the admin API needs the sign-in cookie, and the cookie is HttpOnly and Sam
     const out = await fetch(base + '/admin/logout', { method: 'POST' });
     assert.match(out.headers.get('set-cookie'), /Max-Age=0/);
   } finally { server.close(); }
+});
+
+test("the Brickwith parts file leaves GoBricks' own baseplate to add by hand, but lists the Mini's 16 x 16 plate", () => {
+  const load = (n) => JSON.parse(require('node:fs').readFileSync(require('node:path').join(__dirname, '../designs', n + '.json'), 'utf8'));
+  const classic = partsXml({ ...load('634-unit-a'), supplier: 'gobricks' }), mini = partsXml({ ...load('634-unit-a-mini'), supplier: 'gobricks' });
+  assert.doesNotMatch(classic, /<ITEMID>3811</);
+  assert.match(mini, /<ITEMID>91405<\/ITEMID><COLOR>6<\/COLOR><MINQTY>1</);
 });

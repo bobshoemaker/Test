@@ -14,7 +14,7 @@ if (!orders.length) console.log(`No kit orders${all ? '' : ' (--all includes tes
 for (const j of orders) {
   const k = j.kit, d = (j.result && j.result.design) || {}, a = k.shipping || {};
   const money = k.amount != null ? `${(k.amount / 100).toFixed(2)} ${(k.currency || '').toUpperCase()}` : 'test order';
-  console.log(`${new Date(k.at).toISOString().slice(0, 16).replace('T', ' ')}  ${d.name || 'untitled'} (${d.plate === 48 ? 'Grand' : 'Classic'})  ${money}`);
+  console.log(`${new Date(k.at).toISOString().slice(0, 16).replace('T', ' ')}  ${d.name || 'untitled'} (${require('../src/server/scale').sizeName(d.plate)})  ${money}`);
   console.log(`  job ${j.id}: /app?job=${j.id}`);
   if (k.name || k.email) console.log(`  ${[k.name, k.email].filter(Boolean).join(', ')}`);
   if (a.line1) console.log(`  ${[a.line1, a.line2, a.city, a.state, a.postal_code, a.country].filter(Boolean).join(', ')}`);

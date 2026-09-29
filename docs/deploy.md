@@ -17,7 +17,8 @@ the Node server (it calls Claude and renders drafts in headless Chromium).
      design only starts after its design fee is paid; without it, designs are free to start. Try it
      first with a test key (`sk_test_...`) and Stripe's test card 4242 4242 4242 4242.
    - `BRICKHOUSE_DESIGN_FEE_CENTS`: the fee in cents (1500 = $15), credited toward the kit if you like.
-   - `BRICKHOUSE_KIT_CLASSIC_CENTS` and `BRICKHOUSE_KIT_GRAND_CENTS`: the kit's price in cents for each size.
+   - `BRICKHOUSE_KIT_MINI_CENTS`, `BRICKHOUSE_KIT_CLASSIC_CENTS` and `BRICKHOUSE_KIT_GRAND_CENTS`: the kit's price in cents for each size
+     (a size with no price can't be ordered yet).
      Until a kit is ordered, customers see a preview of their design (the model, the first few guide steps and
      the kit's totals); a kit order through Stripe Checkout (with their shipping address) unlocks the full guide
      and parts list. Without a Stripe key, "Order your kit" is a test order that unlocks at once, so set Stripe up

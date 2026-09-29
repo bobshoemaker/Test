@@ -20,6 +20,8 @@ services:
         sync: false
       - key: BRICKHOUSE_DESIGN_FEE_CENTS         # the fee in cents
         value: "1500"
+      - key: BRICKHOUSE_KIT_MINI_CENTS           # the kit's price in cents, Mini (16 x 16); unset: that size isn't on sale
+        sync: false
       - key: BRICKHOUSE_KIT_CLASSIC_CENTS        # the kit's price in cents, Classic (32 x 32); unset: kits aren't on sale
         sync: false
       - key: BRICKHOUSE_KIT_GRAND_CENTS          # the kit's price in cents, Grand (48 x 48)

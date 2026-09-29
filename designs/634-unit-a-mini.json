@@ -1,0 +1,538 @@
+{
+  "name": "634, Unit A (Mini)",
+  "place": "Designed from listing photos 1 to 3",
+  "scale": "1 stud is about 4 ft",
+  "plate": 16,
+  "source": "photos",
+  "facts": [
+    "Two-story white stucco Spanish-style house with red clay tile hip roofs and dark green gutters",
+    "One-story front gable wing with a large arched window",
+    "Dark green front door, and a Juliet balcony with French doors above it",
+    "Dark brown two-car garage door on the driveway side, under a dark green upper bay",
+    "Mulch front bed with agaves, shared driveway, tall cypresses"
+  ],
+  "assumed": "The back and west-side windows aren't in the photos, so their positions are guesses. At this size the arched window is square, and the door surround, balcony railing, garden wall and fences are left out.",
+  "phases": [
+    "Sidewalk, driveway and walk",
+    "Ground floor",
+    "Front gable roof",
+    "Upper floor",
+    "Green bay",
+    "Main roof",
+    "Front garden",
+    "Cypress trees",
+    "Lawn"
+  ],
+  "ops": [
+    {
+      "op": "fill",
+      "phase": "Sidewalk, driveway and walk",
+      "kind": "tile",
+      "color": "Light Bluish Gray",
+      "note": "Sidewalk, shared driveway, front walk",
+      "rects": [
+        [
+          0,
+          15,
+          15,
+          15
+        ],
+        [
+          10,
+          0,
+          14,
+          14
+        ],
+        [
+          7,
+          10,
+          8,
+          14
+        ]
+      ]
+    },
+    {
+      "op": "walls",
+      "phase": "Ground floor",
+      "note": "Ground floor and front gable wing",
+      "color": "White",
+      "courses": [
+        0,
+        1
+      ],
+      "base": 0,
+      "segments": [
+        [
+          2,
+          1,
+          2,
+          9
+        ],
+        [
+          2,
+          1,
+          9,
+          1
+        ],
+        [
+          9,
+          1,
+          9,
+          9
+        ],
+        [
+          2,
+          9,
+          9,
+          9
+        ],
+        [
+          2,
+          10,
+          2,
+          11
+        ],
+        [
+          6,
+          10,
+          6,
+          11
+        ],
+        [
+          2,
+          11,
+          6,
+          11
+        ]
+      ],
+      "openings": [
+        {
+          "cells": [
+            3,
+            11,
+            5,
+            11
+          ],
+          "courses": [
+            0,
+            1
+          ],
+          "fill": {
+            "color": "Trans-Black"
+          },
+          "note": "Arched window"
+        },
+        {
+          "cells": [
+            8,
+            9,
+            8,
+            9
+          ],
+          "courses": [
+            0,
+            1
+          ],
+          "fill": {
+            "color": "Dark Green"
+          },
+          "kind": "door",
+          "note": "Front door"
+        },
+        {
+          "cells": [
+            9,
+            2,
+            9,
+            5
+          ],
+          "courses": [
+            0,
+            1
+          ],
+          "fill": {
+            "color": "Dark Brown"
+          },
+          "kind": "garage door",
+          "note": "Two-car garage door"
+        },
+        {
+          "cells": [
+            9,
+            7,
+            9,
+            7
+          ],
+          "courses": [
+            0,
+            1
+          ],
+          "fill": {
+            "color": "Dark Green"
+          },
+          "kind": "door",
+          "note": "Side door"
+        },
+        {
+          "cells": [
+            2,
+            4,
+            2,
+            5
+          ],
+          "courses": [
+            1,
+            1
+          ],
+          "fill": {
+            "color": "Trans-Black"
+          }
+        },
+        {
+          "cells": [
+            4,
+            1,
+            5,
+            1
+          ],
+          "courses": [
+            0,
+            1
+          ],
+          "fill": {
+            "color": "Trans-Black"
+          }
+        }
+      ]
+    },
+    {
+      "op": "roof",
+      "phase": "Front gable roof",
+      "note": "Front-facing gable over the arched window",
+      "rect": [
+        2,
+        10,
+        6,
+        11
+      ],
+      "base": 6,
+      "abut": [
+        "N"
+      ],
+      "gable": [
+        "S"
+      ],
+      "gableColor": "White",
+      "color": "Dark Orange",
+      "fascia": "Dark Green"
+    },
+    {
+      "op": "walls",
+      "phase": "Upper floor",
+      "note": "Upper floor",
+      "color": "White",
+      "courses": [
+        2,
+        3
+      ],
+      "base": 6,
+      "segments": [
+        [
+          2,
+          1,
+          2,
+          9
+        ],
+        [
+          2,
+          1,
+          9,
+          1
+        ],
+        [
+          9,
+          1,
+          9,
+          1
+        ],
+        [
+          9,
+          6,
+          9,
+          9
+        ],
+        [
+          2,
+          9,
+          9,
+          9
+        ]
+      ],
+      "openings": [
+        {
+          "cells": [
+            8,
+            9,
+            8,
+            9
+          ],
+          "courses": [
+            2,
+            3
+          ],
+          "fill": {
+            "color": "Trans-Black"
+          },
+          "note": "Balcony French doors"
+        },
+        {
+          "cells": [
+            9,
+            7,
+            9,
+            8
+          ],
+          "courses": [
+            3,
+            3
+          ],
+          "fill": {
+            "color": "Trans-Black"
+          }
+        },
+        {
+          "cells": [
+            2,
+            3,
+            2,
+            3
+          ],
+          "courses": [
+            3,
+            3
+          ],
+          "fill": {
+            "color": "Trans-Black"
+          }
+        },
+        {
+          "cells": [
+            2,
+            7,
+            2,
+            7
+          ],
+          "courses": [
+            3,
+            3
+          ],
+          "fill": {
+            "color": "Trans-Black"
+          }
+        },
+        {
+          "cells": [
+            4,
+            1,
+            4,
+            1
+          ],
+          "courses": [
+            3,
+            3
+          ],
+          "fill": {
+            "color": "Trans-Black"
+          }
+        },
+        {
+          "cells": [
+            7,
+            1,
+            7,
+            1
+          ],
+          "courses": [
+            3,
+            3
+          ],
+          "fill": {
+            "color": "Trans-Black"
+          }
+        }
+      ]
+    },
+    {
+      "op": "walls",
+      "phase": "Green bay",
+      "note": "Board-and-batten bay over the garage",
+      "color": "Dark Green",
+      "courses": [
+        2,
+        3
+      ],
+      "base": 6,
+      "segments": [
+        [
+          9,
+          2,
+          9,
+          5
+        ]
+      ],
+      "openings": [
+        {
+          "cells": [
+            9,
+            3,
+            9,
+            4
+          ],
+          "courses": [
+            2,
+            3
+          ],
+          "fill": {
+            "color": "Trans-Black"
+          }
+        }
+      ]
+    },
+    {
+      "op": "roof",
+      "phase": "Main roof",
+      "note": "Main hip roof",
+      "rect": [
+        2,
+        1,
+        9,
+        9
+      ],
+      "base": 12,
+      "color": "Dark Orange",
+      "fascia": "Dark Green"
+    },
+    {
+      "op": "fill",
+      "phase": "Front garden",
+      "kind": "plate",
+      "color": "Reddish Brown",
+      "note": "Mulch bed",
+      "rects": [
+        [
+          0,
+          12,
+          6,
+          14
+        ]
+      ]
+    },
+    {
+      "op": "places",
+      "phase": "Front garden",
+      "note": "Agaves",
+      "part": "roundplate1",
+      "color": "Sand Green",
+      "y": 1,
+      "at": [
+        [
+          1,
+          13
+        ],
+        [
+          3,
+          12
+        ],
+        [
+          5,
+          14
+        ],
+        [
+          0,
+          14
+        ]
+      ]
+    },
+    {
+      "op": "places",
+      "phase": "Front garden",
+      "note": "Small shrubs",
+      "part": "roundplate1",
+      "color": "Green",
+      "y": 1,
+      "at": [
+        [
+          2,
+          14
+        ],
+        [
+          4,
+          13
+        ],
+        [
+          6,
+          12
+        ]
+      ]
+    },
+    {
+      "op": "places",
+      "phase": "Cypress trees",
+      "note": "Cypresses",
+      "part": "round1",
+      "color": "Dark Green",
+      "at": [
+        [
+          15,
+          0,
+          1
+        ],
+        [
+          15,
+          3,
+          1
+        ],
+        [
+          15,
+          6,
+          1
+        ],
+        [
+          15,
+          0,
+          4
+        ],
+        [
+          15,
+          3,
+          4
+        ],
+        [
+          15,
+          6,
+          4
+        ],
+        [
+          15,
+          0,
+          7
+        ],
+        [
+          15,
+          3,
+          7
+        ]
+      ]
+    },
+    {
+      "op": "floor",
+      "phase": "Ground floor",
+      "kind": "tile",
+      "color": "Tan"
+    },
+    {
+      "op": "lawn",
+      "phase": "Lawn"
+    }
+  ]
+}
