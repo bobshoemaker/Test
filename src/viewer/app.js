@@ -85,7 +85,8 @@ function ldrawPose(p){ const def=SPECIAL[p.key]||{};
   if(p.shape==='swordleaf'){ // clipped on one corner bar of the palm top, fanning out toward dir
     const r={N:0,E:1,S:2,W:3}[p.dir||'N'], c=[[p.x+2.5,p.z+6],[p.x,p.z+2.5],[p.x+2.5,p.z],[p.x+6,p.z+2.5]][r], bar=[[0.5,0],[0,0.5],[-0.5,0],[0,-0.5]][r];
     return [c[0]+bar[0]-OFF,(p.y+0.5)*PH,c[1]+bar[1]-OFF,r]; }
-  if(p.shape==='palm'||p.key==='bush224') return [p.x+p.w/2-OFF,p.y*PH,p.z+p.d/2-OFF,0];
+  if(p.shape==='palm'||p.key==='bush224') return [p.x+p.w/2-OFF,p.y*PH,p.z+p.d/2-OFF,0]; // drawn up from the base
+  if(p.shape==='pine') return [p.x+p.w/2-OFF,(p.y+1)*PH,p.z+p.d/2-OFF,0]; // its base plate hangs a plate below LDraw's origin
   if(def.at){ const a=turnCell(def,def.at,p.rot); return [p.x+a[0]+0.5-OFF,(p.y+1)*PH,p.z+a[1]+0.5-OFF,p.rot||0]; }
   // a standard part: LDraw's origin is the middle of the top of its body; a quarter turn per "rot" (the
   // long side of windows, arches and fences runs along x at rot 0), and slopes and side studs by "dir"/"face"
@@ -201,6 +202,9 @@ function makeSpecial(p){
     const [fx,fz]={N:[0,-1],S:[0,1],E:[1,0],W:[-1,0]}[p.face]||[0,1], t=PH*0.9;
     put(new THREE.BoxGeometry(0.96,t,0.96),0,t/2,0);
     put(new THREE.BoxGeometry(fx?t:0.96,1,fz?t:0.96),-fx*(0.48-t/2),0.5,-fz*(0.48-t/2));
+  } else if(p.shape==='pine'){ // a molded pine: a short base, then tiers of branches narrowing to the tip
+    const r=p.w/2, n=p.w>2?4:3; put(new THREE.CylinderGeometry(0.7,0.7,PH*1.5,12),0,PH*0.75,0);
+    for(let i=0;i<n;i++){ const hi=(H-PH*1.5)/n*1.35, rr=r*(1-i/(n+0.6)); put(new THREE.ConeGeometry(rr,hi,12),0,PH*1.5+(H-PH*1.5)/n*i+hi/2,0); }
   } else if(p.shape==='palm'){ // palm top: a hub with four upright bars (fronds clip onto them)
     put(new THREE.CylinderGeometry(0.34,0.34,PH,12),0,PH/2,0);
     const bar=new THREE.CylinderGeometry(0.11,0.11,H-PH*0.5,8); for(const [bx,bz] of [[0.3,0.3],[-0.3,0.3],[0.3,-0.3],[-0.3,-0.3]]) put(bar,bx,PH*0.5+(H-PH*0.5)/2,bz);
