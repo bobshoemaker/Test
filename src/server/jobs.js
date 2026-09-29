@@ -8,6 +8,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 
 const MAX_FIXES = 2; // "ask Claude to fix these" rounds included with a paid job
+const RESUME_WITHIN_MS = 24 * 3600e3; // older cut-off jobs are left alone (no surprise API spend on stale ones)
+const MAX_RESUMES = 2; // times a job cut off by a restart is picked up again (a crash that recurs stops there)
 
 function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, fixRun = null, now = () => Date.now() }) {
   fs.mkdirSync(dir, { recursive: true });
@@ -30,7 +32,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     if (ev.type === 'draft' && design) { j.draft = design; j.draftN = (j.draftN || 0) + 1; rest.draftN = j.draftN; }
     if (ev.type === 'done') j.result = ev;
     j.events.push({ ...rest, t: now() });
-    if (ev.type === 'done' || ev.type === 'error' || ev.type === 'draft') save(j);
+    if (ev.type === 'done' || ev.type === 'error' || ev.type === 'draft' || ev.type === 'part') save(j); // part: where a restart picks up
   }
 
   function launch(j, fn) {
@@ -70,6 +72,29 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       return { code: 200, status: j.status };
     },
 
+    // At server start: pick up every job a restart cut off (a deploy, the server running out of memory) at
+    // the part it was on, from its last draft, so a paid design isn't left half built. A cut-off fix round
+    // gives the round back and keeps the design it had. Returns the ids picked up.
+    resumeInterrupted() {
+      const ids = [];
+      for (const f of fs.readdirSync(dir)) {
+        const j = f.endsWith('.json') ? load(f.slice(0, -5)) : null;
+        if (!j || j.status !== 'interrupted' || (feeOn && j.sessionId && !j.paid)) continue;
+        if (j.result) { j.status = 'done'; j.fixes = Math.max(0, j.fixes - 1); save(j); continue; }
+        if (now() - (j.createdAt || 0) > RESUME_WITHIN_MS) { emit(j, { type: 'error', message: 'The design was cut off and is too old to pick up again.' }); j.status = 'error'; save(j); continue; }
+        if ((j.resumes || 0) >= MAX_RESUMES) { emit(j, { type: 'error', message: 'The design was cut off too many times to finish.' }); j.status = 'error'; save(j); continue; }
+        j.resumes = (j.resumes || 0) + 1;
+        const parts = j.events.filter((e) => e.type === 'part' && Number.isInteger(e.n));
+        let fromPart = parts.length ? parts[parts.length - 1].n : 1;
+        const seed = fromPart > 1 ? j.draft : null;
+        if (!seed) fromPart = 1;
+        emit(j, { type: 'status', message: `Picking the design up again at part ${fromPart}.`, resumed: fromPart });
+        launch(j, (params, e) => run({ ...params, resume: { fromPart, seed } }, e));
+        ids.push(j.id);
+      }
+      return ids;
+    },
+
     // Progress since event index `after`, plus the latest draft when the viewer doesn't have it yet.
     get(id, { after = 0, have = 0 } = {}) {
       const j = load(id);
@@ -93,4 +118,4 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
   };
 }
 
-module.exports = { createJobs, MAX_FIXES };
+module.exports = { createJobs, MAX_FIXES, MAX_RESUMES };
