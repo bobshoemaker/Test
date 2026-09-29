@@ -114,7 +114,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   photos; `GET /api/photo/<mapillary id>` proxies one image.
 - `src/viewer/landing.html`: the home page at `/`, written for homeowners and gift buyers, not technical (moments,
   how it works, examples, sizes, questions); renders of the samples on its warm background in `src/viewer/img/`,
-  made by `scripts/landing.js`; "Make yours" goes to `/app#design`. Promise only what ships today.
+  made by `scripts/landing.js`; "Make yours" goes to `/app#design`. It promises a kit shipped to the customer (we order
+  the parts from Brickwith, pack them and reship; the app's kit checkout isn't built yet) and names no prices in its questions.
 - `src/viewer/`: single-page three.js (r128, CDN) viewer, at `/app`: model, manual (sub-builds shown on
   their own), parts and BrickLink XML, design editor, photo upload, and "Lift roof" for designs
   whose roof ops carry `"liftoff"` (floors show underneath; the rooms too when there was a plan).
