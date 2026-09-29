@@ -100,3 +100,14 @@ test('with no elevation data the note still gives the building and streets, with
   assert.match(t.note, /Elm Street runs along the side of the house that faces the street/);
   assert.doesNotMatch(t.note, /slopes about|Going back/);
 });
+
+test('a stalled elevation service can\'t hold the lookup: it stops at the deadline, without slopes', async () => {
+  const base = fakeFetch({ streets: [elm] });
+  const stall = async (url, opts) => url.includes('/api/interpreter') ? base(url, opts)
+    : new Promise((resolve, reject) => opts.signal.addEventListener('abort', () => reject(new Error('timed out'))));
+  const alive = setInterval(() => {}, 50); // AbortSignal.timeout doesn't hold the event loop open; a server does
+  const t0 = Date.now(), t = await lookupTerrain(place, '5 Elm St', { fetchImpl: stall, elevationMs: 300 }).finally(() => clearInterval(alive));
+  assert.ok(Date.now() - t0 < 5000);
+  assert.equal(t.frontage[0].name, 'Elm Street');
+  assert.ok(t.samples.every((p) => !Number.isFinite(p.ft)));
+});

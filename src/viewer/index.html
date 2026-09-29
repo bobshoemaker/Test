@@ -118,7 +118,9 @@ textarea.xml{width:100%;height:140px;margin-top:10px;background:var(--code);colo
 .survey .opt small{display:block;color:var(--muted);font-size:13px}
 textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel);font-size:15px;resize:vertical}
 .status-err{color:var(--flag)}
-.addr{display:flex;gap:8px;margin-top:10px}
+.addr{display:flex;gap:8px;margin-top:6px}
+.addrlabel{display:block;margin-top:14px;font-weight:700;font-size:14px}
+.addrwhy{margin:6px 0 0;font-size:13px;color:var(--muted)}
 .addr input{flex:1;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-size:15px}
 .cands{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:10px}
 .cand{display:block;padding:0;border:2px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden;cursor:pointer;text-align:left;font:inherit;color:inherit}
@@ -250,16 +252,18 @@ html:not(.upload) .seeex{display:none}
           <h2 style="margin-top:0">Make your house</h2>
           <p class="note" style="margin-top:0;color:var(--ink)" id="photoIntro">Checking for the design server…</p>
           <div id="photoControls" hidden>
-            <form class="addr" id="addrForm"><input id="addrInput" type="text" autocomplete="street-address" placeholder="House address, e.g. 634 Main St, Springfield, IL" aria-label="House address"><button class="btn" id="addrBtn" type="submit">Find photos</button></form>
-            <div class="out" id="addrStatus" aria-live="polite"></div>
-            <div class="cands" id="cands"></div>
-            <div class="row" id="candRow" hidden><button class="btn" id="useCands">Add selected photos</button></div>
             <div class="row" id="pickRow"><button class="btn" id="pickBtn">Choose photos</button><input type="file" id="photoInput" multiple hidden>
               <button class="btn" id="planBtn" type="button">Add floor plan</button><input type="file" id="planInput" accept="image/jpeg,image/png,image/webp" hidden>
               <label class="target dev-only">About <input type="number" id="target" value="1200" min="300" max="2500" step="50" inputmode="numeric"> pieces</label>
               <label class="target"><input type="checkbox" id="bigPlate"> Grand size: a 15 in base with room for the yard (Classic is 10 in)</label></div>
             <div class="out" id="planStatus"></div>
             <div class="photos" id="thumbs"></div>
+            <label class="addrlabel" for="addrInput">The house's address</label>
+            <form class="addr" id="addrForm"><input id="addrInput" type="text" autocomplete="street-address" maxlength="300" placeholder="e.g. 634 Main St, Springfield, IL"><button class="btn dev-only" id="addrBtn" type="submit">Find photos</button></form>
+            <p class="addrwhy">We use it to find the house's outline on the map and how the ground slopes, so the walls, driveway and yard come out true to life.</p>
+            <div class="out" id="addrStatus" aria-live="polite"></div>
+            <div class="cands" id="cands"></div>
+            <div class="row" id="candRow" hidden><button class="btn" id="useCands">Add selected photos</button></div>
             <textarea class="notes" id="notes" rows="2" placeholder="Anything the photos don't show, like the roof color or which side the garage is on"></textarea>
             <div class="survey" id="survey" hidden></div>
             <div class="row"><button class="btn" id="surveyBtn">Check my photos first</button><button class="btn primary" id="designBtn">Design from photos</button><button class="btn" id="stopBtn" hidden>Stop</button><button class="btn" id="lastBtn" hidden>Show my last design</button></div>

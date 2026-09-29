@@ -35,7 +35,7 @@ async function overpass(q, fetchImpl) {
   let last = '';
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const res = await fetchImpl(`${OVERPASS[attempt % OVERPASS.length]}?data=${encodeURIComponent(q)}`, { headers: { 'user-agent': UA } });
+      const res = await fetchImpl(`${OVERPASS[attempt % OVERPASS.length]}?data=${encodeURIComponent(q)}`, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(30000) });
       if (res.ok) return await res.json();
       last = `${res.status}`;
     } catch (e) { last = e.message; }
@@ -175,16 +175,17 @@ function samplePlan(streets) {
   return pts;
 }
 
-async function elevations(origin, pts, { fetchImpl = fetch, concurrency = 6 } = {}) {
-  const { toLL } = frame(origin);
+// Stops asking after deadlineMs: a point with no answer by then stays unknown, and the slopes use the rest.
+async function elevations(origin, pts, { fetchImpl = fetch, concurrency = 6, deadlineMs = 40000 } = {}) {
+  const { toLL } = frame(origin), end = Date.now() + deadlineMs;
   const out = pts.map((p) => ({ ...p, ft: NaN }));
   let next = 0;
   async function worker() {
     for (let i; (i = next++) < out.length;) {
       const ll = toLL(out[i].xy);
-      for (let tries = 0; tries < 3 && !Number.isFinite(out[i].ft); tries++) {
+      for (let tries = 0; tries < 3 && !Number.isFinite(out[i].ft) && Date.now() < end; tries++) {
         try {
-          const res = await fetchImpl(`${EPQS}?x=${ll.lon}&y=${ll.lat}&wkid=4326&units=Feet&includeDate=false`, { headers: { 'user-agent': UA } });
+          const res = await fetchImpl(`${EPQS}?x=${ll.lon}&y=${ll.lat}&wkid=4326&units=Feet&includeDate=false`, { headers: { 'user-agent': UA }, signal: AbortSignal.timeout(Math.max(1000, Math.min(10000, end - Date.now()))) });
           if (res.ok) { const v = Number((await res.json()).value); if (Number.isFinite(v) && v > -1000) out[i].ft = v; }
         } catch { /* retry */ }
       }
@@ -287,7 +288,7 @@ function propertyHint(address, building) {
 }
 
 // Building, streets and slopes for a geocoded place. Returns {building, frontage, streets, samples, analysis, note}.
-async function lookupTerrain(place, address, { fetchImpl = fetch, plate = 32 } = {}) {
+async function lookupTerrain(place, address, { fetchImpl = fetch, plate = 32, elevationMs } = {}) {
   let building = null;
   try { building = await findBuilding(place, address, { fetchImpl }); } catch { /* fall back to the geocoded point */ }
   const center = building ? building.center : place;
@@ -297,7 +298,7 @@ async function lookupTerrain(place, address, { fetchImpl = fetch, plate = 32 } =
   // ground at the house and at each outbuilding, to tell whether a garage sits lower or higher
   const { toXY } = frame(center), spots = [{ kind: 'bldg', id: 'house', xy: [0, 0] }];
   if (building) building.outbuildings.forEach((o, i) => { o.xy = toXY(o.center); spots.push({ kind: 'bldg', id: `outbuilding ${i}`, xy: o.xy }); });
-  const samples = await elevations(center, [...samplePlan(frontage), ...spots], { fetchImpl });
+  const samples = await elevations(center, [...samplePlan(frontage), ...spots], { fetchImpl, ...(elevationMs ? { deadlineMs: elevationMs } : {}) });
   const groundFt = Object.fromEntries(samples.filter((p) => p.kind === 'bldg').map((p) => [p.id, p.ft]));
   const t = { building, frontage, streets, lanes, groundFt, street: frontage[0], samples, plate, analysis: analyzeTerrain(samples, { plate }), property: propertyHint(address, building) };
   t.note = terrainNote(t);

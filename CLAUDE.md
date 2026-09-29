@@ -68,8 +68,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   key). The note says, relative to each street, how it rises across the baseplate, which side a
   corner's second street is on, where each outbuilding sits and how the ground there compares with
   the house, any alley or service lane beside the house or an outbuilding (a garage there likely
-  opens onto it), and roughly how the lot rises toward the back (`/api/lookup` adds
-  it; `--address` on the scripts). Geocoders can land on a neighbour, so it measures from the
+  opens onto it), and roughly how the lot rises toward the back (the design job with an address; `--address` on the
+  scripts). The elevation samples take 15 s to a minute, so the app just asks for the address with the photos (and
+  says why) and the job looks it up; each outside request has a time limit. Geocoders can land on a neighbour, so it measures from the
   outline when it finds one. The lot's rise is smoothed and interpolated under the house, so the
   note defers to the photos there. Not Street View: Google's terms bar it.
 - `src/server/footprint.js`: floor plan to locked walls. With a plan, parts mode first has Claude
@@ -111,7 +112,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
   `designs/generated/jobs/`; results to `designs/generated/`. There is no unpaid design endpoint. `POST /api/quote {lots}` returns GoBricks' price and stock
   for a parts list today (cached a day per list; `BRICKHOUSE_GOBRICKS_QUOTES=0` turns it off, `BRICKHOUSE_CNY_PER_USD`
   sets the viewer's dollar rate). `POST /api/lookup {address}` returns the place and ranked candidate
-  photos; `GET /api/photo/<mapillary id>` proxies one image.
+  photos (the dev view's Find photos); `GET /api/photo/<mapillary id>` proxies one image.
 - `src/viewer/landing.html`: the home page at `/`, written for homeowners and gift buyers, not technical (moments,
   how it works, examples, sizes, questions); renders of the samples on its warm background in `src/viewer/img/`,
   made by `scripts/landing.js`; "Make yours" goes to `/app#design`. It promises a kit shipped to the customer (we order

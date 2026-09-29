@@ -24,7 +24,7 @@ function bearing(a, b) {
 const angleDiff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
 
 async function getJson(fetchImpl, url, headers = {}) {
-  const res = await fetchImpl(url, { headers: { 'user-agent': UA, accept: 'application/json', ...headers } });
+  const res = await fetchImpl(url, { headers: { 'user-agent': UA, accept: 'application/json', ...headers }, signal: AbortSignal.timeout(15000) });
   if (!res.ok) throw new Error(`${new URL(url).host} answered ${res.status}`);
   return res.json();
 }
