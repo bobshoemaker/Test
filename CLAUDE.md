@@ -152,7 +152,10 @@ closing gift that realtors give clients: a brick model of the house they just bo
   `bundle.js`) puts in place of each page's `<!-- topbar -->`, so it doesn't move between pages; its button reads
   "See an example" on the upload page). "Make yours" (`/app#design`) is an upload page of its own, the sample house hidden,
   until the first draft of their house comes back. With one or two photos (or none, only a description) it notes above the Design button that
-  the sides we can't see get guessed, so the model won't be as accurate (not a block). `?dev=1` turns on the technical view in that browser (`?dev=0` off): the design
+  the sides we can't see get guessed, so the model won't be as accurate (not a block). The size is a choice of two cards,
+  Classic and Grand, with the landing page's sizes and piece counts (`#bigPlate` is Grand). Designs made in a browser are
+  remembered there (localStorage `brickhouse-designs`: job id, name, date) and listed as "Your designs" on the
+  upload page; emailing the link and a "find my designs" by email are planned (Resend suggested). `?dev=1` turns on the technical view in that browser (`?dev=0` off): the design
   list (samples only, unless the server is on your own machine), checker counts and problems, connection colors, part numbers, suppliers and
   prices, the piece target and the design code editor, all marked `dev-only`; standalone copies are technical.
 - `src/viewer/`: single-page three.js (r128, CDN) viewer, at `/app`: model, manual (sub-builds shown on

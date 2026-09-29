@@ -139,6 +139,21 @@ textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-ra
 .kitordernote{margin:8px 0 0}
 .kitdone{color:var(--ink)!important;font-weight:600}
 .guidelock p{margin:0 0 10px}
+.sizes{border:0;padding:0;margin:16px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sizes legend{font-weight:700;font-size:14px;margin-bottom:6px;padding:0}
+.size{position:relative;display:flex;flex-direction:column;gap:2px;border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer;background:var(--panel)}
+.size:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 1.5px var(--accent) inset}
+.size:has(input:focus-visible){outline:3px solid var(--accent);outline-offset:2px}
+.size input{position:absolute;opacity:0;pointer-events:none}
+.sizename{font-family:"Jersey 10","Archivo",sans-serif;font-size:26px;line-height:1}
+.sizedim{font-weight:700;font-size:14px}
+.sizeabout{font-size:13px;color:var(--muted);line-height:1.4}
+@media (max-width:420px){.sizes{grid-template-columns:1fr}}
+.mine{margin:0 0 14px;padding:10px 14px;border-radius:12px;background:var(--stage)}
+.mine h3{margin:0 0 4px;font-size:15px}
+.mine ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2px}
+.mine a{color:var(--accent);font-weight:600}
+.mine small{color:var(--muted);margin-left:6px}
 .addrwhy{margin:6px 0 0;font-size:13px;color:var(--muted)}
 .addr input{flex:1;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-size:15px}
 .cands{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:10px}
@@ -287,12 +302,13 @@ if(location.hash==='#design'&&!/[?&](job|hero)=/.test(location.search)) document
       <section class="pane" id="pane-design" hidden>
         <div class="card">
           <h2 style="margin-top:0">Make your house</h2>
+          <div class="mine" id="myDesigns" hidden><h3>Your designs</h3><ul id="myDesignList"></ul></div>
           <p class="note" style="margin-top:0;color:var(--ink)" id="photoIntro">Add photos of the outside of the house: the front first, then the sides, the back and the garage if you have them (up to 12). A floor plan helps us get the walls just right, and anything the photos don't show, you can tell us below.</p>
           <div id="photoControls">
             <div class="row" id="pickRow"><button class="btn" id="pickBtn">Choose photos</button><input type="file" id="photoInput" multiple hidden>
               <button class="btn" id="planBtn" type="button">Add floor plan</button><input type="file" id="planInput" accept="image/jpeg,image/png,image/webp" hidden>
               <label class="target dev-only">About <input type="number" id="target" value="1200" min="300" max="2500" step="50" inputmode="numeric"> pieces</label>
-              <label class="target"><input type="checkbox" id="bigPlate"> Grand size: a 15 in base with room for the yard (Classic is 10 in)</label></div>
+</div>
             <div class="out" id="planStatus"></div>
             <div class="photos" id="thumbs"></div>
             <label class="addrlabel" for="addrInput">The house's address</label>
@@ -301,6 +317,15 @@ if(location.hash==='#design'&&!/[?&](job|hero)=/.test(location.search)) document
             <div class="out" id="addrStatus" aria-live="polite"></div>
             <div class="cands" id="cands"></div>
             <div class="row" id="candRow" hidden><button class="btn" id="useCands">Add selected photos</button></div>
+            <fieldset class="sizes">
+              <legend>Choose a size</legend>
+              <label class="size"><input type="radio" name="size" id="sizeClassic" checked>
+                <span class="sizename">Classic</span><span class="sizedim">10 × 10 in base</span>
+                <span class="sizeabout">The house and its front yard. About 800 to 1,300 pieces, an evening or two to build.</span></label>
+              <label class="size"><input type="radio" name="size" id="bigPlate">
+                <span class="sizename">Grand</span><span class="sizedim">15 × 15 in base</span>
+                <span class="sizeabout">Room for the whole yard, the garden and the street. About 2,000 to 2,400 pieces, a weekend or two.</span></label>
+            </fieldset>
             <textarea class="notes" id="notes" rows="2" placeholder="Anything the photos don't show, like the roof color or which side the garage is on"></textarea>
             <div class="survey" id="survey" hidden></div>
             <p class="fewphotos" id="fewPhotos" role="status" hidden></p>
