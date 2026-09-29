@@ -722,7 +722,7 @@ async function askServer(mode){
     if(!photos.length&&!notes){ status('Add at least one photo or a short description first.',true); return; }
     setBusy(true); status('Preparing photos…');
     const big=$('bigPlate').checked;
-    const body={notes,target:big?Math.max(target,2400):target,plate:big?48:32,address:houseAddress(),
+    const body={notes,target:big?Math.max(target,2400):target,plate:big?48:32,address:houseAddress(),email:$('emailInput').value.trim()||undefined,
       plan:planFile?await toPayload(planFile,2400):undefined, photos:await Promise.all(photos.map(f=>toPayload(f))),
       credits:photos.map(f=>photoCredit.get(f)).filter(Boolean), choices:surveyChoices()};
     if(photos.length) status('Checking your photos…');
@@ -732,6 +732,12 @@ async function askServer(mode){
     watchJob(j.id,false);
   }catch(e){ status(esc(e.message),true,e.plain); setBusy(false); }
 }
+// "Made a design on another device?": the server emails the links for that address (the same answer either way)
+$('findMine').onsubmit=async e=>{ e.preventDefault(); const email=$('findEmail').value.trim(), st=$('findStatus'); if(!email) return;
+  st.textContent='Sending…';
+  try{ const r=await fetch('/api/mine',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email})}), j=await r.json();
+    st.textContent=r.ok?`If we have designs for ${email}, we've emailed you the links. Check your inbox (and spam folder) in a minute.`:(j.error||'We couldn\'t send that just now.'); }
+  catch(err){ st.textContent='We couldn\'t send that just now. Please try again in a little while.'; } };
 // Designs made in this browser, remembered on the device (no account): listed on the upload page
 const MINE='brickhouse-designs';
 function myDesigns(){ try{ const a=JSON.parse(localStorage.getItem(MINE)||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
@@ -861,14 +867,16 @@ async function boot(){
     requestAnimationFrame(()=>requestAnimationFrame(()=>{ try{ parent.postMessage({brickhouse:'hero-ready'},location.origin); }catch(e){} }));
     if(BUILD&&!window.BRICKHOUSE_STILL) playBuildLoop();
     return; }
-  if(embedded){ $('homeLink').hidden=true; $('topCta').hidden=true; $('photoControls').hidden=true; $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }
+  if(embedded){ $('homeLink').hidden=true; $('topCta').hidden=true; $('photoControls').hidden=true; $('findMine').hidden=true; $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }
   try{ health=await (await fetch('/api/health')).json(); }catch(e){ health=null; }
   loadDesignList();
   const closed='Designing new houses isn\'t open just yet. Please check back soon.';
   // the form shows from the start (no jump on the usual path); it goes only when the server can't design
-  if(!health){ $('photoControls').hidden=true; $('photoIntro').textContent=DEV?'Start the server with npm start to design from photos.':closed; return; }
-  if(!health.ready){ $('photoControls').hidden=true; $('photoIntro').textContent=DEV?'Add BRICKHOUSE_ANTHROPIC_API_KEY to .env and restart the server to design from photos (or run with BRICKHOUSE_FAKE=1 to try the flow).':closed; return; }
+  if(!health){ $('photoControls').hidden=true; $('findMine').hidden=true; $('photoIntro').textContent=DEV?'Start the server with npm start to design from photos.':closed; return; }
+  if(!health.ready){ $('photoControls').hidden=true; $('findMine').hidden=true; $('photoIntro').textContent=DEV?'Add BRICKHOUSE_ANTHROPIC_API_KEY to .env and restart the server to design from photos (or run with BRICKHOUSE_FAKE=1 to try the flow).':closed; return; }
   $('photoControls').hidden=false; $('addrBtn').hidden=!health.streetPhotos;
+  // email: the link to the design, and finding designs by email; both only when the site can send it
+  for(const id of ['emailLabel','emailInput','emailWhy','findMine']) $(id).hidden=!health.mail;
   $('photoIntro').textContent=DEV?`Enter the address to find street photos${health.streetPhotos?'':' (needs MAPILLARY_TOKEN)'}, or pick up to ${health.maxPhotos} exterior photos, front first, then each side, the back, the garage and any yard or patio: Claude builds only what a photo, the floor plan or your notes show, so a side no photo shows gets guessed. Claude (${health.model}) studies them, writes a design, compiles it here, fixes what the checker flags, and saves it.`
     :`Add photos of the outside of the house: the front first, then the sides, the back and the garage if you have them (up to ${health.maxPhotos}). A floor plan helps us get the walls just right, and anything the photos don't show, you can tell us below.`;
   renderThumbs();

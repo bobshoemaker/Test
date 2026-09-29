@@ -13,8 +13,9 @@ const MAX_RESUMES = 2; // times a job cut off by a restart is picked up again (a
 
 // kitCents(plate): the kit's price for a design on that baseplate, or null when kits aren't on sale.
 // preview(design): what a customer sees before ordering the kit (preview.js); the full design after.
+// notify(job, 'ready' | 'kit'): email the owner (mail.js), when the job has an email; never fails a job.
 function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, fixRun = null, now = () => Date.now(),
-  kitCents = () => null, preview = null }) {
+  kitCents = () => null, preview = null, notify = null }) {
   fs.mkdirSync(dir, { recursive: true });
   const jobs = new Map();
   const file = (id) => path.join(dir, `${id}.json`);
@@ -44,10 +45,14 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     if (ev.type === 'done' || ev.type === 'error' || ev.type === 'draft' || ev.type === 'part') save(j); // part: where a restart picks up
   }
 
+  const tell = (j, kind) => { if (!notify || !j.email) return;
+    Promise.resolve().then(() => notify(j, kind)).catch((e) => console.error(`Email (${kind}) for ${j.id} failed: ${e.message}`)); };
   function launch(j, fn) {
     j.status = 'running'; save(j);
     fn(j.params, (ev) => emit(j, ev))
-      .then(() => { j.status = 'done'; save(j); })
+      .then(() => { j.status = 'done';
+        if (j.result && !j.readySent) { j.readySent = now(); tell(j, 'ready'); } // once: not again after a fix round
+        save(j); })
       .catch((e) => { emit(j, { type: 'error', message: e && e.message ? e.message : String(e) }); j.status = 'error'; save(j); });
   }
 
@@ -56,7 +61,9 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
 
     // A new job for these (already cleaned) design parameters. Returns {id, checkout?}.
     async create(params, origin) {
-      const j = { id: crypto.randomUUID(), createdAt: now(), status: feeOn ? 'awaiting_payment' : 'queued', params, events: [], fixes: 0 };
+      // the owner's email (to send the link) and the site's address (for links in emails) ride on the job, not in its params
+      const { email = null, ...rest } = params;
+      const j = { id: crypto.randomUUID(), createdAt: now(), status: feeOn ? 'awaiting_payment' : 'queued', params: rest, events: [], fixes: 0, email, origin };
       jobs.set(j.id, j);
       if (!feeOn) { save(j); launch(j, run); return { id: j.id }; }
       const s = await stripe.createCheckout({ jobId: j.id, amountCents: feeCents, currency, name: 'Brick model design fee',
@@ -75,6 +82,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
           const s = await stripe.getSession(sessionId);
           if (s.payment_status !== 'paid' || (s.metadata && s.metadata.job) !== id) return { code: 402, error: 'The design fee has not been paid yet.' };
           j.paid = { at: now(), amount: s.amount_total, currency: s.currency };
+          if (!j.email && s.customer_details && s.customer_details.email) j.email = String(s.customer_details.email).toLowerCase();
         }
         launch(j, run);
       }
@@ -110,6 +118,16 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       return ph && typeof ph.data === 'string' ? { mediaType: ph.mediaType, data: ph.data } : null;
     },
 
+    // The finished designs made with this email address, newest first: [{id, name, at, origin}].
+    byEmail(email) {
+      const out = [];
+      for (const f of fs.readdirSync(dir)) {
+        const j = f.endsWith('.json') ? load(f.slice(0, -5)) : null;
+        if (j && j.email === email && j.result) out.push({ id: j.id, name: (j.result.design && j.result.design.name) || '', at: j.createdAt, origin: j.origin });
+      }
+      return out.sort((a, b) => b.at - a.at);
+    },
+
     // Progress since event index `after`, plus the latest draft when the viewer doesn't have it yet.
     // full: the whole design even without a kit order (the server's own machine, for the owner)
     get(id, { after = 0, have = 0, full = false } = {}) {
@@ -140,6 +158,8 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
         const cd = s.customer_details || {}, ship = (s.collected_information && s.collected_information.shipping_details) || s.shipping_details || null;
         j.kit = { at: now(), amount: s.amount_total, currency: s.currency, session, email: cd.email || null, name: (ship && ship.name) || cd.name || null, shipping: ship ? ship.address : cd.address || null };
         save(j);
+        if (!j.email && cd.email) j.email = String(cd.email).toLowerCase();
+        tell(j, 'kit');
         return { code: 200, ordered: true };
       }
       const cents = kitCents(plateOf(j));

@@ -24,6 +24,10 @@ services:
         sync: false
       - key: BRICKHOUSE_KIT_GRAND_CENTS          # the kit's price in cents, Grand (48 x 48)
         sync: false
+      - key: RESEND_API_KEY                      # email (the design's link, kit orders, find my designs) through Resend
+        sync: false
+      - key: BRICKHOUSE_MAIL_FROM                # the sender, on a domain verified at Resend, e.g. Brickhouse <hello@yourdomain.com>
+        sync: false
       - key: MAPILLARY_TOKEN                     # optional: street photos from the address box
         sync: false
       - key: BRICKHOUSE_GOBRICKS_QUOTES          # 0 turns off live GoBricks quotes on the Parts tab
