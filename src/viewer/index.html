@@ -172,6 +172,9 @@ html.hero canvas{cursor:grab;touch-action:pan-y}
 html.hero canvas:active{cursor:grabbing}
 /* the upload page ("Make yours" before a design of their own exists): no sample house beside it */
 html.upload .stagecol,html.upload header h1,html.upload header .sub,html.upload header .chips,html.upload .tabs{display:none!important}
+/* the upload page shows its form from the first paint (the head script sets the class before the app loads) */
+html.upload .pane:not(#pane-design){display:none!important}
+html.upload #pane-design[hidden]{display:block!important}
 html.upload .grid{display:block;max-width:760px;margin:0 auto}
 html.upload .panel{border:0;background:none}
 html.upload #pane-design h2:first-child{font-size:40px}
@@ -179,6 +182,11 @@ html.upload #pane-design h2:first-child{font-size:40px}
 .seeex a{color:var(--accent);font-weight:700}
 html:not(.upload) .seeex{display:none}
 </style>
+<script>
+// /app#design opens straight on the upload page: set it before the first paint, not when the app's script
+// (after three.js, the engine and the part shapes) gets to it, so the sample house never flashes up first
+if(location.hash==='#design'&&!/[?&](job|hero)=/.test(location.search)) document.documentElement.classList.add('upload');
+</script>
 </head>
 <body>
 <div class="wrap">
@@ -279,8 +287,8 @@ html:not(.upload) .seeex{display:none}
       <section class="pane" id="pane-design" hidden>
         <div class="card">
           <h2 style="margin-top:0">Make your house</h2>
-          <p class="note" style="margin-top:0;color:var(--ink)" id="photoIntro">Checking for the design server…</p>
-          <div id="photoControls" hidden>
+          <p class="note" style="margin-top:0;color:var(--ink)" id="photoIntro">Add photos of the outside of the house: the front first, then the sides, the back and the garage if you have them (up to 12). A floor plan helps us get the walls just right, and anything the photos don't show, you can tell us below.</p>
+          <div id="photoControls">
             <div class="row" id="pickRow"><button class="btn" id="pickBtn">Choose photos</button><input type="file" id="photoInput" multiple hidden>
               <button class="btn" id="planBtn" type="button">Add floor plan</button><input type="file" id="planInput" accept="image/jpeg,image/png,image/webp" hidden>
               <label class="target dev-only">About <input type="number" id="target" value="1200" min="300" max="2500" step="50" inputmode="numeric"> pieces</label>
@@ -296,7 +304,7 @@ html:not(.upload) .seeex{display:none}
             <textarea class="notes" id="notes" rows="2" placeholder="Anything the photos don't show, like the roof color or which side the garage is on"></textarea>
             <div class="survey" id="survey" hidden></div>
             <p class="fewphotos" id="fewPhotos" role="status" hidden></p>
-            <div class="row"><button class="btn" id="surveyBtn">Check my photos first</button><button class="btn primary" id="designBtn">Design from photos</button><button class="btn" id="stopBtn" hidden>Stop</button><button class="btn" id="lastBtn" hidden>Show my last design</button></div>
+            <div class="row"><button class="btn" id="surveyBtn" hidden>Check my photos first</button><button class="btn primary" id="designBtn">Design from photos</button><button class="btn" id="stopBtn" hidden>Stop</button><button class="btn" id="lastBtn" hidden>Show my last design</button></div>
             <div class="out" id="photoStatus" aria-live="polite"></div>
             <p class="privacy"><b>Your privacy.</b> We use your photos and address only to design your model and send your kit. We never sell them or share them for advertising, and your house isn't shown to anyone else: you see it through your own private link.</p>
           </div>

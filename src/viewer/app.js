@@ -821,7 +821,7 @@ function uploadMode(){ const on=tab==='design'&&!ownShown&&!HERO_MODE; document.
   if(on){ if(location.hash!=='#design') try{ history.replaceState(null,'','#design'); }catch(e){} }
   else if(location.hash==='#design') try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
   // the top bar's button: to the upload page, or from it to the example
-  $('topCta').textContent=on?'See an example':'Make yours'; $('topCta').setAttribute('href',on?'/app':'/app#design');
+  $('topCta').setAttribute('href',on?'/app':'/app#design'); // its label follows html.upload in CSS (topbar.html)
   if(on||tab!=='design') dirty=true; }
 function showOwn(){ if(ownShown) return; ownShown=true; uploadMode(); requestAnimationFrame(resize); }
 function showTab(t){ tab=t;
@@ -852,12 +852,13 @@ async function boot(){
     requestAnimationFrame(()=>requestAnimationFrame(()=>{ try{ parent.postMessage({brickhouse:'hero-ready'},location.origin); }catch(e){} }));
     if(BUILD&&!window.BRICKHOUSE_STILL) playBuildLoop();
     return; }
-  if(embedded){ $('homeLink').hidden=true; $('topCta').hidden=true; $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }
+  if(embedded){ $('homeLink').hidden=true; $('topCta').hidden=true; $('photoControls').hidden=true; $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }
   try{ health=await (await fetch('/api/health')).json(); }catch(e){ health=null; }
   loadDesignList();
   const closed='Designing new houses isn\'t open just yet. Please check back soon.';
-  if(!health){ $('photoIntro').textContent=DEV?'Start the server with npm start to design from photos.':closed; return; }
-  if(!health.ready){ $('photoIntro').textContent=DEV?'Add BRICKHOUSE_ANTHROPIC_API_KEY to .env and restart the server to design from photos (or run with BRICKHOUSE_FAKE=1 to try the flow).':closed; return; }
+  // the form shows from the start (no jump on the usual path); it goes only when the server can't design
+  if(!health){ $('photoControls').hidden=true; $('photoIntro').textContent=DEV?'Start the server with npm start to design from photos.':closed; return; }
+  if(!health.ready){ $('photoControls').hidden=true; $('photoIntro').textContent=DEV?'Add BRICKHOUSE_ANTHROPIC_API_KEY to .env and restart the server to design from photos (or run with BRICKHOUSE_FAKE=1 to try the flow).':closed; return; }
   $('photoControls').hidden=false; $('addrBtn').hidden=!health.streetPhotos;
   $('photoIntro').textContent=DEV?`Enter the address to find street photos${health.streetPhotos?'':' (needs MAPILLARY_TOKEN)'}, or pick up to ${health.maxPhotos} exterior photos, front first, then each side, the back, the garage and any yard or patio: Claude builds only what a photo, the floor plan or your notes show, so a side no photo shows gets guessed. Claude (${health.model}) studies them, writes a design, compiles it here, fixes what the checker flags, and saves it.`
     :`Add photos of the outside of the house: the front first, then the sides, the back and the garage if you have them (up to ${health.maxPhotos}). A floor plan helps us get the walls just right, and anything the photos don't show, you can tell us below.`;
