@@ -264,5 +264,62 @@ The first ${photoCount} image${photoCount === 1 ? ' is a photo' : 's are photos'
 Look them over and submit the survey with submit_survey.`;
 }
 
+// The check every design request passes before it is saved or paid for: the photos must show one home.
+const PHOTO_CHECK_SPEC = `You screen photos sent to a service that turns a photo of a home into a brick model of it.
+Look at each image and say what it shows, so that only requests for a real home go ahead.
+
+A home is any building people live in: a house, a townhouse, a duplex, a cabin, a mobile home, an apartment or
+condo building (the customer may want one unit of it). A street photo that shows the neighbours too is fine when
+the home is in it. Photos of one home can differ a lot: the front and the back, day and night, summer and winter,
+before and after a repaint, close up and from across the street. Judge by the building itself (its shape, roof,
+windows, doors, materials), not by the weather, light, cars or people.
+
+For each photo, pick one:
+- "home": the outside of the home the request is about, the same one as the other photos
+- "inside": the inside of that home
+- "different_home": a home, but plainly a different one from the rest (with two or more photos, call out the odd
+  ones; if they split evenly, call the ones after the first photo's home different)
+- "not_home": a building that isn't a home (a shop, office, school, church, warehouse, stadium, landmark)
+- "not_building": no building at all (people, pets, food, a screenshot, a drawing, text, a car, a landscape)
+- "unclear": too dark, blurry or cropped to tell
+
+A floor plan, when sent, is the last image and is marked as one: say whether it really is a floor plan of a home.
+
+Be fair: when in doubt between "home" and "different_home", choose "home", since the owner knows their house.
+Give no explanation of your reasoning beyond the one short note per photo. Submit with submit_photo_check.`;
+
+const PHOTO_CHECK_TOOL = {
+  name: 'submit_photo_check',
+  description: 'Reports what each photo shows.',
+  strict: true,
+  input_schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      photos: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            photo: { type: 'integer', description: 'The photo number, 1 for the first image.' },
+            shows: { type: 'string', enum: ['home', 'inside', 'different_home', 'not_home', 'not_building', 'unclear'] },
+            note: { type: 'string', description: 'A few plain words on what it shows.' },
+          },
+          required: ['photo', 'shows', 'note'],
+        },
+      },
+      planIsFloorPlan: { type: 'boolean', description: 'Whether the floor plan image is a floor plan of a home; true when none was sent.' },
+    },
+    required: ['photos', 'planIsFloorPlan'],
+  },
+};
+
+function photoCheckTask({ photoCount, hasPlan }) {
+  return `TASK
+The first ${photoCount} image${photoCount === 1 ? ' is a photo' : 's are photos'} sent for one design${hasPlan ? '; the last image is sent as its floor plan' : ''}.
+Say what each photo shows with submit_photo_check.`;
+}
+
 module.exports = { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask,
-  SURVEY_SPEC, SURVEY_TOOL, surveyTask, LANDSCAPE_STYLES, choicesNote, example };
+  SURVEY_SPEC, SURVEY_TOOL, surveyTask, PHOTO_CHECK_SPEC, PHOTO_CHECK_TOOL, photoCheckTask, LANDSCAPE_STYLES, choicesNote, example };

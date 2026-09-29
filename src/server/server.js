@@ -4,7 +4,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const { designHouse, surveyHouse } = require('./designer');
+const { designHouse, surveyHouse, checkPhotos } = require('./designer');
 const { scaleFor } = require('./scale');
 const { lookupAddress, fetchMapillaryImage } = require('./lookup');
 const { lookupTerrain } = require('./terrain');
@@ -104,7 +104,10 @@ async function handleSurvey(req, res) {
   try { body = JSON.parse(await readBody(req)); } catch (e) { return send(res, 400, { error: e.message }); }
   const photos = cleanPhotos(body.photos);
   if (!photos.length) return send(res, 400, { error: 'Add at least one photo to check.' });
+  if (limited(req, 'survey', 30)) return send(res, 429, { error: 'Too many checks from here; try again in an hour.' });
   try {
+    const screen = await checkPhotos({ client, model: SURVEY_MODEL, photos, plan: cleanPhotos([body.plan])[0] || null });
+    if (!screen.ok) return send(res, 422, { error: screen.message, problems: screen.problems });
     // With an address, the survey sees the same building, street and slope facts as the design.
     const prep = await prepareDesign({ address: cleanAddress(body.address), notes: String(body.notes || '').slice(0, 1500), plate: scaleFor(body.plate).plate, lockToOutline: false });
     const out = await surveyHouse({ client, model: SURVEY_MODEL, effort: SURVEY_EFFORT, photos, plan: cleanPhotos([body.plan])[0] || null, notes: prep.notes });
@@ -192,6 +195,9 @@ async function handleJobs(req, res, url) {
       if (limited(req, 'job', 20)) return send(res, 429, { error: 'Too many designs started from here; try again in an hour.' });
       const p = parseDesignRequest(JSON.parse(await readBody(req)));
       if (!p.photos.length && !p.notes) return send(res, 400, { error: 'Add at least one photo or a description.' });
+      // Before anything is saved or paid for: the photos must show one home (photoVerdict in designer.js)
+      const screen = await checkPhotos({ client: makeClient(), model: SURVEY_MODEL, photos: p.photos, plan: p.plan });
+      if (!screen.ok) return send(res, 422, { error: screen.message, problems: screen.problems });
       return send(res, 200, await JOBS.create(p, originOf(req)));
     }
     if (req.method === 'POST' && action === 'start') {

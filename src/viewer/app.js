@@ -579,8 +579,13 @@ const photoCredit=new WeakMap(); // File -> credit for photos found by address l
 // customers see errors in plain words: anything naming the service behind the design, keys, settings or
 // codes becomes a friendly line (the technical view shows it as it came)
 const TECHNICAL=/claude|anthropic|\bai\b|api|key|\.env|brickhouse_|model|token|mapillary|stripe_|http \d|server error|fetch|json|undefined|econn|timeout/i;
-function status(html,err){ if(err&&!DEV&&TECHNICAL.test(html)) html='Something went wrong on our side. Please try again in a little while.';
+// e.plain: a message meant for the owner as it is (the photo check's), never swapped for the generic one
+function status(html,err,plain){ if(err&&!plain&&!DEV&&TECHNICAL.test(html)) html='Something went wrong on our side. Please try again in a little while.';
   $('photoStatus').innerHTML=err?`<span class="status-err">${html}</span>`:html; }
+// A failed response as an Error; the photo check (422) says which photos to change, and marks them
+function failed(res,j){ const e=new Error(j.error||`Server error ${res.status}`);
+  if(res.status===422){ e.plain=true; flagPhotos((j.problems||[]).map(p=>p.photo)); } return e; }
+function flagPhotos(nums){ $('thumbs').querySelectorAll('img').forEach(im=>im.classList.toggle('flagged',nums.includes(+im.dataset.i+1))); }
 function setBusy(b){ $('planBtn').disabled=b; $('surveyBtn').disabled=b; $('designBtn').disabled=b; $('pickBtn').disabled=b; $('addrBtn').disabled=b; $('useCands').disabled=b; $('stopBtn').hidden=!b; $('compileBtn').disabled=b; $('revertBtn').disabled=b; }
 function renderThumbs(){
   photoUrls.forEach(u=>URL.revokeObjectURL(u)); photoUrls=photos.map(f=>URL.createObjectURL(f));
@@ -671,11 +676,12 @@ async function askServer(mode){
     const body={notes,target:big?Math.max(target,2400):target,plate:big?48:32,address:houseAddress(),
       plan:planFile?await toPayload(planFile,2400):undefined, photos:await Promise.all(photos.map(f=>toPayload(f))),
       credits:photos.map(f=>photoCredit.get(f)).filter(Boolean), choices:surveyChoices()};
+    if(photos.length) status('Checking your photos…');
     const res=await fetch('/api/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}), j=await res.json();
-    if(!res.ok) throw new Error(j.error||`Server error ${res.status}`);
+    if(!res.ok) throw failed(res,j);
     if(j.checkout){ status('Taking you to the secure payment page for the design fee…'); location.href=j.checkout; return; }
     watchJob(j.id,false);
-  }catch(e){ status(esc(e.message),true); setBusy(false); }
+  }catch(e){ status(esc(e.message),true,e.plain); setBusy(false); }
 }
 function watchJob(id,keep){
   jobId=id; if(!keep){ jobAfter=0; jobHave=0; } jobT0=Date.now(); setBusy(true); $('stopBtn').hidden=true;
@@ -739,10 +745,10 @@ $('surveyBtn').onclick=async()=>{
     const body={notes:$('notes').value.trim().slice(0,1500),photos:await Promise.all(photos.map(f=>toPayload(f))),address:houseAddress(),
       plate:$('bigPlate').checked?48:32,plan:planFile?await toPayload(planFile,2400):undefined};
     const res=await fetch('/api/survey',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:ctl.signal});
-    const j=await res.json(); if(!res.ok) throw new Error(j.error||`Server error ${res.status}`);
+    const j=await res.json(); if(!res.ok) throw failed(res,j);
     survey=j; renderSurvey(j);
     status(`${j.questions.length} question${j.questions.length===1?'':'s'}. The photos' best guess is picked; change any answer, then design.`);
-  }catch(e){ status(e.name==='AbortError'?'Stopped.':esc(e.message),e.name!=='AbortError'); }
+  }catch(e){ status(e.name==="AbortError"?"Stopped.":esc(e.message),e.name!=="AbortError",e.plain); }
   finally{ busyCtl=null; setBusy(false); }
 };
 
