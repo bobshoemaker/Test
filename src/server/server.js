@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { designHouse, surveyHouse, checkPhotos } = require('./designer');
 const { makePreview } = require('./preview');
+const { makeMailer, cleanEmail, readyEmail, kitEmail, mineEmail } = require('./mail');
 const { scaleFor } = require('./scale');
 const { lookupAddress, fetchMapillaryImage } = require('./lookup');
 const { lookupTerrain } = require('./terrain');
@@ -136,6 +137,8 @@ function parseDesignRequest(body) {
       .filter((c) => c && c.credit),
     plan: cleanPhotos([body.plan])[0] || null, address: cleanAddress(body.address),
     frontStreet: body.frontStreet ? String(body.frontStreet).slice(0, 100) : null,
+    // optional: where to email the design's link (jobs.js keeps it on the job, not in the design's parameters)
+    email: cleanEmail(body.email),
   };
 }
 
@@ -173,6 +176,8 @@ async function runFix(p, emit) {
 }
 
 // Design jobs, paid for through Stripe Checkout when STRIPE_SECRET_KEY is set (see jobs.js).
+// Email through Resend (mail.js): RESEND_API_KEY turns it on, BRICKHOUSE_MAIL_FROM is the sender
+const MAILER = makeMailer({ apiKey: process.env.RESEND_API_KEY, ...(process.env.BRICKHOUSE_MAIL_FROM ? { from: process.env.BRICKHOUSE_MAIL_FROM } : {}) });
 const JOBS = createJobs({
   dir: path.join(ROOT, 'designs/generated/jobs'),
   stripe: makeStripe({ secretKey: process.env.STRIPE_SECRET_KEY, ...(process.env.BRICKHOUSE_STRIPE_API ? { apiBase: process.env.BRICKHOUSE_STRIPE_API } : {}) }), // the override is for local tests
@@ -181,6 +186,11 @@ const JOBS = createJobs({
   // the kit's price by baseplate: Classic (32) and Grand (48); unset means kits aren't on sale yet
   kitCents: (plate) => Number(plate === 48 ? process.env.BRICKHOUSE_KIT_GRAND_CENTS : process.env.BRICKHOUSE_KIT_CLASSIC_CENTS) || null,
   preview: makePreview,
+  notify: async (j, kind) => {
+    if (!MAILER) return;
+    const link = `${j.origin}/app?job=${j.id}`, name = j.result && j.result.design && j.result.design.name;
+    await MAILER.send({ to: j.email, ...(kind === 'kit' ? kitEmail : readyEmail)({ name, link }) });
+  },
 });
 const originOf = (req) => `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers['x-forwarded-host'] || req.headers.host}`;
 
@@ -235,6 +245,19 @@ async function handleJobs(req, res, url) {
     }
     send(res, 405, { error: 'Method not allowed' });
   } catch (e) { send(res, 502, { error: e && e.message ? e.message : String(e) }); }
+}
+
+// POST /api/mine {email}: emails the links to the designs made with that address. The answer is the same
+// whether or not there are any, so it can't be used to learn whose email has designs.
+async function handleMine(req, res) {
+  if (!MAILER) return send(res, 503, { error: 'Email isn\'t set up on this site yet.' });
+  let email;
+  try { email = cleanEmail(JSON.parse(await readBody(req)).email); } catch (e) { return send(res, 400, { error: e.message }); }
+  if (!email) return send(res, 400, { error: 'Please enter a valid email address.' });
+  if (limited(req, 'mine', 5)) return send(res, 429, { error: 'Too many requests from here; try again in an hour.' });
+  const designs = JOBS.byEmail(email).slice(0, 20).map((d) => ({ name: d.name, link: `${d.origin || originOf(req)}/app?job=${d.id}` }));
+  if (designs.length) try { await MAILER.send({ to: email, ...mineEmail({ designs }) }); } catch (e) { console.error(`Find my designs email failed: ${e.message}`); }
+  send(res, 200, { ok: true });
 }
 
 async function handleLookup(req, res) {
@@ -297,7 +320,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, fs.readFileSync(path.join(ROOT, file)), type);
     }
     if (req.method === 'GET' && url.pathname === '/api/health') {
-      return send(res, 200, { ok: true, model: FAKE ? 'fake' : MODEL, effort: EFFORT, ready: FAKE || !!anthropicKey(), fee: JOBS.fee, maxPhotos: MAX_PHOTOS, streetPhotos: !!process.env.MAPILLARY_TOKEN, quote: !!QUOTER, cnyPerUsd: CNY_PER_USD });
+      return send(res, 200, { ok: true, model: FAKE ? 'fake' : MODEL, effort: EFFORT, ready: FAKE || !!anthropicKey(), fee: JOBS.fee, maxPhotos: MAX_PHOTOS, streetPhotos: !!process.env.MAPILLARY_TOKEN, quote: !!QUOTER, cnyPerUsd: CNY_PER_USD, mail: !!MAILER });
     }
     if (req.method === 'GET' && url.pathname === '/api/designs') return send(res, 200, listDesigns(onThisMachine(req)));
     const m = /^\/designs\/((?:generated\/)?[a-z0-9._-]+)\.json$/i.exec(url.pathname);
@@ -313,6 +336,7 @@ const server = http.createServer(async (req, res) => {
       return handleSurvey(req, res);
     }
     if (req.method === 'POST' && url.pathname === '/api/lookup') return handleLookup(req, res);
+    if (req.method === 'POST' && url.pathname === '/api/mine') return handleMine(req, res);
     if (req.method === 'POST' && url.pathname === '/api/quote') return handleQuote(req, res);
     const ph = /^\/api\/photo\/(\d{1,20})$/.exec(url.pathname);
     if (req.method === 'GET' && ph) return handlePhoto(res, ph[1]);

@@ -22,6 +22,11 @@ the Node server (it calls Claude and renders drafts in headless Chromium).
      the kit's totals); a kit order through Stripe Checkout (with their shipping address) unlocks the full guide
      and parts list. Without a Stripe key, "Order your kit" is a test order that unlocks at once, so set Stripe up
      before launch. `node scripts/orders.js` (in the Render Shell) lists kit orders to fulfill.
+   - `RESEND_API_KEY`: turns on email through Resend (resend.com): the link to each design when it's ready (to the
+     email on the form or from Stripe), a kit order's confirmation, and "find my designs" by email.
+     `BRICKHOUSE_MAIL_FROM` is the sender, for example `Brickhouse <hello@yourdomain.com>`, on a domain you've verified
+     at Resend (Domains, then add the DNS records it shows). Until then it sends from Resend's test address, which only
+     delivers to your own Resend account's email.
    - `MAPILLARY_TOKEN`: optional, for street photos from the address box.
    It also sets `BRICKHOUSE_GOBRICKS_QUOTES` (`0` turns off live GoBricks quotes on the Parts tab) and
    `BRICKHOUSE_CNY_PER_USD` (how many of GoBricks' yuan make a dollar at Brickwith, its store: about 3.5); change them

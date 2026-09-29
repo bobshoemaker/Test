@@ -155,7 +155,11 @@ closing gift that realtors give clients: a brick model of the house they just bo
   the sides we can't see get guessed, so the model won't be as accurate (not a block). The size is a choice of two cards,
   Classic and Grand, with the landing page's sizes and piece counts (`#bigPlate` is Grand). Designs made in a browser are
   remembered there (localStorage `brickhouse-designs`: job id, name, date) and listed as "Your designs" on the
-  upload page; emailing the link and a "find my designs" by email are planned (Resend suggested). `?dev=1` turns on the technical view in that browser (`?dev=0` off): the design
+  upload page. Email goes through Resend (`src/server/mail.js`, `RESEND_API_KEY`, sender `BRICKHOUSE_MAIL_FROM`
+  on a verified domain): an optional email on the form (or the one from a Stripe checkout) gets the design's link
+  once it's ready and a kit order's confirmation (jobs.js `notify`; the email is kept on the job, not in its
+  parameters), and "Made a design on another device?" (`POST /api/mine {email}`, 5 an hour) emails the links for
+  that address, answering the same either way. Without a key the email fields don't show. `?dev=1` turns on the technical view in that browser (`?dev=0` off): the design
   list (samples only, unless the server is on your own machine), checker counts and problems, connection colors, part numbers, suppliers and
   prices, the piece target and the design code editor, all marked `dev-only`; standalone copies are technical.
 - `src/viewer/`: single-page three.js (r128, CDN) viewer, at `/app`: model, manual (sub-builds shown on
