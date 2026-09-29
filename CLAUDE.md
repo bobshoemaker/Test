@@ -33,7 +33,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   textures lawn, meadow, dry) and a warning for a big open stretch of bare baseplate (about 12 ft
   square; `"lot": false` for a building alone, as most unit tests are), hints (never
   blocking) for big open stretches of plain tile, a fixture library for roofs (skylight, HVAC unit,
-  vents, solar panel, hatch, chimney), manual step grouping, and the inventory.
+  vents, solar panel, hatch, chimney), manual step grouping (one layer a step, like a big LEGO set: split evenly past
+  20 pieces, a step under 6 joins its neighbour), and the inventory.
   Parts must be easy to buy: `src/engine/parts-availability.js` (built by `scripts/availability.js`
   from Rebrickable's database downloads) says how many LEGO sets have included each part in each
   color and when; a part in a color is easy to get with 6+ sets, the latest 2018 or later. The packer
@@ -45,7 +46,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
   GoBricks' part-list matcher once about every engine part in every color (`src/server/gobricks.js`; the
   matcher takes LEGO design numbers, so the cone goes as 59900). The Parts tab shows GDS numbers and a price
   per lot, the total at catalog prices, and on the server today's price and stock (`POST /api/quote`); it
-  saves the list for GoBricks' upload tool (webrick.com), which takes BrickLink XML.
+  saves the list for the part-list upload at Brickwith (brickwith.com), GoBricks' own store, which replaced Webrick.
   Dependency-free; runs in the browser (globals) and in Node (require).
 - `src/server/prompt.js`: `SPEC`, the design language written for Claude. It is the source of
   truth for what a design may contain. When you add an op, part or field to the engine,
@@ -184,8 +185,15 @@ before changing API parameters.
   per-piece prices. Check before any real order.
 - GoBricks quotes and the catalog snapshot use the part-list matcher gobricks.cn's own site calls, not a
   documented API: ask GoBricks (support@webrick.com) before customers rely on it. Prices come back in
-  yuan (the reply names no currency), before shipping; the dollar figure uses a fixed rate. Under a
+  yuan (the reply names no currency), before shipping; the dollar figure uses what Brickwith, GoBricks' store, charged for the 634 sample
+  (¥153.07 came to $43.88, about ¥3.5 a dollar), not the exchange rate. Under a
   supplier the engine warns about what it can't get; Claude, not the engine, swaps the part or color.
+  GoBricks has no green LEGO-numbered baseplate, but makes its own thick (3.2 mm, a plate tall) green ones,
+  GDS-2237 (32 x 32) and GDS-2238 (48 x 48), with no LEGO number: a design held to GoBricks uses them (entered
+  by hand in scripts/gobricks.js with their dollar prices; the viewer draws the base a plate thick). Without
+  a LEGO number the uploaded list can't carry them, so the Parts tab says to add them at Brickwith by hand.
+  A supplier without its own baseplate gets a neutral one it sells, and the lawn op lays a full layer of grass.
+  Brickwith's part-list upload doesn't know the 1 x 2 x 3 window (60593), so the catalog leaves it out.
 - Plain bricks, plates and tiles are drawn as boxes with studs (no underside or logo). Sideways building is limited to side-stud bricks
   in wall openings with a few details hung on them (lantern, house number, plaque, vent); mounted
   parts are drawn as small blocks.

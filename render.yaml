@@ -24,8 +24,8 @@ services:
         sync: false
       - key: BRICKHOUSE_GOBRICKS_QUOTES          # 0 turns off live GoBricks quotes on the Parts tab
         value: "1"
-      - key: BRICKHOUSE_CNY_PER_USD              # yuan per dollar for the approximate dollar price
-        value: "7.2"
+      - key: BRICKHOUSE_CNY_PER_USD              # GoBricks yuan per dollar at Brickwith, its store
+        value: "3.5"
     disk:                    # keeps generated designs across deploys
       name: designs
       mountPath: /app/designs/generated

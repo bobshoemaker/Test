@@ -19,7 +19,7 @@ the Node server (it calls Claude and renders drafts in headless Chromium).
    - `BRICKHOUSE_DESIGN_FEE_CENTS`: the fee in cents (1500 = $15), credited toward the kit if you like.
    - `MAPILLARY_TOKEN`: optional, for street photos from the address box.
    It also sets `BRICKHOUSE_GOBRICKS_QUOTES` (`0` turns off live GoBricks quotes on the Parts tab) and
-   `BRICKHOUSE_CNY_PER_USD` (the yuan-to-dollar rate for the approximate dollar price); change them
+   `BRICKHOUSE_CNY_PER_USD` (how many of GoBricks' yuan make a dollar at Brickwith, its store: about 3.5); change them
    on the service's Environment tab.
 4. Apply. The first build takes a few minutes (the image includes Chromium). The site is then at
    `https://brickhouse-XXXX.onrender.com`; share that and the password.

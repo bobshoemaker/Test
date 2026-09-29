@@ -515,4 +515,23 @@ test('a design held to GoBricks uses exactly the parts and colors GoBricks makes
   assert.deepEqual(one({ supplier: 'gobricks' }).warnings, []);
   assert.match(one({}).warnings.map((w) => w.msg).join(' '), /hard to get/);
   assert.match(compile({ name: 'x', supplier: 'acme', phases: ['p'], ops: [] }).errors[0].msg, /Unknown supplier "acme"; known: gobricks/);
+  // GoBricks makes the 1 x 2 x 3 window, but its store's part-list upload doesn't know it, so it can't be ordered
+  const win = (part) => compile({ name: 'w', supplier: 'gobricks', phases: ['p'], ops: [{ op: 'walls', phase: 'p', color: 'White', courses: [0, 3], base: 0,
+    segments: [[2, 2, 9, 2]], openings: [{ cells: [4, 2, 5, 2], courses: [0, 2], fill: { part, color: 'Dark Green' } }] }] }).warnings.map((w) => w.msg);
+  assert.deepEqual(win('win22'), []);
+  assert.match(win('win23').join(' '), /Window 1 x 2 x 3 \(60593\) can't be ordered from GoBricks: use another part/);
+  // GoBricks' own thick green baseplate (no LEGO number), so the lawn is patches on green as with LEGO
+  const yard = (supplier) => compile({ name: 'y', lot: true, plate: 48, supplier, phases: ['g'], ops: [{ op: 'lawn', phase: 'g' }] });
+  const ground = (r) => new Set(r.parts.filter((q) => q.y === 0).flatMap((q) => q.occ.filter((v) => v[2] === 0).map((v) => v[0] + ',' + v[1]))).size;
+  const lego = yard(undefined), gds = yard('gobricks'), plate = gds.inventory.find((e) => e.kind === 'baseplate');
+  assert.equal(lego.stats.baseColor, 'Green'); assert.equal(lego.stats.baseThick, 0);
+  assert.deepEqual([plate.gds, plate.color, gds.stats.baseThick], ['GDS-2238-040', 'Green', 1]);
+  assert.ok(ground(gds) < 48 * 48 / 2); assert.deepEqual(gds.errors, []); assert.deepEqual(gds.warnings, []);
+  // a supplier without its own baseplate: a neutral one it sells the LEGO baseplate in, with the lawn laid over it
+  const own = G.baseplates; delete G.baseplates;
+  try {
+    const n = yard('gobricks');
+    assert.ok(supplies(G, '4186', n.stats.baseColor) && n.stats.baseColor !== 'Green', n.stats.baseColor);
+    assert.equal(ground(n), 48 * 48); assert.deepEqual(n.warnings, []);
+  } finally { G.baseplates = own; }
 });
