@@ -6,30 +6,30 @@
 <title>Brickhouse</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Jersey+10&family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
 <style>
 :root{
-  --paper:#E9EFF5; --panel:#FFFFFF; --stage:#D9E2EB; --ink:#16253A; --muted:#56677D; --line:#C5D2DE;
-  --accent:#F2B705; --accent-ink:#16253A; --good:#2F8F5B; --flag:#C8412B; --chip:#F1F5F9; --code:#F4F7FA;
+  --paper:#F7F1E8; --panel:#FFFDF9; --stage:#EFE6D8; --ink:#27211B; --muted:#6A6056; --line:#E3D7C5;
+  --accent:#B4462A; --accent-ink:#FFFFFF; --good:#2F6B45; --flag:#B4462A; --chip:#F3ECE1; --code:#FBF7F1;
   box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --paper:#0E1724; --panel:#162234; --stage:#0B131F; --ink:#E6EDF5; --muted:#92A3B8; --line:#26374E;
-    --accent:#F2B705; --accent-ink:#16253A; --good:#4DBB7F; --flag:#EE6A52; --chip:#1D2B40; --code:#111B2A; color-scheme:dark;
+    --paper:#16120E; --panel:#201A15; --stage:#2A231C; --ink:#F3ECE2; --muted:#B5A898; --line:#3A3028;
+    --accent:#E0714F; --accent-ink:#1B120C; --good:#7FB894; --flag:#EE6A52; --chip:#2A221B; --code:#1C1712; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
-  --paper:#0E1724; --panel:#162234; --stage:#0B131F; --ink:#E6EDF5; --muted:#92A3B8; --line:#26374E;
-  --accent:#F2B705; --accent-ink:#16253A; --good:#4DBB7F; --flag:#EE6A52; --chip:#1D2B40; --code:#111B2A; color-scheme:dark;
+  --paper:#16120E; --panel:#201A15; --stage:#2A231C; --ink:#F3ECE2; --muted:#B5A898; --line:#3A3028;
+  --accent:#E0714F; --accent-ink:#1B120C; --good:#7FB894; --flag:#EE6A52; --chip:#2A221B; --code:#1C1712; color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:inherit}
 html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
 .wrap{max-width:1240px;margin:0 auto;padding:16px 16px 40px}
 header{margin-bottom:12px}
-h1{margin:0;font-weight:800;font-stretch:112%;font-size:clamp(26px,5.2vw,40px);line-height:1.04;letter-spacing:-.01em}
+h1{margin:0;font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;font-size:clamp(40px,6vw,60px);line-height:1;letter-spacing:0}
 .sub{margin:4px 0 10px;color:var(--muted);font-size:15px;max-width:64ch}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chips span{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:3px 10px;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
@@ -52,7 +52,7 @@ canvas:active{cursor:grabbing}
 .bar{flex:0 0 26%;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
 .bar i{display:block;height:100%;width:0;background:var(--accent)}
 button,select,input,textarea{font:inherit;color:inherit}
-.btn{white-space:nowrap;border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:8px 12px;font-size:14px;font-weight:600;cursor:pointer}
+.btn{white-space:nowrap;border:1.5px solid var(--line);background:var(--panel);border-radius:999px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer}
 .btn.sm{padding:5px 10px;font-size:13px}
 .btn:hover{border-color:var(--muted)}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
@@ -69,7 +69,7 @@ button,select,input,textarea{font:inherit;color:inherit}
 .big b{font-size:30px;font-weight:800;font-stretch:84%;line-height:1;font-variant-numeric:tabular-nums}
 .big span{font-size:13px;color:var(--muted);margin-top:4px}
 .big .ok b{color:var(--good)} .big .bad b{color:var(--flag)}
-h2{font-size:16px;font-weight:700;margin:18px 0 6px}
+h2{font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;font-size:27px;line-height:1.05;margin:20px 0 6px}
 ul.facts{margin:0;padding-left:18px;font-size:15px}
 ul.facts li{margin:2px 0}
 .note{color:var(--muted);font-size:14px;margin:8px 0 0;max-width:62ch}
@@ -80,7 +80,7 @@ ul.facts li{margin:2px 0}
 .legend{display:flex;gap:12px;font-size:13px;color:var(--muted);margin-top:6px;flex-wrap:wrap}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 .stephead{display:flex;gap:14px;align-items:center}
-.stepnum{flex:none;min-width:76px;height:76px;padding:0 8px;border-radius:12px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:800;font-stretch:78%;font-size:44px;line-height:1;font-variant-numeric:tabular-nums}
+.stepnum{flex:none;min-width:76px;height:76px;padding:0 8px;border-radius:12px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-family:"Jersey 10","Archivo",sans-serif;font-weight:400;font-size:50px;line-height:1;font-variant-numeric:tabular-nums}
 .steptitle{font-size:19px;font-weight:700;margin:0}
 .stepof{color:var(--muted);font-size:14px;margin:2px 0 0}
 .subtag[hidden]{display:none}
@@ -102,7 +102,7 @@ td.yuan{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 textarea.code{width:100%;height:420px;margin-top:10px;background:var(--code);color:var(--ink);border:1px solid var(--line);border-radius:10px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;padding:10px;white-space:pre;overflow:auto;tab-size:2}
 textarea.xml{width:100%;height:140px;margin-top:10px;background:var(--code);color:var(--ink);border:1px solid var(--line);border-radius:8px;font-size:12px;padding:8px}
 .out{font-size:14px;margin-top:10px}
-.card{border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--chip);margin-bottom:6px}
+.card{border:1px solid var(--line);border-radius:20px;padding:18px;background:var(--panel);margin-bottom:6px}
 .photos{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .photos img{width:76px;height:76px;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
 .target{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--muted)}
@@ -127,11 +127,20 @@ textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-ra
 .cand span{display:block;padding:4px 6px;font-size:12px;color:var(--muted);line-height:1.3}
 .credits{font-size:12px;color:var(--muted);margin:6px 0 0;padding-left:18px}
 .credits a{color:inherit}
-.home{display:inline-block;margin-bottom:6px;font-weight:800;font-stretch:112%;font-size:15px;text-decoration:none;color:var(--muted)}
+.home{display:inline-flex;align-items:center;gap:9px;margin-bottom:14px;font-family:"Jersey 10","Archivo",sans-serif;font-size:26px;text-decoration:none;color:var(--ink)}
 .home:hover{color:var(--ink)} .home[hidden]{display:none}
-.home::before{content:"\2190\00a0"}
+
 .pick{display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-size:14px;color:var(--muted)}
 .pick select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
+[hidden]{display:none!important}
+.seg:has(> button[hidden]:only-child){display:none} /* no "Lift roof" frame without a lift-off roof */
+input[type=checkbox],input[type=radio]{accent-color:var(--accent)}
+.target input[type=checkbox]{width:auto;padding:0}
+.big b{font-family:"Jersey 10","Archivo",sans-serif;font-weight:400;font-size:40px}
+/* the technical view (?dev=1): customers don't see these */
+html:not(.dev) .dev-only{display:none!important}
+.stage{border-radius:22px}
+.panel{border-radius:22px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 /* ?hero=1: only the model, filling the frame (the landing page's live picture) */
 html.hero,html.hero body{background:transparent;overflow:hidden}
@@ -147,11 +156,11 @@ html.hero canvas:active{cursor:grabbing}
 <body>
 <div class="wrap">
   <header>
-    <a class="home" id="homeLink" href="/">Brickhouse</a>
+    <a class="home" id="homeLink" href="/"><svg width="26" height="24" viewBox="0 0 30 28" aria-hidden="true"><path d="M3 13 15 3l12 10v13H3z" fill="#B4462A"/><rect x="7" y="0.5" width="5" height="4" rx="1.2" fill="#B4462A"/><rect x="11.5" y="16" width="7" height="10" rx="1" fill="#F7F1E8"/></svg>Brickhouse</a>
     <h1 id="title">Loading…</h1>
     <p class="sub" id="subline"></p>
     <div class="chips" id="chips"></div>
-    <label class="pick" id="pickWrap" hidden>Design <select id="designPick"></select></label>
+    <label class="pick dev-only" id="pickWrap" hidden>Design <select id="designPick"></select></label>
   </header>
   <div class="grid">
     <div class="stagecol">
@@ -175,29 +184,29 @@ html.hero canvas:active{cursor:grabbing}
     <div class="panel">
       <div class="tabs" role="tablist">
         <button role="tab" aria-selected="true" data-tab="model">Model</button>
-        <button role="tab" aria-selected="false" data-tab="manual">Manual</button>
-        <button role="tab" aria-selected="false" data-tab="parts">Parts</button>
-        <button role="tab" aria-selected="false" data-tab="design">Design</button>
+        <button role="tab" aria-selected="false" data-tab="manual">Guide</button>
+        <button role="tab" aria-selected="false" data-tab="parts">Kit</button>
+        <button role="tab" aria-selected="false" data-tab="design">Make yours</button>
       </div>
       <section class="pane" id="pane-model">
         <div class="big">
           <div><b id="sPieces">0</b><span>pieces</span></div>
           <div><b id="sSteps">0</b><span>steps</span></div>
-          <div><b id="sPages">0</b><span>manual pages</span></div>
-          <div><b id="sMs">0</b><span>compile</span></div>
-          <div id="sErr"><b>0</b><span>errors</span></div>
-          <div id="sWarn"><b>0</b><span>warnings</span></div>
+          <div><b id="sPages">0</b><span>guide pages</span></div>
+          <div class="dev-only"><b id="sMs">0</b><span>compile</span></div>
+          <div id="sErr" class="dev-only"><b>0</b><span>errors</span></div>
+          <div id="sWarn" class="dev-only"><b>0</b><span>warnings</span></div>
         </div>
         <p class="note" id="verdict" style="margin-top:0;color:var(--ink)"></p>
-        <ul class="problems" id="problems"></ul>
+        <ul class="problems dev-only" id="problems"></ul>
         <div id="refWrap" hidden><h2>Your photos</h2><div class="photos" id="refPhotos"></div></div>
         <ul class="credits" id="credits" hidden></ul>
-        <h2 id="factsTitle">From the listing</h2>
+        <h2 id="factsTitle">What we saw in your photos</h2>
         <ul class="facts" id="facts"></ul>
-        <h2>Assumed</h2>
+        <h2>What we filled in</h2>
         <p class="note" style="margin-top:0" id="assumed"></p>
-        <label class="toggle"><input type="checkbox" id="stress"> Color by connection strength</label>
-        <div class="legend"><span><i style="background:#D64B34"></i>under 0.5 joints per stud</span><span><i style="background:#E8A93A"></i>0.5 to 1</span><span><i style="background:#3E9E68"></i>1 or more</span></div>
+        <label class="toggle dev-only"><input type="checkbox" id="stress"> Color by connection strength</label>
+        <div class="legend dev-only"><span><i style="background:#D64B34"></i>under 0.5 joints per stud</span><span><i style="background:#E8A93A"></i>0.5 to 1</span><span><i style="background:#3E9E68"></i>1 or more</span></div>
       </section>
       <section class="pane" id="pane-manual" hidden>
         <div class="stephead">
@@ -214,21 +223,22 @@ html.hero canvas:active{cursor:grabbing}
       </section>
       <section class="pane" id="pane-parts" hidden>
         <div class="big" style="grid-template-columns:repeat(2,1fr)">
-          <div><b id="pLots">0</b><span>lots to source</span></div>
+          <div><b id="pLots">0</b><span>kinds of piece</span></div>
           <div><b id="pPieces">0</b><span>pieces</span></div>
-          <div><b id="pCost">$0</b><span>rough LEGO parts cost</span></div>
-          <div id="pGdsBox" hidden><b id="pGds">¥0</b><span id="pGdsLabel">at GoBricks</span></div>
+          <div class="dev-only"><b id="pCost">$0</b><span>rough LEGO parts cost</span></div>
+          <div id="pGdsBox" class="dev-only" hidden><b id="pGds">¥0</b><span id="pGdsLabel">at GoBricks</span></div>
         </div>
-        <div class="row" style="margin-top:0"><button class="btn primary" id="copyXml">Copy BrickLink wanted list</button><button class="btn" id="gdsOrder">Order from GoBricks</button></div>
-        <p class="note" id="gdsNote" hidden></p>
-        <textarea class="xml" id="xmlOut" hidden readonly aria-label="BrickLink wanted list XML"></textarea>
-        <div class="tablewrap"><table><thead><tr><th></th><th>Part</th><th>No.</th><th>Color</th><th style="text-align:right">Qty</th><th style="text-align:right" id="gdsHead">GoBricks</th></tr></thead><tbody id="partsBody"></tbody></table></div>
-        <p class="note">The LEGO cost uses placeholder per-piece prices by part type; paste the wanted list into BrickLink for real quotes. GoBricks prices are in yuan, before shipping.</p>
-        <p class="note">Part shapes (plants, slopes, rounds, windows, arches, fence): <a href="https://library.ldraw.org" target="_blank" rel="noopener">LDraw Parts Library</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>; part authors are listed in ldraw-parts.js. LEGO is a trademark of the LEGO Group, which does not sponsor or endorse this site.</p>
+        <p class="note kitnote" style="margin-top:0;color:var(--ink)">Everything below comes in your kit.</p>
+        <div class="row dev-only" style="margin-top:0"><button class="btn primary" id="copyXml">Copy BrickLink wanted list</button><button class="btn" id="gdsOrder">Order from GoBricks</button></div>
+        <p class="note dev-only" id="gdsNote" hidden></p>
+        <textarea class="xml dev-only" id="xmlOut" hidden readonly aria-label="BrickLink wanted list XML"></textarea>
+        <div class="tablewrap"><table><thead><tr><th></th><th>Piece</th><th class="dev-only">No.</th><th>Color</th><th style="text-align:right">Qty</th><th style="text-align:right" id="gdsHead" class="dev-only">GoBricks</th></tr></thead><tbody id="partsBody"></tbody></table></div>
+        <p class="note dev-only">The LEGO cost uses placeholder per-piece prices by part type; paste the wanted list into BrickLink for real quotes. GoBricks prices are in yuan, before shipping.</p>
+        <p class="note">Part shapes (plants, slopes, rounds, windows, arches, fence): <a href="https://library.ldraw.org" target="_blank" rel="noopener">LDraw Parts Library</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>; part authors are credited in <a href="/viewer/ldraw-parts.js" target="_blank" rel="noopener">the part files</a>. LEGO is a trademark of the LEGO Group, which does not sponsor or endorse this site.</p>
       </section>
       <section class="pane" id="pane-design" hidden>
         <div class="card">
-          <h2 style="margin-top:0">Design from photos</h2>
+          <h2 style="margin-top:0">Make your house</h2>
           <p class="note" style="margin-top:0;color:var(--ink)" id="photoIntro">Checking for the design server…</p>
           <div id="photoControls" hidden>
             <form class="addr" id="addrForm"><input id="addrInput" type="text" autocomplete="street-address" placeholder="House address, e.g. 634 Main St, Springfield, IL" aria-label="House address"><button class="btn" id="addrBtn" type="submit">Find photos</button></form>
@@ -237,21 +247,23 @@ html.hero canvas:active{cursor:grabbing}
             <div class="row" id="candRow" hidden><button class="btn" id="useCands">Add selected photos</button></div>
             <div class="row" id="pickRow"><button class="btn" id="pickBtn">Choose photos</button><input type="file" id="photoInput" multiple hidden>
               <button class="btn" id="planBtn" type="button">Add floor plan</button><input type="file" id="planInput" accept="image/jpeg,image/png,image/webp" hidden>
-              <label class="target">About <input type="number" id="target" value="1200" min="300" max="2500" step="50" inputmode="numeric"> pieces</label>
-              <label class="target"><input type="checkbox" id="bigPlate"> Larger model (48 × 48, about 2,400 pieces)</label></div>
+              <label class="target dev-only">About <input type="number" id="target" value="1200" min="300" max="2500" step="50" inputmode="numeric"> pieces</label>
+              <label class="target"><input type="checkbox" id="bigPlate"> Grand size: a 15 in base with room for the yard (Classic is 10 in)</label></div>
             <div class="out" id="planStatus"></div>
             <div class="photos" id="thumbs"></div>
             <textarea class="notes" id="notes" rows="2" placeholder="Anything the photos don't show, like the roof color or which side the garage is on"></textarea>
             <div class="survey" id="survey" hidden></div>
-            <div class="row"><button class="btn" id="surveyBtn">Check the photos first</button><button class="btn primary" id="designBtn">Design from photos</button><button class="btn" id="stopBtn" hidden>Stop</button><button class="btn" id="lastBtn" hidden>Load last photo design</button></div>
+            <div class="row"><button class="btn" id="surveyBtn">Check my photos first</button><button class="btn primary" id="designBtn">Design from photos</button><button class="btn" id="stopBtn" hidden>Stop</button><button class="btn" id="lastBtn" hidden>Show my last design</button></div>
             <div class="out" id="photoStatus" aria-live="polite"></div>
           </div>
         </div>
+        <div class="dev-only">
         <h2>Design code</h2>
         <p class="note" style="margin-top:0;color:var(--ink)">The engine turns this into parts, checks every stud joint in build order, and writes the manual. Edit it and compile to see what breaks.</p>
         <div class="row"><button class="btn primary" id="compileBtn">Compile</button><button class="btn" id="revertBtn">Undo edits</button></div>
         <div class="out" id="compileOut"></div>
         <textarea class="code" id="designSrc" spellcheck="false" aria-label="Design source"></textarea>
+        </div>
       </section>
     </div>
   </div>

@@ -8,6 +8,12 @@ const $=id=>document.getElementById(id);
 const HERO_MODE=new URLSearchParams(location.search).get('hero')||(window.BRICKHOUSE_HERO===true?'1':window.BRICKHOUSE_HERO||null);
 const HERO=HERO_MODE==='1'||HERO_MODE==='build', BUILD=HERO_MODE==='build';
 if(HERO) document.documentElement.classList.add('hero');
+// ?dev=1 shows the technical view (design list, checker counts, part numbers, suppliers, design code) and
+// remembers it in this browser (?dev=0 forgets it); standalone copies are technical. Customers see neither.
+const DEV=!HERO&&(()=>{ const q=new URLSearchParams(location.search).get('dev');
+  try{ if(q==='1') localStorage.setItem('brickhouse-dev','1'); if(q==='0') localStorage.removeItem('brickhouse-dev'); if(localStorage.getItem('brickhouse-dev')==='1') return true; }catch(e){ if(q==='1') return true; }
+  return !!document.getElementById('designJson'); })();
+if(DEV) document.documentElement.classList.add('dev');
 const canvas=$('cv'), stage=$('stage');
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:HERO});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
@@ -489,7 +495,7 @@ function renderParts(){
   const priceCell=r=>{ const p=each(r); if(p!=null) return `<span title="${yuan(p)} each">${yuan(p*r.q)}</span>`;
     return oos.has(K(r))?'out of stock':r.kind==='baseplate'?'not sold':'—'; };
   $('gdsHead').hidden=!GB;
-  $('partsBody').innerHTML=rows.map(r=>`<tr><td><span class="sw" style="background:${COLORS[r.color].hex}"></span></td><td>${r.name}</td><td>${r.no}${GB?`<small class="gds" title="GoBricks part number">${gdsNo(r)}</small>`:''}</td><td>${r.color}</td><td class="n">${r.q}</td>${GB?`<td class="yuan">${priceCell(r)}</td>`:''}</tr>`).join('');
+  $('partsBody').innerHTML=rows.map(r=>`<tr><td><span class="sw" style="background:${COLORS[r.color].hex}"></span></td><td>${r.name}</td><td class="dev-only">${r.no}${GB?`<small class="gds" title="GoBricks part number">${gdsNo(r)}</small>`:''}</td><td>${r.color}</td><td class="n">${r.q}</td>${GB?`<td class="yuan dev-only">${priceCell(r)}</td>`:''}</tr>`).join('');
   $('gdsOrder').hidden=!GB; $('gdsNote').hidden=!GB; $('pGdsBox').hidden=!GB;
   if(GB){
     const gap=rows.filter(r=>r.kind!=='baseplate'&&!supplierNo(GB,r.no,r.color)), gp=gap.reduce((n,r)=>n+r.q,0);
@@ -528,11 +534,14 @@ function renderReport(){
   const st=R.stats;
   $('sPieces').textContent=st.pieces.toLocaleString(); $('sSteps').textContent=st.steps; $('sPages').textContent=st.pages; $('sMs').textContent=(st.ms/1000).toFixed(2)+' s';
   const e=$('sErr'), w=$('sWarn'); e.querySelector('b').textContent=R.errors.length+(R.errors.length?'':' ✓'); w.querySelector('b').textContent=R.warnings.length+(R.warnings.length?'':' ✓');
-  e.className=R.errors.length?'bad':'ok'; w.className=R.warnings.length?'bad':'ok';
-  $('verdict').textContent=R.errors.length?`${R.errors.length} problem${R.errors.length>1?'s':''} to fix before this can ship.`:`Every piece locks to the baseplate through ${st.joints.toLocaleString()} stud joints, checked in build order.`;
+  e.classList.toggle('bad',!!R.errors.length); e.classList.toggle('ok',!R.errors.length); w.classList.toggle('bad',!!R.warnings.length); w.classList.toggle('ok',!R.warnings.length);
+  $('verdict').textContent=R.errors.length?(DEV?`${R.errors.length} problem${R.errors.length>1?'s':''} to fix before this can ship.`:'We\'re still finishing a few details of this design.')
+    :DEV?`Every piece locks to the baseplate through ${st.joints.toLocaleString()} stud joints, checked in build order.`
+    :`Checked brick by brick: all ${st.joints.toLocaleString()} connections hold, in the order you'll build it.`;
   const list=[...R.errors.map(x=>['e',x]),...R.warnings.map(x=>['w',x])].slice(0,12);
   $('problems').innerHTML=list.map(([t,x])=>`<li class="${t}">${x.msg}${x.op!=null?` (design step ${x.op+1})`:''}</li>`).join('');
-  $('chips').innerHTML=`<span><b>${st.pieces.toLocaleString()}</b>pieces</span><span><b>${st.steps}</b>steps</span><span><b>${st.subBuilds}</b>sub-builds</span><span><b>${PLATE}×${PLATE}</b>studs</span><span><b>$${Math.round(st.cost)}</b>parts</span>`;
+  $('chips').innerHTML=`<span><b>${st.pieces.toLocaleString()}</b>pieces</span><span><b>${st.steps}</b>steps</span><span><b>${PLATE>32?'Grand':'Classic'}</b>size</span>`
+    +(DEV?`<span><b>${st.subBuilds}</b>sub-builds</span><span><b>${PLATE}×${PLATE}</b>studs</span><span><b>$${Math.round(st.cost)}</b>parts</span>`:'');
 }
 $('stress').onchange=e=>{ stress=e.target.checked; applyState(); };
 
@@ -543,8 +552,8 @@ function showDesign(d){
   curDesign=d; R=compile(d); lifted=0; $('lift').hidden=!(R.stats.liftoff&&R.stats.liftoff.length); $('lift').textContent=liftLabel(); $('lift').setAttribute('aria-pressed','false'); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,R.stats.baseThick?PH/0.14:1,PLATE/32); base.position.y=R.stats.baseThick?-PH/2:-0.07; base.material.color.copy(lin(COLORS[R.stats.baseColor||'Green'].hex)); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
   buildScene(); renderReport(); renderParts(); renderStep(); frame();
   $('title').textContent=d.name||'Brick house'; document.title=(d.name||'Brick house')+', brick model';
-  $('subline').textContent=(d.place?d.place+'. ':'')+(d.unit?`Unit ${d.unit}, cut from its building. `:'')+'A closing-gift brick model with a full build manual.';
-  $('factsTitle').textContent=d.source==='photos'?'What the photos show':'From the listing';
+  $('subline').textContent=(d.place?d.place+'. ':'')+(d.unit?`Unit ${d.unit}, cut from its building. `:'')+'A brick model with a step-by-step building guide.';
+  $('factsTitle').textContent='What we saw in the photos';
   $('facts').innerHTML=(d.facts||[]).map(f=>`<li>${esc(f)}</li>`).join('');
   $('assumed').textContent=d.assumed||'';
   const cr=d.photoCredits||[]; $('credits').hidden=!cr.length;
@@ -665,7 +674,8 @@ async function askServer(mode){
 function watchJob(id,keep){
   jobId=id; if(!keep){ jobAfter=0; jobHave=0; } jobT0=Date.now(); setBusy(true); $('stopBtn').hidden=true;
   try{ history.replaceState(null,'','?job='+id); }catch(e){}
-  status('Claude is studying the photos. This usually takes 15 to 25 minutes; you can close this page and come back with the same address.');
+  status(DEV?'Claude is studying the photos. This usually takes 15 to 25 minutes; you can close this page and come back with the same address.'
+    :'We\'re designing your house from the photos. It takes a while to get right; you can close this page and come back to this link any time.');
   pollJob();
 }
 async function pollJob(){
@@ -682,6 +692,15 @@ async function pollJob(){
 }
 function handleEvent(ev,t0){
   const secs=()=>Math.round((Date.now()-t0)/1000);
+  if(!DEV){ // the customer's view: what we're working on, not how
+    if(ev.type==='part') status(`Designing your house: ${esc(String(ev.name).toLowerCase())} (${ev.n} of ${ev.of})…`);
+    else if(ev.type==='draft') status('Checking every brick and refining the details…');
+    else if(ev.type==='done'&&ev.design){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; run(t); DESIGN_TEXT=t;
+      status((ev.errors||ev.warnings)?'Almost there: a few details still need finishing. <button class="btn sm primary" id="fixBtn">Finish the design</button>'
+        :'Your house is ready. Turn it around, then open the building guide to see how it goes together.');
+      const fb=$('fixBtn'); if(fb) fb.onclick=()=>askServer('fix'); }
+    else if(ev.type==='error') status('Something went wrong on our side. Please try again in a little while.',true);
+    return; }
   if(ev.type==='status') status(`${esc(ev.message)} <span style="color:var(--muted)">${secs()} s</span>`);
   else if(ev.type==='part') status(`Building part ${ev.n} of ${ev.of}: ${esc(ev.name)}… <span style="color:var(--muted)">${secs()} s</span>`);
   else if(ev.type==='draft') status(`Draft ${ev.n} compiled: ${ev.stats.pieces.toLocaleString()} pieces, ${ev.errors} errors, ${ev.warnings} warnings. Claude is revising… <span style="color:var(--muted)">${secs()} s</span>`);
@@ -757,10 +776,12 @@ async function boot(){
   if(embedded){ $('homeLink').hidden=true; $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }
   try{ health=await (await fetch('/api/health')).json(); }catch(e){ health=null; }
   loadDesignList();
-  if(!health){ $('photoIntro').textContent='Start the server with npm start to design from photos.'; return; }
-  if(!health.ready){ $('photoIntro').textContent='Add BRICKHOUSE_ANTHROPIC_API_KEY to .env and restart the server to design from photos (or run with BRICKHOUSE_FAKE=1 to try the flow).'; return; }
-  $('photoControls').hidden=false;
-  $('photoIntro').textContent=`Enter the address to find street photos${health.streetPhotos?'':' (needs MAPILLARY_TOKEN)'}, or pick up to ${health.maxPhotos} exterior photos, front first, then each side, the back, the garage and any yard or patio: Claude builds only what a photo, the floor plan or your notes show, so a side no photo shows gets guessed. Claude (${health.model}) studies them, writes a design, compiles it here, fixes what the checker flags, and saves it.`;
+  const closed='Designing new houses isn\'t open just yet. Please check back soon.';
+  if(!health){ $('photoIntro').textContent=DEV?'Start the server with npm start to design from photos.':closed; return; }
+  if(!health.ready){ $('photoIntro').textContent=DEV?'Add BRICKHOUSE_ANTHROPIC_API_KEY to .env and restart the server to design from photos (or run with BRICKHOUSE_FAKE=1 to try the flow).':closed; return; }
+  $('photoControls').hidden=false; if(!DEV&&!health.streetPhotos) $('addrForm').hidden=true;
+  $('photoIntro').textContent=DEV?`Enter the address to find street photos${health.streetPhotos?'':' (needs MAPILLARY_TOKEN)'}, or pick up to ${health.maxPhotos} exterior photos, front first, then each side, the back, the garage and any yard or patio: Claude builds only what a photo, the floor plan or your notes show, so a side no photo shows gets guessed. Claude (${health.model}) studies them, writes a design, compiles it here, fixes what the checker flags, and saves it.`
+    :`Add photos of the outside of the house: the front first, then the sides, the back and the garage if you have them (up to ${health.maxPhotos}). ${health.streetPhotos?'Or enter the address and we\'ll look for street photos. ':''}A floor plan helps us get the walls just right, and anything the photos don't show, you can tell us below.`;
   renderThumbs();
   // Back from Stripe (?job=…&session=…): confirm the payment and start the design; ?job=… alone
   // picks up a design in progress or finished.

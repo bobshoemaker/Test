@@ -122,6 +122,10 @@ closing gift that realtors give clients: a brick model of the house they just bo
   crossfades with its still picture (`hero-house.png`, the same view). `?hero=build` plays the building guide in a
   loop (the "Everything you need" section, `634-unit-a`, still `build-house.png`), loaded as it scrolls near, paused
   offscreen, posting its step to the page. Neither loads with reduced motion.
+- The app at `/app` is consumer-facing in the home page's theme (warm palette, Jersey 10 headings, pill buttons;
+  tabs Model, Guide, Kit, Make yours). `?dev=1` turns on the technical view in that browser (`?dev=0` off): the design
+  list (it lists every customer's house), checker counts and problems, connection colors, part numbers, suppliers and
+  prices, the piece target and the design code editor, all marked `dev-only`; standalone copies are technical.
 - `src/viewer/`: single-page three.js (r128, CDN) viewer, at `/app`: model, manual (sub-builds shown on
   their own), parts and BrickLink XML, design editor, photo upload, and "Lift roof" for designs
   whose roof ops carry `"liftoff"` (floors show underneath; the rooms too when there was a plan).
