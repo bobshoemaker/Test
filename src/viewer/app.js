@@ -636,6 +636,8 @@ function fewPhotosNote(){ const n=photos.length, el=$('fewPhotos'), described=$(
   el.textContent=!n?'Without photos, the model is built from your description alone, so it will only be a rough likeness. Photos of the house make it far more accurate.'
     :`With only ${n} photo${n>1?'s':''}, we'll have to guess what the ${n>1?'other sides':'sides and back'} of the house look like, so the model won't be as accurate. Add photos of the sides, the back and the garage if you can (up to ${(health&&health.maxPhotos)||12}).`; }
 $('notes').addEventListener('input',fewPhotosNote);
+// the notes are kept short (the server holds them to 500 characters too)
+$('notes').addEventListener('input',()=>{ const n=$('notes').value.length; $('notesCount').textContent=`${n} / 500`; });
 function renderThumbs(){
   photoUrls.forEach(u=>URL.revokeObjectURL(u)); photoUrls=photos.map(f=>URL.createObjectURL(f));
   const html=photoUrls.map((u,i)=>`<img src="${u}" alt="House photo ${i+1}">`).join('');
@@ -659,7 +661,7 @@ let planFile=null;
 $('planBtn').onclick=()=>$('planInput').click();
 $('planInput').onchange=e=>{ planFile=e.target.files[0]||null; e.target.value='';
   $('planStatus').textContent=planFile?`Floor plan: ${planFile.name}. The walls will follow it.`:''; $('planBtn').textContent=planFile?'Change floor plan':'Add floor plan'; };
-const houseAddress=()=>$('addrInput').value.trim().slice(0,300)||undefined; // the server adds its building, street and slope facts
+const houseAddress=()=>$('addrInput').value.trim().slice(0,200)||undefined; // the server adds its building, street and slope facts
 $('photoInput').accept='image/jpeg,image/png,image/webp';
 // photos add up across picks (the same file twice counts once); click a thumbnail to remove it
 $('photoInput').onchange=e=>{ const max=(health&&health.maxPhotos)||12, same=(a,b)=>a.name===b.name&&a.size===b.size;
@@ -720,6 +722,7 @@ async function askServer(mode){
     }
     const notes=$('notes').value.trim().slice(0,1500), target=Math.max(300,Math.min(2500,+$('target').value||1200));
     if(!photos.length&&!notes){ status('Add at least one photo or a short description first.',true); return; }
+    if(!houseAddress()){ status('Please enter the house\'s address.',true,true); $('addrInput').focus(); return; }
     setBusy(true); status('Preparing photos…');
     const big=$('bigPlate').checked;
     const body={notes,target:big?Math.max(target,2400):target,plate:big?48:32,address:houseAddress(),email:$('emailInput').value.trim()||undefined,

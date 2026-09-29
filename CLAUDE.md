@@ -127,7 +127,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   and each customer sees theirs through its job link. `GET /api/jobs/<id>/photos/<n>` serves a job's own photos (as private
   as its link), shown under "Your photos" on the Model tab and full size on a tap. Neither page zooms on phones
   (viewport, `touch-action: manipulation`, 16px inputs, Safari's pinch stopped); the model's own pinch still works. The upload page and the home page's questions promise that we
-  use photos and address only for the model and kit, never sell them or share them for advertising: keep it true. There is no unpaid design endpoint. Before the kit is ordered a customer sees a preview, not the design (`src/server/preview.js`,
+  use photos and address only for the model and kit, never sell them or share them for advertising: keep it true. There is no unpaid design endpoint. The intake's free text is cleaned on the server (`cleanText`: no control characters, one line,
+  no double quotes) and limited, matching the form: notes 500 characters, address 200 (required, `cleanAddress`),
+  survey answers 200, email 254; the task quotes the notes and says they're facts about the house, never instructions. Before the kit is ordered a customer sees a preview, not the design (`src/server/preview.js`,
   served by `GET /api/jobs/<id>` unless the job has a kit order or the request is from the server's own machine): the
   whole model with plain bricks, plates and tiles merged into made-up blocks, special parts as themselves, the first 3
   guide steps, and the Kit tab's totals and colors, no list. `POST /api/jobs/<id>/kit` orders the kit (Stripe Checkout
