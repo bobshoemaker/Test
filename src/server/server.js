@@ -204,14 +204,7 @@ async function handleJobs(req, res, url) {
 async function handleLookup(req, res) {
   let body;
   try { body = JSON.parse(await readBody(req)); } catch (e) { return send(res, 400, { error: e.message }); }
-  try {
-    const r = await lookupAddress(body.address);
-    // Street and slope, best effort: a lookup still works when the elevation or street service is down.
-    if (r.place) {
-      try { const t = await lookupTerrain(r.place, body.address, { plate: body.plate }); r.terrain = { note: t.note, streets: t.frontage.map((f) => f.name), building: t.building && { areaSqFt: t.building.areaSqFt, tags: t.building.tags }, analysis: t.analysis }; } catch (e) { r.notes = [...(r.notes || []), `No terrain: ${e.message}`]; }
-    }
-    send(res, 200, r);
-  } catch (e) { send(res, 502, { error: e.message }); }
+  try { send(res, 200, await lookupAddress(body.address)); } catch (e) { send(res, 502, { error: e.message }); }
 }
 
 // GoBricks quotes come from its part-list matcher, which isn't a documented API (see gobricks.js):

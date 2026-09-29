@@ -605,7 +605,7 @@ let planFile=null;
 $('planBtn').onclick=()=>$('planInput').click();
 $('planInput').onchange=e=>{ planFile=e.target.files[0]||null; e.target.value='';
   $('planStatus').textContent=planFile?`Floor plan: ${planFile.name}. The walls will follow it.`:''; $('planBtn').textContent=planFile?'Change floor plan':'Add floor plan'; };
-let lookedUp=''; // the address the last lookup found; the server adds its building, street and slope facts
+const houseAddress=()=>$('addrInput').value.trim().slice(0,300)||undefined; // the server adds its building, street and slope facts
 $('photoInput').accept='image/jpeg,image/png,image/webp';
 // photos add up across picks (the same file twice counts once); click a thumbnail to remove it
 $('photoInput').onchange=e=>{ const max=(health&&health.maxPhotos)||12, same=(a,b)=>a.name===b.name&&a.size===b.size;
@@ -618,20 +618,20 @@ $('thumbs').onclick=e=>{ const i=e.target&&e.target.dataset&&e.target.dataset.i;
 // ---------- address lookup: POST /api/lookup, then pick candidate street photos ----------
 let cands=[];
 function addrStatus(html,err){ $('addrStatus').innerHTML=err?`<span class="status-err">${html}</span>`:html; }
+// The address goes with the design (the server finds the outline and slope then). The dev view can also
+// look for street photos of it (Mapillary, with MAPILLARY_TOKEN).
 $('addrForm').onsubmit=async e=>{
-  e.preventDefault(); const address=$('addrInput').value.trim(); if(!address) return;
+  e.preventDefault(); const address=$('addrInput').value.trim(); if(!address||!DEV||$('addrBtn').hidden) return;
   $('addrBtn').disabled=true; cands=[]; $('cands').innerHTML=''; $('candRow').hidden=true; addrStatus('Looking up the address…');
   try{
     const res=await fetch('/api/lookup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({address})});
     const j=await res.json(); if(!res.ok) throw new Error(j.error||`Server error ${res.status}`);
     cands=j.photos.map(p=>({...p,on:false}));
-    const where=j.place?`Found ${esc(j.place.label)} (${j.place.precision==='building'?'building':'street'} match, ${esc(j.place.source)}).`:'';
-    addrStatus([where,...j.notes.map(esc)].filter(Boolean).join(' ')+(cands.length?` Tap the photos that show this house, front first.`:''));
+    const where=j.place?`Found ${esc(j.place.label)} (${j.place.precision==='building'?'building':'street'} match, ${esc(j.place.source)}).`:'No match for that address.';
+    addrStatus([where,...j.notes.map(esc)].join(' ')+(cands.length?' Tap the photos that show this house, front first.':''));
     $('cands').innerHTML=cands.map((c,i)=>`<button type="button" class="cand" data-i="${i}" aria-pressed="false"><img loading="lazy" src="${esc(c.thumb&&/^https:\/\//.test(c.thumb)?c.thumb:'/api/photo/'+c.id)}" alt="Street photo ${i+1}"><span>${c.distanceM} m away${c.capturedAt?', '+esc(c.capturedAt):''}<br>${esc(c.credit)}</span></button>`).join('');
     $('cands').querySelectorAll('.cand').forEach(b=>b.onclick=()=>{ const c=cands[+b.dataset.i]; c.on=!c.on; b.setAttribute('aria-pressed',c.on); });
     $('candRow').hidden=!cands.length;
-    lookedUp=j.place?address:'';
-    if(j.terrain&&j.terrain.building) addrStatus($('addrStatus').innerHTML+` Found the building outline${j.terrain.streets&&j.terrain.streets.length>1?` on a corner of ${j.terrain.streets.map(esc).join(' and ')}`:''}: the walls will follow it unless you add a floor plan.`);
   }catch(err){ addrStatus(esc(err.message),true); }
   finally{ $('addrBtn').disabled=false; }
 };
@@ -668,7 +668,7 @@ async function askServer(mode){
     if(!photos.length&&!notes){ status('Add at least one photo or a short description first.',true); return; }
     setBusy(true); status('Preparing photos…');
     const big=$('bigPlate').checked;
-    const body={notes,target:big?Math.max(target,2400):target,plate:big?48:32,address:lookedUp||undefined,
+    const body={notes,target:big?Math.max(target,2400):target,plate:big?48:32,address:houseAddress(),
       plan:planFile?await toPayload(planFile,2400):undefined, photos:await Promise.all(photos.map(f=>toPayload(f))),
       credits:photos.map(f=>photoCredit.get(f)).filter(Boolean), choices:surveyChoices()};
     const res=await fetch('/api/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}), j=await res.json();
@@ -736,7 +736,7 @@ $('surveyBtn').onclick=async()=>{
   const ctl=new AbortController(); busyCtl=ctl; setBusy(true);
   status('Taking a quick look at the photos for anything they leave open…');
   try{
-    const body={notes:$('notes').value.trim().slice(0,1500),photos:await Promise.all(photos.map(f=>toPayload(f))),address:lookedUp||undefined,
+    const body={notes:$('notes').value.trim().slice(0,1500),photos:await Promise.all(photos.map(f=>toPayload(f))),address:houseAddress(),
       plate:$('bigPlate').checked?48:32,plan:planFile?await toPayload(planFile,2400):undefined};
     const res=await fetch('/api/survey',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:ctl.signal});
     const j=await res.json(); if(!res.ok) throw new Error(j.error||`Server error ${res.status}`);
@@ -795,9 +795,9 @@ async function boot(){
   const closed='Designing new houses isn\'t open just yet. Please check back soon.';
   if(!health){ $('photoIntro').textContent=DEV?'Start the server with npm start to design from photos.':closed; return; }
   if(!health.ready){ $('photoIntro').textContent=DEV?'Add BRICKHOUSE_ANTHROPIC_API_KEY to .env and restart the server to design from photos (or run with BRICKHOUSE_FAKE=1 to try the flow).':closed; return; }
-  $('photoControls').hidden=false; if(!DEV&&!health.streetPhotos) $('addrForm').hidden=true;
+  $('photoControls').hidden=false; $('addrBtn').hidden=!health.streetPhotos;
   $('photoIntro').textContent=DEV?`Enter the address to find street photos${health.streetPhotos?'':' (needs MAPILLARY_TOKEN)'}, or pick up to ${health.maxPhotos} exterior photos, front first, then each side, the back, the garage and any yard or patio: Claude builds only what a photo, the floor plan or your notes show, so a side no photo shows gets guessed. Claude (${health.model}) studies them, writes a design, compiles it here, fixes what the checker flags, and saves it.`
-    :`Add photos of the outside of the house: the front first, then the sides, the back and the garage if you have them (up to ${health.maxPhotos}). ${health.streetPhotos?'Or enter the address and we\'ll look for street photos. ':''}A floor plan helps us get the walls just right, and anything the photos don't show, you can tell us below.`;
+    :`Add photos of the outside of the house: the front first, then the sides, the back and the garage if you have them (up to ${health.maxPhotos}). A floor plan helps us get the walls just right, and anything the photos don't show, you can tell us below.`;
   renderThumbs();
   // Back from Stripe (?job=…&session=…): confirm the payment and start the design; ?job=… alone
   // picks up a design in progress or finished.
