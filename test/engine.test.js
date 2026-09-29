@@ -123,6 +123,34 @@ test('every plant in the library stands on its own, and an unknown kind is named
   assert.deepEqual([leaf(1).w, leaf(1).d, leaf(1).sockets], [4, 3, [[10, 11]]]);
 });
 
+test('trees are built like LEGO\'s: tall, with a deep layered canopy, and molded pines on their trunks', () => {
+  const one = (kind) => compile({ name: kind, plate: 48, lot: false, phases: ['p'], ops: [{ op: 'plant', phase: 'p', kind, at: [[20, 0, 20]] }] });
+  const top = (r) => Math.max(...r.parts.map((p) => p.y + p.h));
+  // a two-story house is 24 plates; the big trees come close, the small one reaches a story and a half
+  for (const kind of ['shade tree', 'jacaranda', 'olive tree', 'lemon tree', 'pine', 'cypress']) assert.ok(top(one(kind)) >= 19, `${kind} stands ${top(one(kind))} plates`);
+  assert.ok(top(one('small tree')) >= 15);
+  // the canopy is leaves turned a quarter each layer, lifted a plate apart by round plates, at least five layers deep
+  const leaves = one('shade tree').parts.filter((p) => p.shape === 'leaves');
+  assert.ok(leaves.length >= 5 && new Set(leaves.map((p) => p.rot)).size === 4 && new Set(leaves.map((p) => p.y)).size === leaves.length);
+  // the large pine's 2 x 2 base presses onto the trunk's four studs, its branches a stud past it all round
+  const pine = one('pine'), [trunk, tree] = pine.parts;
+  assert.deepEqual([tree.no, tree.x, tree.z, tree.y, tree.w, tree.sockets.length, tree.studs.length], ['3471', 19, 19, trunk.y + trunk.h, 4, 4, 0]);
+  assert.ok(pine.joints.some(([a, b]) => a === tree.id && b === trunk.id));
+});
+
+test('planting keeps to a few parts and colors, naming the plants that add the most', () => {
+  const { PLANT_LOTS } = require('../src/engine/engine.js');
+  const yard = (list) => compile({ name: 'y', plate: 48, lot: false, phases: ['p'],
+    ops: list.map(([kind, bloom], i) => ({ op: 'plant', phase: 'p', kind, ...(bloom ? { bloom } : {}), at: [[8 + (i % 3) * 14, 0, 8 + Math.floor(i / 3) * 16]] })) });
+  // a suburban yard: two trees, shrubs, a bed, one bloom color: within the limit
+  const ok = yard([['shade tree'], ['small tree'], ['shrub'], ['boxwood'], ['flowering shrub', 'Red'], ['flower bed', 'Red']]);
+  assert.deepEqual([ok.warnings, ok.stats.plantLots <= PLANT_LOTS], [[], true]);
+  // a bit of everything is too many
+  const all = yard([['shade tree'], ['olive tree'], ['yucca'], ['agave'], ['columnar cactus'], ['shrub'], ['flowering shrub', 'Red'], ['grasses'], ['lavender']]);
+  assert.ok(all.stats.plantLots > PLANT_LOTS);
+  assert.match(all.warnings.map((w) => w.msg).join(' '), new RegExp(`The planting uses ${all.stats.plantLots} different parts and colors, more than ${PLANT_LOTS}: .*\\(olive tree adds \\d+, shade tree adds \\d+`));
+});
+
 test('wall details hang on side-stud bricks set in the wall, and need them', () => {
   const walls = { op: 'walls', phase: 'W', color: 'White', courses: [0, 3], base: 0, segments: [[4, 10, 14, 10], [4, 11, 4, 16], [14, 11, 14, 16], [5, 16, 13, 16]],
     openings: [{ cells: [6, 16, 6, 16], courses: [2, 2], fill: { part: 'snot', face: 'S' } }, { cells: [10, 16, 11, 16], courses: [3, 3], fill: { part: 'snot', face: 'S' } }] };
@@ -503,7 +531,7 @@ test('a design held to GoBricks uses exactly the parts and colors GoBricks makes
   assert.deepEqual(plants('shade tree').warnings, []);
   assert.deepEqual(plants('palm').warnings, []);
   // GoBricks has no lavender: the checker names the colors it does make the part in
-  assert.match(plants('jacaranda').warnings.map((w) => w.msg).join(' '), /GoBricks doesn't make Plant leaves 6 x 5 in Lavender \(2\): use a color it makes \(Green, Dark Brown.*\) or another part \(the jacaranda plant uses it: pick another plant\)/);
+  assert.match(plants('jacaranda').warnings.map((w) => w.msg).join(' '), /GoBricks doesn't make Plant leaves 6 x 5 in Lavender \(2\): use a color it makes \(Reddish Brown, Green.*\) or another part \(the jacaranda plant uses it: pick another plant\)/);
   // the packer keeps to the sizes GoBricks makes in a color: no 1 x 8 or 1 x 6 plates in Coral
   const coral = compile({ name: 'c', supplier: 'gobricks', phases: ['p'], ops: [{ op: 'fill', phase: 'p', kind: 'plate', color: 'Coral', rects: [[2, 2, 17, 3]], y: 0 }] });
   assert.deepEqual(coral.warnings, []);

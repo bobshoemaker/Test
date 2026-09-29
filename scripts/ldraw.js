@@ -12,7 +12,7 @@ const CACHE = path.join(ROOT, '.ldraw-cache');
 const BASE = 'https://library.ldraw.org/library/official/';
 const OUT = path.join(ROOT, 'src/viewer/ldraw-parts.js');
 // part number -> the engine part it draws
-const PARTS = { 2417: 'leaves65', 2423: 'leaves43', 32607: 'sprig1', 33291: 'flower1', 2566: 'palmtop', 30239: 'swordleaf', 6064: 'bush224',
+const PARTS = { 3471: 'pine4', 2435: 'pine2', 2417: 'leaves65', 2423: 'leaves43', 32607: 'sprig1', 33291: 'flower1', 2566: 'palmtop', 30239: 'swordleaf', 6064: 'bush224',
   // specialty parts: slopes, rounds, windows and their glass, arches, fence, brackets
   54200: 'cheese', '3062b': 'round1', 4073: 'roundplate1', 4032: 'roundplate2', 3941: 'roundbrick2', 4589: 'cone1', 36840: 'bracket11', 87087: 'snot',
   60592: 'win22', 60593: 'win23', 60594: 'win43', 60601: 'glass22', 60602: 'glass23', 60603: 'glass43', 6182: 'arch42', 3659: 'arch41', 3633: 'fence4' };

@@ -26,9 +26,13 @@ closing gift that realtors give clients: a brick model of the house they just bo
   which the design loop sets, recolors a few pieces of each material and turns about 15% of ground
   paving tiles and 8% of floor tiles into same-size plates, in patches, so some studs show;
   `"studs"` on a fill or floor op sets the share), a plant library built from
-  real LEGO foliage (branching "plant leaves" 4 x 3 and 6 x 5 with studs on their tips, stacked into
-  canopies with fruit or flowers on the tips; leafy and flower-edged round plates; a palm top with
-  swordleaf fronds clipped to its bars) in colors true to each plant, a `lawn` op that
+  real LEGO foliage the way LEGO's own sets build it: trees on round-brick trunks under deep canopies of
+  "plant leaves" 6 x 5 and 4 x 3 turned a quarter each layer and lifted a plate apart, with sprigs, flowers or
+  fruit on the tips (`CANOPY`), about as tall as a two-story house; LEGO's molded pines (3471, 2435) for
+  conifers (GoBricks doesn't make them); leafy and flower-edged round plates; a palm top with swordleaf fronds
+  clipped to its bars; one shared palette (Reddish Brown trunks, bases and soil, a few greens) so kinds share
+  parts, and a warning when a design's planting passes 16 different parts and colors (`PLANT_LOTS`), naming the
+  plants that add the most, a `lawn` op that
   finishes bare ground (irregular patches of lighter and darker plates, grass tufts, a few flowers;
   textures lawn, meadow, dry) and a warning for a big open stretch of bare baseplate (about 12 ft
   square; `"lot": false` for a building alone, as most unit tests are), hints (never
