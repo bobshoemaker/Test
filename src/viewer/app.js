@@ -452,11 +452,11 @@ $('startOver').onclick=()=>{ stopPlay(); showAll=false; stepIdx=0; renderStep();
 $('finished').onclick=$('showWhole').onclick=()=>{ stopPlay(); showAll=true; stepIdx=R.steps.length-1; renderStep(); };
 
 // ---------- showcase playback ----------
-let playTimer=null;
+let playTimer=null, draftOnly=false; // draftOnly: the stage shows a draft of a design still in progress
 function updateShowLabel(){
   const lbl=$('showLbl'), bar=$('barFill'), mainSteps=R.steps.filter(s=>s.kind!=='sub');
   $('showWhole').hidden=showAll;
-  if(showAll){ lbl.innerHTML='<b>Finished</b> '+R.stats.pieces.toLocaleString()+' pieces'; bar.style.width='100%'; return; }
+  if(showAll){ lbl.innerHTML=(draftOnly?'<b>Draft</b> so far, ':'<b>Finished</b> ')+R.stats.pieces.toLocaleString()+' pieces'; bar.style.width='100%'; return; }
   const s=R.steps[stepIdx], k=mainSteps.indexOf(s);
   lbl.innerHTML=`<b>${stepIdx+1} / ${R.steps.length}</b> ${s.kind==='main'?s.title:(s.kind==='sub'?R.subs[s.sub].name:s.title)}`;
   bar.style.width=((stepIdx+1)/R.steps.length*100).toFixed(1)+'%';
@@ -704,12 +704,13 @@ function watchJob(id,keep){
 async function pollJob(){
   let j;
   try{ const r=await fetch(`/api/jobs/${jobId}?after=${jobAfter}&have=${jobHave}`); j=await r.json(); if(!r.ok) throw new Error(j.error||`Server error ${r.status}`); }
-  catch(e){ status(esc(e.message),true); setTimeout(pollJob,5000); return; }
-  if(j.draft){ jobHave=j.draftN; showOwn(); showDesign(j.draft); $('designSrc').value=JSON.stringify(j.draft,null,2); }
+  catch(e){ status(DEV?esc(e.message):'Reconnecting… your design keeps going on our side.',DEV); setTimeout(pollJob,5000); return; } // a restart or a dropped connection
+  if(j.draft){ jobHave=j.draftN; showOwn(); draftOnly=j.status!=='done'; showDesign(j.draft); $('designSrc').value=JSON.stringify(j.draft,null,2); }
   for(const ev of j.events) handleEvent(ev.type==='done'&&j.result?j.result:ev,jobT0);
   jobAfter=j.next;
   if(j.status==='awaiting_payment'){ status(`This design is waiting for its design fee.`); setBusy(false); return; }
-  if(j.status==='interrupted'){ status('The server restarted during this design. Reload this page to pick it up again.',true); setBusy(false); return; }
+  // cut off by a restart: the server picks it up again at the part it was on (jobs.resumeInterrupted)
+  if(j.status==='interrupted'){ status('Picking your design up where it left off…'); setTimeout(pollJob,4000); return; }
   if(j.status==='done'||j.status==='error'){ setBusy(false); return; }
   setTimeout(pollJob,2000);
 }
@@ -718,7 +719,7 @@ function handleEvent(ev,t0){
   if(!DEV){ // the customer's view: what we're working on, not how
     if(ev.type==='part') status(`Designing your house: ${esc(String(ev.name).toLowerCase())} (${ev.n} of ${ev.of})…`);
     else if(ev.type==='draft') status('Checking every brick and refining the details…');
-    else if(ev.type==='done'&&ev.design){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; showOwn(); run(t); DESIGN_TEXT=t;
+    else if(ev.type==='done'&&ev.design){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; showOwn(); draftOnly=false; run(t); DESIGN_TEXT=t;
       status((ev.errors||ev.warnings)?'Almost there: a few details still need finishing. <button class="btn sm primary" id="fixBtn">Finish the design</button>'
         :'Your house is ready. Turn it around, then open the building guide to see how it goes together.');
       const fb=$('fixBtn'); if(fb) fb.onclick=()=>askServer('fix'); }
@@ -727,7 +728,7 @@ function handleEvent(ev,t0){
   if(ev.type==='status') status(`${esc(ev.message)} <span style="color:var(--muted)">${secs()} s</span>`);
   else if(ev.type==='part') status(`Building part ${ev.n} of ${ev.of}: ${esc(ev.name)}… <span style="color:var(--muted)">${secs()} s</span>`);
   else if(ev.type==='draft') status(`Draft ${ev.n} compiled: ${ev.stats.pieces.toLocaleString()} pieces, ${ev.errors} errors, ${ev.warnings} warnings. Claude is revising… <span style="color:var(--muted)">${secs()} s</span>`);
-  else if(ev.type==='done'&&ev.design){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; showOwn(); run(t); DESIGN_TEXT=t;
+  else if(ev.type==='done'&&ev.design){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; showOwn(); draftOnly=false; run(t); DESIGN_TEXT=t;
     status(`Done: ${ev.stats.pieces.toLocaleString()} pieces, ${ev.errors} errors, ${ev.warnings} warnings. Saved as designs/${esc(ev.saved)}.json.`
       +(ev.note?` ${esc(ev.note)}`:'')+((ev.errors||ev.warnings)?' <button class="btn sm" id="fixBtn">Ask Claude to fix these</button>':''));
     const fb=$('fixBtn'); if(fb) fb.onclick=()=>askServer('fix'); loadDesignList(ev.saved); }

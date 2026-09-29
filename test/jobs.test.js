@@ -75,3 +75,45 @@ test('the Stripe client sends a form-encoded one-off Checkout Session for the jo
   assert.match(decodeURIComponent(sent.body), /mode=payment&client_reference_id=j1&metadata\[job\]=j1&line_items\[0\]\[quantity\]=1&line_items\[0\]\[price_data\]\[currency\]=usd&line_items\[0\]\[price_data\]\[unit_amount\]=1500/);
   assert.equal(makeStripe({ secretKey: '' }), null);
 });
+
+test('a job cut off by a restart is picked up again at the part it was on, from its last draft', async () => {
+  const dir = tmp(), calls = [];
+  // the first server: the job gets through part 1 and into part 2, then the server goes away mid-run
+  const hang = async (p, emit) => { calls.push(p.resume || null); emit({ type: 'part', n: 1, of: 5, name: 'Walls' });
+    emit({ type: 'draft', n: 1, design: { name: 'walls', phases: ['a'], ops: [] }, stats: { pieces: 1 } }); emit({ type: 'part', n: 2, of: 5, name: 'Roofs' }); await new Promise(() => {}); };
+  const first = createJobs({ dir, run: hang });
+  const { id } = await first.create({ notes: 'house', photos: [] }, 'https://site.test');
+  await until(() => first.get(id).events.length >= 3);
+  // a restart: a new server on the same saved jobs
+  const second = createJobs({ dir, run: hang });
+  assert.deepEqual(second.resumeInterrupted(), [id]);
+  await until(() => calls.length === 2);
+  assert.deepEqual(calls[1], { fromPart: 2, seed: { name: 'walls', phases: ['a'], ops: [] } });
+  assert.equal(second.get(id).status, 'running');
+  assert.match(second.get(id).events.map((e) => e.message).join(' '), /Picking the design up again at part 2/);
+  // it gives up after MAX_RESUMES, so a crash that recurs doesn't loop forever
+  const { MAX_RESUMES } = require('../src/server/jobs');
+  for (let k = 1; k < MAX_RESUMES; k++) createJobs({ dir, run: hang }).resumeInterrupted();
+  const last = createJobs({ dir, run: hang });
+  assert.deepEqual(last.resumeInterrupted(), []);
+  assert.equal(last.get(id).status, 'error');
+});
+
+test('a restart leaves unpaid jobs alone and gives back a cut-off fix round', async () => {
+  const dir = tmp(), stripe = fakeStripe(); let runs = 0;
+  const jobs = createJobs({ dir, stripe, feeCents: 1500, run: async () => { runs++; } });
+  const unpaid = await jobs.create({ notes: 'x', photos: [] }, 'https://site.test');
+  // a finished job whose fix round was running when the server went away
+  const done = { id: '00000000-0000-4000-8000-000000000001', status: 'running', paid: { at: 1 }, params: {}, events: [], fixes: 1, result: { type: 'done', design: { name: 'kept' } } };
+  fs.writeFileSync(path.join(dir, `${done.id}.json`), JSON.stringify(done));
+  const after = createJobs({ dir, stripe, feeCents: 1500, run: async () => { runs++; } });
+  assert.deepEqual(after.resumeInterrupted(), []);
+  assert.equal(runs, 0);
+  assert.equal(after.get(unpaid.id).status, 'awaiting_payment');
+  // a job cut off long ago isn't picked up (no surprise spend on stale ones)
+  const old = { id: '00000000-0000-4000-8000-000000000002', createdAt: Date.now() - 3 * 24 * 3600e3, status: 'running', params: {}, events: [] };
+  fs.writeFileSync(path.join(dir, `${old.id}.json`), JSON.stringify(old));
+  const later = createJobs({ dir, stripe, feeCents: 1500, run: async () => { runs++; } });
+  assert.deepEqual([later.resumeInterrupted(), runs, later.get(old.id).status], [[], 0, 'error']);
+  assert.deepEqual([after.get(done.id).status, after.get(done.id).fixesLeft, after.get(done.id).result.design.name], ['done', MAX_FIXES, 'kept']);
+});

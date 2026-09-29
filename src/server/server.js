@@ -155,7 +155,8 @@ async function runDesign(p, emit) {
   prep.log.forEach((m) => emit({ type: 'status', message: m }));
   const renderer = await getRenderer();
   const out = await designHouse({ client, model: MODEL, effort: EFFORT, photos: p.photos, plan: p.plan, notes: prep.notes, target: p.target, choices: p.choices,
-    plate: p.plate, mode: 'parts', locked: prep.locked, render: renderer && renderer.render, planTools: renderer, onEvent: emit });
+    plate: p.plate, mode: 'parts', locked: prep.locked, render: renderer && renderer.render, planTools: renderer, onEvent: emit,
+    ...(p.resume ? { fromPart: p.resume.fromPart, seed: p.resume.seed } : {}) });
   finishDesign(out, p, emit, t0);
 }
 
@@ -300,6 +301,8 @@ const server = http.createServer(async (req, res) => {
 
 if (require.main === module) {
   server.listen(PORT, () => {
+    const resumed = JOBS.resumeInterrupted();
+    if (resumed.length) console.log(`Picked up ${resumed.length} design${resumed.length === 1 ? '' : 's'} cut off by a restart: ${resumed.join(', ')}`);
     console.log(`Brickhouse on http://localhost:${PORT}  (model: ${FAKE ? 'fake' : MODEL}${EFFORT ? ', effort ' + EFFORT : ''})`);
     if (!FAKE && !anthropicKey()) console.log('No Anthropic API key: the viewer works, photo design is off. Add a key to .env or use BRICKHOUSE_FAKE=1.');
   });

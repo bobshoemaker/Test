@@ -118,7 +118,10 @@ closing gift that realtors give clients: a brick model of the house they just bo
   (`BRICKHOUSE_DESIGN_FEE_CENTS`, `src/server/payments.js`); `POST /api/jobs/<id>/start {session}`
   runs it only once Stripe confirms that job's session is paid, and only once; `GET
   /api/jobs/<id>?after=&have=` is its progress, polled by the viewer; `POST /api/jobs/<id>/fix`
-  gives a finished job up to two more rounds. Jobs run server-side and are saved to
+  gives a finished job up to two more rounds. A restart (every deploy from master, or the server running out of
+  memory) cuts off a running job; at startup the server picks each one up again at the part it was on, from its
+  last draft (`resumeInterrupted`: up to twice, jobs from the last day only), and the viewer keeps polling through
+  it and calls an unfinished design a draft. Jobs run server-side and are saved to
   `designs/generated/jobs/`; results to `designs/generated/`, which are private: `/api/designs` and
   `/designs/generated/…` list and serve them only to a request made on the server's own machine (no proxy header),
   and each customer sees theirs through its job link. The upload page and the home page's questions promise that we
