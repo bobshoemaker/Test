@@ -120,6 +120,7 @@ textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-ra
 .status-err{color:var(--flag)}
 .addr{display:flex;gap:8px;margin-top:6px}
 .addrlabel{display:block;margin-top:14px;font-weight:700;font-size:14px}
+.privacy{margin:14px 0 0;padding:10px 12px;border-radius:10px;background:var(--stage);font-size:13px;line-height:1.45}
 .addrwhy{margin:6px 0 0;font-size:13px;color:var(--muted)}
 .addr input{flex:1;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-size:15px}
 .cands{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:10px}
@@ -268,6 +269,7 @@ html:not(.upload) .seeex{display:none}
             <div class="survey" id="survey" hidden></div>
             <div class="row"><button class="btn" id="surveyBtn">Check my photos first</button><button class="btn primary" id="designBtn">Design from photos</button><button class="btn" id="stopBtn" hidden>Stop</button><button class="btn" id="lastBtn" hidden>Show my last design</button></div>
             <div class="out" id="photoStatus" aria-live="polite"></div>
+            <p class="privacy"><b>Your privacy.</b> We use your photos and address only to design your model and send your kit. We never sell them or share them for advertising, and your house isn't shown to anyone else: you see it through your own private link.</p>
           </div>
           <p class="seeex">Want to see one first? <a href="/app" id="seeExample">Look at an example house</a></p>
         </div>
