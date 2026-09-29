@@ -291,7 +291,8 @@ canvas.addEventListener('pointermove',e=>{ if(!ptrs.has(e.pointerId)) return; co
 const endPtr=e=>{ ptrs.delete(e.pointerId); if(ptrs.size<2) pinch0=0; };
 canvas.addEventListener('pointerup',endPtr); canvas.addEventListener('pointercancel',endPtr);
 if(!HERO) canvas.addEventListener('wheel',e=>{ e.preventDefault(); goal.radius=Math.max(10,Math.min(170,goal.radius*(1+e.deltaY*0.001))); radius=goal.radius; userZoom=true; dirty=true; },{passive:false});
-function resize(){ const w=stage.clientWidth,h=stage.clientHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); if(!userZoom&&mode==='main'){ goal.radius=fitRadius(); } dirty=true; }
+function resize(){ const w=stage.clientWidth,h=stage.clientHeight; if(!w||!h) return; // hidden (the upload page)
+  renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); if(!userZoom&&mode==='main'){ goal.radius=fitRadius(); } dirty=true; }
 new ResizeObserver(resize).observe(stage);
 const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function loop(){ requestAnimationFrame(loop);
@@ -687,7 +688,7 @@ async function pollJob(){
   let j;
   try{ const r=await fetch(`/api/jobs/${jobId}?after=${jobAfter}&have=${jobHave}`); j=await r.json(); if(!r.ok) throw new Error(j.error||`Server error ${r.status}`); }
   catch(e){ status(esc(e.message),true); setTimeout(pollJob,5000); return; }
-  if(j.draft){ jobHave=j.draftN; showDesign(j.draft); $('designSrc').value=JSON.stringify(j.draft,null,2); }
+  if(j.draft){ jobHave=j.draftN; showOwn(); showDesign(j.draft); $('designSrc').value=JSON.stringify(j.draft,null,2); }
   for(const ev of j.events) handleEvent(ev.type==='done'&&j.result?j.result:ev,jobT0);
   jobAfter=j.next;
   if(j.status==='awaiting_payment'){ status(`This design is waiting for its design fee.`); setBusy(false); return; }
@@ -700,7 +701,7 @@ function handleEvent(ev,t0){
   if(!DEV){ // the customer's view: what we're working on, not how
     if(ev.type==='part') status(`Designing your house: ${esc(String(ev.name).toLowerCase())} (${ev.n} of ${ev.of})…`);
     else if(ev.type==='draft') status('Checking every brick and refining the details…');
-    else if(ev.type==='done'&&ev.design){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; run(t); DESIGN_TEXT=t;
+    else if(ev.type==='done'&&ev.design){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; showOwn(); run(t); DESIGN_TEXT=t;
       status((ev.errors||ev.warnings)?'Almost there: a few details still need finishing. <button class="btn sm primary" id="fixBtn">Finish the design</button>'
         :'Your house is ready. Turn it around, then open the building guide to see how it goes together.');
       const fb=$('fixBtn'); if(fb) fb.onclick=()=>askServer('fix'); }
@@ -709,7 +710,7 @@ function handleEvent(ev,t0){
   if(ev.type==='status') status(`${esc(ev.message)} <span style="color:var(--muted)">${secs()} s</span>`);
   else if(ev.type==='part') status(`Building part ${ev.n} of ${ev.of}: ${esc(ev.name)}… <span style="color:var(--muted)">${secs()} s</span>`);
   else if(ev.type==='draft') status(`Draft ${ev.n} compiled: ${ev.stats.pieces.toLocaleString()} pieces, ${ev.errors} errors, ${ev.warnings} warnings. Claude is revising… <span style="color:var(--muted)">${secs()} s</span>`);
-  else if(ev.type==='done'&&ev.design){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; run(t); DESIGN_TEXT=t;
+  else if(ev.type==='done'&&ev.design){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; showOwn(); run(t); DESIGN_TEXT=t;
     status(`Done: ${ev.stats.pieces.toLocaleString()} pieces, ${ev.errors} errors, ${ev.warnings} warnings. Saved as designs/${esc(ev.saved)}.json.`
       +(ev.note?` ${esc(ev.note)}`:'')+((ev.errors||ev.warnings)?' <button class="btn sm" id="fixBtn">Ask Claude to fix these</button>':''));
     const fb=$('fixBtn'); if(fb) fb.onclick=()=>askServer('fix'); loadDesignList(ev.saved); }
@@ -753,14 +754,24 @@ async function loadDesignList(selected){
 }
 
 // ---------- tabs & theme ----------
-document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));
-  ['model','manual','parts','design'].forEach(t=>$('pane-'+t).hidden=t!==b.dataset.tab);
-  if(b.dataset.tab==='parts') fetchQuote();
-});
-// /app#design (the landing page's "Start a design") opens on the Design tab
-if(location.hash==='#design'){ document.querySelector('.tabs button[data-tab="design"]').click();
-  if(innerWidth<960) requestAnimationFrame(()=>document.querySelector('.panel').scrollIntoView()); }
+let tab='model', ownShown=false; // ownShown: a draft or design of theirs is on the stage
+// "Make yours" is a page of its own (upload mode) until a design of theirs is on the way: the sample
+// house and the other tabs stay out of it, and come back with their house's first draft
+function uploadMode(){ const on=tab==='design'&&!ownShown&&!HERO_MODE; document.documentElement.classList.toggle('upload',on);
+  if(on){ if(location.hash!=='#design') try{ history.replaceState(null,'','#design'); }catch(e){} }
+  else if(location.hash==='#design') try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
+  if(on||tab!=='design') dirty=true; }
+function showOwn(){ if(ownShown) return; ownShown=true; uploadMode(); requestAnimationFrame(resize); }
+function showTab(t){ tab=t;
+  document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-selected',x.dataset.tab===t));
+  ['model','manual','parts','design'].forEach(k=>$('pane-'+k).hidden=k!==t);
+  if(t==='parts') fetchQuote();
+  const was=document.documentElement.classList.contains('upload'); uploadMode();
+  if(was&&!document.documentElement.classList.contains('upload')){ scrollTo(0,0); requestAnimationFrame(resize); } }
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
+$('seeExample').onclick=e=>{ e.preventDefault(); showTab('model'); };
+// /app#design (the landing page's "Make yours") opens on the upload page
+if(location.hash==='#design') showTab('design');
 function applyTheme(){ const c=getComputedStyle(document.documentElement).getPropertyValue('--stage').trim()||'#D9E2EB'; stageLin=lin(c); scene.background=HERO?null:new THREE.Color(c); if(R) applyState(); dirty=true; }
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme);
 
