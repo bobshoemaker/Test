@@ -7,7 +7,7 @@
 <meta name="description" content="Send a few photos of any house and we'll design a brick model of it, with a step-by-step building guide and every piece listed. For your first home, the house you grew up in, or a gift.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Archivo:wdth,wght@100,400..700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Jersey+10&family=Archivo:wdth,wght@100,400..700&display=swap" rel="stylesheet">
 <style>
 :root{
   --paper:#F7F1E8; --panel:#FFFDF9; --sand:#EFE6D8; --ink:#27211B; --muted:#6A6056; --line:#E3D7C5;
@@ -33,11 +33,13 @@ img{max-width:100%;display:block}
 .wrap{max-width:1140px;margin:0 auto;padding:0 16px}
 @media (min-width:720px){.wrap{padding:0 28px}}
 :focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:6px}
-h1,h2,h3{font-family:"Fraunces",Georgia,"Times New Roman",serif;font-weight:600;letter-spacing:-.01em;text-wrap:balance;margin:0}
+/* pixel type: keep letters apart (some pixel fonts' "fi" ligature reads as an "A") */
+h1,h2,h3,.logo,summary,figcaption b{font-variant-ligatures:none;font-feature-settings:"liga" 0,"clig" 0}
+h1,h2,h3{font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;letter-spacing:0;text-wrap:balance;margin:0}
 
 /* top bar */
 .bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 0}
-.logo{display:flex;align-items:center;gap:10px;text-decoration:none;font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:22px}
+.logo{display:flex;align-items:center;gap:10px;text-decoration:none;font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;font-size:28px}
 .nav{display:flex;align-items:center;gap:24px;font-size:15px}
 .nav a.link{text-decoration:none;color:var(--muted)}
 .nav a.link:hover{color:var(--ink)}
@@ -52,7 +54,7 @@ h1,h2,h3{font-family:"Fraunces",Georgia,"Times New Roman",serif;font-weight:600;
 .hero{display:grid;gap:30px;padding:28px 0 64px;align-items:center}
 @media (min-width:940px){.hero{grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:44px;padding:48px 0 96px}}
 .eyebrow{display:inline-block;font-size:14px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin:0 0 14px}
-h1{font-size:clamp(40px,5.4vw,64px);line-height:1.04}
+h1{font-size:clamp(50px,6.6vw,82px);line-height:.98}
 .lede{font-size:clamp(18px,2vw,20px);color:var(--muted);margin:22px 0 30px;max-width:34ch}
 .ctas{display:flex;gap:10px;flex-wrap:wrap}
 .small{font-size:14px;color:var(--muted);margin:18px 0 0}
@@ -63,7 +65,7 @@ h1{font-size:clamp(40px,5.4vw,64px);line-height:1.04}
 /* sections */
 section{padding:64px 0}
 @media (min-width:940px){section{padding:96px 0}}
-h2{font-size:clamp(32px,4.4vw,48px);line-height:1.08}
+h2{font-size:clamp(40px,5.4vw,60px);line-height:1}
 .intro{color:var(--muted);font-size:18px;max-width:52ch;margin:14px 0 40px}
 .center{text-align:center}.center .intro{margin-left:auto;margin-right:auto}
 
@@ -72,14 +74,14 @@ h2{font-size:clamp(32px,4.4vw,48px);line-height:1.08}
 @media (min-width:1000px){.moments{grid-template-columns:repeat(4,1fr)}}
 .moment{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:24px}
 .moment svg{color:var(--accent);margin-bottom:14px}
-.moment h3{font-size:21px;margin-bottom:6px}
+.moment h3{font-size:27px;margin-bottom:6px}
 .moment p{margin:0;color:var(--muted);font-size:16px}
 
 .steps{display:grid;gap:28px;padding:0;margin:0;list-style:none;counter-reset:s}
 @media (min-width:800px){.steps{grid-template-columns:repeat(3,1fr);gap:32px}}
 .steps li{counter-increment:s;border-top:1.5px solid var(--ink);padding-top:18px}
-.steps li::before{content:counter(s);display:block;font-family:"Fraunces",Georgia,serif;font-size:44px;line-height:1;color:var(--accent);margin-bottom:12px}
-.steps h3{font-size:22px;margin-bottom:6px}
+.steps li::before{content:counter(s);display:block;font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-size:60px;line-height:1;color:var(--accent);margin-bottom:12px}
+.steps h3{font-size:28px;margin-bottom:6px}
 .steps p{margin:0;color:var(--muted);font-size:16px}
 
 .feature{display:grid;gap:28px;align-items:center}
@@ -94,14 +96,14 @@ h2{font-size:clamp(32px,4.4vw,48px);line-height:1.08}
 @media (min-width:860px){.examples{grid-template-columns:1fr 1fr}}
 figure{margin:0}
 figcaption{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:14px}
-figcaption b{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:20px}
+figcaption b{font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;font-size:26px}
 figcaption span{color:var(--muted);font-size:15px;display:block}
 figcaption a{font-weight:600;font-size:15px;color:var(--accent)}
 
 .sizes{display:grid;gap:16px}
 @media (min-width:760px){.sizes{grid-template-columns:1fr 1fr;gap:20px}}
 .size{background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:28px}
-.size h3{font-size:26px}
+.size h3{font-size:34px}
 .size .dims{color:var(--muted);margin:4px 0 18px}
 .size dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:16px}
 .size dt{color:var(--muted)}
@@ -110,7 +112,7 @@ figcaption a{font-weight:600;font-size:15px;color:var(--accent)}
 
 .faq{max-width:760px}
 details{border-bottom:1px solid var(--line);padding:4px 0}
-summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:16px;align-items:center;padding:16px 0;font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:20px}
+summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:16px;align-items:center;padding:16px 0;font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;font-size:26px}
 summary::-webkit-details-marker{display:none}
 summary::after{content:"+";font-family:"Archivo",sans-serif;font-weight:400;font-size:26px;color:var(--accent);flex:none}
 details[open] summary::after{content:"\2212"}
