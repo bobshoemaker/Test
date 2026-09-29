@@ -116,9 +116,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   how it works, examples, sizes, questions); renders of the samples on its warm background in `src/viewer/img/`,
   made by `scripts/landing.js`; "Make yours" goes to `/app#design`. It promises a kit shipped to the customer (we order
   the parts from Brickwith, pack them and reship; the app's kit checkout isn't built yet) and names no prices in its questions.
-- The landing hero is the viewer itself in an iframe (`/app?design=savannah-dr&hero=1&bg=EFE6D8`): only the model,
-  turning slowly, its top story (not plants) lifting a little on hover or tap; it loads after the page and fades in
-  over the still picture, and isn't loaded at all with reduced motion.
+- The landing hero is the viewer itself in an iframe (`/app?design=savannah-dr&hero=1`): only the model, from one
+  view, on a transparent background, its top story (not plants) lifting a little on hover or tap; it loads after the
+  page and crossfades with its still picture (`hero-house.png`, the same view), and isn't loaded with reduced motion.
 - `src/viewer/`: single-page three.js (r128, CDN) viewer, at `/app`: model, manual (sub-builds shown on
   their own), parts and BrickLink XML, design editor, photo upload, and "Lift roof" for designs
   whose roof ops carry `"liftoff"` (floors show underneath; the rooms too when there was a plan).
