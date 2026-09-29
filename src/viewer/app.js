@@ -1,13 +1,13 @@
 // Brickhouse viewer: rendering, manual, parts, design editor, photo jobs.
 // Needs three.js r128 (global THREE) and src/engine/engine.js (global compile, COLORS).
 const $=id=>document.getElementById(id);
-// ?hero=1 is the landing page's live picture: only the model, turning slowly on the page's background
-// (?bg=rrggbb), its top story lifting a little while the pointer is over it (a tap on touch screens)
-const HERO=new URLSearchParams(location.search).get('hero')==='1';
-if(HERO){ document.documentElement.classList.add('hero'); const bg=new URLSearchParams(location.search).get('bg');
-  if(/^[0-9a-f]{6}$/i.test(bg||'')) document.documentElement.style.setProperty('--stage','#'+bg); }
+// ?hero=1 (or window.BRICKHOUSE_HERO, for rendering its still picture) is the landing page's live picture:
+// only the model, from one view, on a transparent background so the page shows through, its top story
+// lifting a little while the pointer is over it (a tap on touch screens)
+const HERO=new URLSearchParams(location.search).get('hero')==='1'||window.BRICKHOUSE_HERO===true;
+if(HERO) document.documentElement.classList.add('hero');
 const canvas=$('cv'), stage=$('stage');
-const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:HERO});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
 renderer.outputEncoding=THREE.sRGBEncoding;
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
@@ -243,7 +243,7 @@ function applyState(){
 
 // ---------- camera ----------
 let theta=0.62, phi=0.98, radius=70, target=new THREE.Vector3(0,3.5,0), goal={theta, phi, radius, t:target.clone()}, autoSpin=false, dirty=true, userZoom=false, lastMode='main';
-function fitRadius(){ const a=camera.aspect, k=PLATE/32*(HERO?0.78:1); return Math.min(170*k,Math.max(82*k,77*k/Math.max(a,0.45))); }
+function fitRadius(){ const a=camera.aspect, k=PLATE/32*(HERO?0.88:1); return Math.min(170*k,Math.max(82*k,77*k/Math.max(a,0.45))); }
 function frame(){
   if(mode===lastMode) return; lastMode=mode;
   if(mode==='sub'){ const s=R.steps[stepIdx]; const ps=R.parts.filter(p=>p.sub===s.sub&&p.copy===0);
@@ -295,13 +295,15 @@ const GROWN=['plant','sub','lawn','fence'];
 function topStory(){ const ops=curDesign.ops||[], bases=ops.filter(o=>o.op==='walls'&&!o.context&&(o.base||0)>0).map(o=>o.base);
   const built=R.parts.filter(p=>!GROWN.includes((ops[p.op]||{}).op));
   return bases.length?built.filter(p=>p.y>=Math.max(...bases)):built.filter(p=>(ops[p.op]||{}).op==='roof'); }
+// shadows are redrawn every frame here: between redraws a descending roof sits just under its own stale
+// shadow and shades itself, then doesn't, which flickers
 function liftTo(t){ const dy=7*PH*t*t*(3-2*t); m4.makeTranslation(0,dy,0);
   for(const p of liftParts){ const r=recOf.get(p.id); if(!r) continue;
     if(r.obj){ r.obj.position.set(r.pos0.x,r.pos0.y+dy,r.pos0.z); continue; }
     r.mesh.setMatrixAt(r.i,p._v?m4b.copy(m4).multiply(r.m):ZERO); r.mesh.instanceMatrix.needsUpdate=true;
     for(const e of r.extra||[]){ e.mesh.setMatrixAt(e.i,p._v?m4b.copy(m4).multiply(e.m):ZERO); e.mesh.instanceMatrix.needsUpdate=true; }
     for(const si of studsOf.get(p.id)||[]){ const sr=studRecs[si]; if(sr.slot>=0) studs.setMatrixAt(sr.slot,m4b.copy(m4).multiply(sr.m)); } }
-  studs.instanceMatrix.needsUpdate=true; if(++shadowTick%3===0||t===0||t===1) renderer.shadowMap.needsUpdate=true; }
+  studs.instanceMatrix.needsUpdate=true; renderer.shadowMap.needsUpdate=true; }
 
 // ---------- bricks in motion ----------
 // Play build drops each step's bricks straight down into place one after another; lifting a roof or floor
@@ -310,11 +312,11 @@ const m4=new THREE.Matrix4(), m4b=new THREE.Matrix4(), eul=new THREE.Euler(), v3
 const easeIn=t=>t*t, easeOut=t=>1-(1-t)*(1-t);
 function centerOf(p){ return v3.set(p.x+p.w/2-OFF,(p.y+p.h/2)*PH,p.z+p.d/2-OFF); }
 function animFrame(now){
-  let done=false, touched=false;
+  let done=false, touched=false, down=false;
   for(const [id,a] of anims){
     const t=(now-a.t0)/a.dur, p=R.parts[id-1], r=recOf.get(id); if(!r) { anims.delete(id); continue; }
     if(t>=1){ anims.delete(id); settle(p,r); done=true; continue; }
-    const e=t<0?0:a.ease(t), hide=t<0&&a.hideBefore;
+    const e=t<0?0:a.ease(t), hide=t<0&&a.hideBefore; if(t>=0&&a.to[1]<a.from[1]) down=true;
     const off=[0,1,2].map(k=>a.from[k]+(a.to[k]-a.from[k])*e), sc=a.shrink&&e>0.7?Math.max(0.05,1-(e-0.7)/0.3):1;
     if(r.obj){ r.obj.visible=!hide&&p._v; r.obj.position.set(r.pos0.x+off[0],r.pos0.y+off[1],r.pos0.z+off[2]);
       r.obj.rotation.set(a.spin[0]*e,r.rot0+a.spin[1]*e,a.spin[2]*e); r.obj.scale.setScalar(sc); continue; }
@@ -327,8 +329,9 @@ function animFrame(now){
   }
   if(touched) studs.instanceMatrix.needsUpdate=true;
   if(done&&!anims.size) applyState(); // all settled: one full refresh (uncovered studs, colors)
-  // shadows follow the moving bricks a few times a second, not every frame
-  if(done||++shadowTick%4===0) renderer.shadowMap.needsUpdate=true;
+  // shadows follow the moving bricks a few times a second, not every frame; but every frame while any brick
+  // comes down, since between redraws it sits under its own stale shadow and shades itself (a flicker)
+  if(done||down||++shadowTick%4===0) renderer.shadowMap.needsUpdate=true;
   dirty=true;
 }
 let shadowTick=0;
@@ -693,7 +696,7 @@ document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
 // /app#design (the landing page's "Start a design") opens on the Design tab
 if(location.hash==='#design'){ document.querySelector('.tabs button[data-tab="design"]').click();
   if(innerWidth<960) requestAnimationFrame(()=>document.querySelector('.panel').scrollIntoView()); }
-function applyTheme(){ const c=getComputedStyle(document.documentElement).getPropertyValue('--stage').trim()||'#D9E2EB'; stageLin=lin(c); scene.background=new THREE.Color(c); if(R) applyState(); dirty=true; }
+function applyTheme(){ const c=getComputedStyle(document.documentElement).getPropertyValue('--stage').trim()||'#D9E2EB'; stageLin=lin(c); scene.background=HERO?null:new THREE.Color(c); if(R) applyState(); dirty=true; }
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme);
 
 async function boot(){
@@ -705,8 +708,8 @@ async function boot(){
   }catch(e){ DESIGN_TEXT='{"name":"No design loaded","phases":[],"ops":[]}'; }
   $('designSrc').value=DESIGN_TEXT; run(DESIGN_TEXT); $('compileOut').innerHTML='';
   resize(); goal.radius=fitRadius(); radius=goal.radius*1.25; loop();
-  if(HERO){ // start near the landing page's picture (from the front), then turn; tell the page it can show us
-    goal.theta=theta=-0.35; goal.phi=phi=1.1; radius=goal.radius; liftParts=topStory(); autoSpin=!reduceMotion;
+  if(HERO){ // the same view as the landing page's still picture; tell the page it can show us
+    goal.theta=theta=-0.35; goal.phi=phi=1.1; radius=goal.radius; liftParts=topStory(); dirty=true;
     requestAnimationFrame(()=>requestAnimationFrame(()=>{ try{ parent.postMessage({brickhouse:'hero-ready'},location.origin); }catch(e){} }));
     return; }
   if(embedded){ $('homeLink').hidden=true; $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }

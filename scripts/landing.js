@@ -11,9 +11,10 @@ const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(ROOT, 'src/viewer/img');
 // [design, view, file, zoom (smaller is closer), building-guide step as a share of the build (optional)],
 // drawn on the page's warm background
-const SHOTS = [['634-unit-a', 'q', 'sample-634.jpg', 0.72], ['savannah-dr', 'q', 'sample-savannah.jpg', 0.8], ['savannah-dr', 'f', 'sample-savannah-front.jpg', 0.62],
+const SHOTS = [['634-unit-a', 'q', 'sample-634.jpg', 0.72], ['savannah-dr', 'q', 'sample-savannah.jpg', 0.8],
   ['634-unit-a', 'q', 'sample-634-step.jpg', 0.72, 0.42]];
 const BACKGROUND = '#EFE6D8';
+// the hero's still picture: the viewer's hero mode (the live model's first frame) on a transparent background
 
 function playwright() {
   try { return require('playwright'); } catch { /* the global install */ }
@@ -40,6 +41,17 @@ function playwright() {
     await page.waitForTimeout(1500);
     await page.locator('#cv').screenshot({ path: path.join(OUT, file), type: 'jpeg', quality: 86 });
     console.log(`${file}: ${Math.round(fs.statSync(path.join(OUT, file)).size / 1024)} KB`);
+    await page.close();
+  }
+  {
+    const page = await browser.newPage({ viewport: { width: 1200, height: 860 }, deviceScaleFactor: 1 });
+    await page.route('**/three.min.js', (r) => r.fulfill({ body: three, contentType: 'text/javascript' }));
+    const html = bundleHtml(fs.readFileSync(path.join(ROOT, 'designs', 'savannah-dr.json'), 'utf8')).replace('<script', '<script>window.BRICKHOUSE_HERO = true;</script><script');
+    await page.setContent(html, { waitUntil: 'load' });
+    await page.waitForFunction(() => document.querySelector('#cv') && document.querySelector('#cv').width > 0);
+    await page.waitForTimeout(2500);
+    await page.locator('#cv').screenshot({ path: path.join(OUT, 'hero-house.png'), omitBackground: true });
+    console.log(`hero-house.png: ${Math.round(fs.statSync(path.join(OUT, 'hero-house.png')).size / 1024)} KB`);
     await page.close();
   }
   await browser.close();

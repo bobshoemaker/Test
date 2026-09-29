@@ -134,7 +134,8 @@ textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-ra
 .pick select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 /* ?hero=1: only the model, filling the frame (the landing page's live picture) */
-html.hero,html.hero body{background:var(--stage);overflow:hidden}
+html.hero,html.hero body{background:transparent;overflow:hidden}
+html.hero .stage{background:transparent}
 html.hero .wrap{max-width:none;padding:0}
 html.hero header,html.hero .panel,html.hero .tools,html.hero .showcase,html.hero .modebadge{display:none!important}
 html.hero .grid{display:block}

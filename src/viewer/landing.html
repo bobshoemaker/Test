@@ -60,11 +60,13 @@ h1{font-size:clamp(50px,6.6vw,82px);line-height:.98}
 .small{font-size:14px;color:var(--muted);margin:18px 0 0}
 .frame{border-radius:24px;overflow:hidden;background:var(--sand);box-shadow:0 30px 70px -40px rgba(60,40,20,.45)}
 .frame img{width:100%;height:auto}
-.hero .frame img{aspect-ratio:1200/860;object-fit:cover}
+.live img{width:100%;height:auto;aspect-ratio:1200/860}
 /* the live model: loads after the page, then fades in over the picture */
 .live{position:relative}
-.live iframe{position:absolute;inset:0;width:100%;height:100%;border:0;opacity:0;transition:opacity .8s ease;z-index:1}
+.live iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:transparent;color-scheme:normal;opacity:0;transition:opacity .8s ease;z-index:1}
 .live.ready iframe{opacity:1}
+.live img{transition:opacity .8s ease}
+.live.ready img{opacity:0} /* the live model shows the same view; the page shows through both */
 .live .hint{position:absolute;left:14px;bottom:14px;z-index:2;background:rgba(255,253,249,.92);color:#27211B;border-radius:999px;padding:6px 12px;font-size:14px;font-weight:600;opacity:0;transition:opacity .6s ease .6s;pointer-events:none}
 .live.ready .hint{opacity:1}
 .h-tap{display:none}
@@ -162,12 +164,12 @@ footer a{color:inherit}
         <a class="btn primary" href="/app#design">Start with your photos</a>
         <a class="btn" href="/app?design=savannah-dr">See one in 3D</a>
       </div>
-      <p class="small">Works with LEGO® bricks · Designed in about 20 minutes</p>
+      <p class="small">Works with LEGO® bricks</p>
     </div>
-    <div class="frame live" id="heroFrame">
+    <div class="live" id="heroFrame">
       <iframe id="heroLive" title="The example house in 3D" aria-hidden="true" tabindex="-1" hidden></iframe>
       <span class="hint" aria-hidden="true"><span class="h-hover">Hover to peek inside</span><span class="h-tap">Tap to peek inside</span></span>
-      <img src="/img/sample-savannah-front.jpg" width="1200" height="860" alt="A brick model of a tan two-story house with an orange tile roof, two palm trees, a flowering tree, flower beds and a small red car in the driveway.">
+      <img src="/img/hero-house.png" width="1200" height="860" alt="A brick model of a tan two-story house with an orange tile roof, two palm trees, a flowering tree, flower beds and a small red car in the driveway.">
     </div>
   </header>
 </div>
@@ -269,7 +271,7 @@ footer a{color:inherit}
     <details><summary>Is it real LEGO?</summary><p>The bricks are from GoBricks, a compatible brand made to fit LEGO® bricks. You can mix them with bricks you already have. LEGO is a trademark of the LEGO Group, which doesn't sponsor or endorse Brickhouse.</p></details>
     <details><summary>What photos do I need?</summary><p>A clear photo of the front, plus the sides and back if you have them: up to twelve. Photos you took yourself are best. If a side isn't shown, you can answer a few quick questions about it, and anything we still have to guess is marked as a guess.</p></details>
     <details><summary>Do I need building experience?</summary><p>No. The guide goes one layer at a time and shows exactly which pieces go in each step, like any LEGO® set. If you've built one of those, you can build this.</p></details>
-    <details><summary>How long does it take?</summary><p>The design is ready in about 20 minutes, and you can close the page while it works. Your kit usually arrives in two to three weeks. Building takes an evening or two for the Classic size, a weekend or so for the Grand.</p></details>
+    <details><summary>How long does it take?</summary><p>You'll see your house in 3D before anything is made, and you can close the page while we work on it. Your kit usually arrives in two to three weeks. Building takes an evening or two for the Classic size, a weekend or so for the Grand.</p></details>
     <details><summary>What comes in the kit?</summary><p>Every piece for your house, packed in bags, plus the baseplate it all stands on. The building guide is online, so you can follow it on your phone, tablet or computer, and spin your house in 3D whenever you like.</p></details>
     <details><summary>Can I make one as a gift?</summary><p>Of course. Use your own photos of their house, or theirs, pick the size that suits them, and have the kit sent straight to them. It's a lovely one to build together.</p></details>
   </div>
@@ -279,7 +281,7 @@ footer a{color:inherit}
   <div class="wrap">
     <div class="closing">
       <h2>Start with the photos you have</h2>
-      <p class="intro" id="feeLine">Upload a few photos, answer a couple of quick questions, and see your house in bricks in about 20 minutes.</p>
+      <p class="intro" id="feeLine">Upload a few photos, answer a couple of quick questions, and see your house in bricks.</p>
       <div class="ctas">
         <a class="btn primary" href="/app#design">Make yours</a>
         <a class="btn" href="/app?design=634-unit-a">See an example first</a>
@@ -298,7 +300,7 @@ footer a{color:inherit}
 <script>
 // The live model in the hero: after the page has loaded, and not for anyone who asks for less motion
 if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
-  const f=document.getElementById('heroLive'), load=()=>{ f.hidden=false; f.src='/app?design=savannah-dr&hero=1&bg=EFE6D8'; };
+  const f=document.getElementById('heroLive'), load=()=>{ f.hidden=false; f.src='/app?design=savannah-dr&hero=1'; };
   addEventListener('message',e=>{ if(e.origin===location.origin&&e.data&&e.data.brickhouse==='hero-ready') document.getElementById('heroFrame').classList.add('ready'); });
   addEventListener('load',()=>'requestIdleCallback' in window?requestIdleCallback(load,{timeout:1500}):setTimeout(load,300));
 }
@@ -306,7 +308,7 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
 fetch('/api/health').then(r=>r.ok?r.json():null).then(h=>{
   if(!h||!h.fee) return;
   const fee=(h.fee.amountCents/100).toLocaleString(undefined,{style:'currency',currency:h.fee.currency.toUpperCase()});
-  document.getElementById('feeLine').textContent=`Upload a few photos, answer a couple of quick questions, and see your house in bricks in about 20 minutes. The design is ${fee}.`;
+  document.getElementById('feeLine').textContent=`Upload a few photos, answer a couple of quick questions, and see your house in bricks. The design is ${fee}.`;
 }).catch(()=>{});
 </script>
 </body>
