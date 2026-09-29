@@ -38,6 +38,9 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute
 [hidden]{display:none!important}
 .note{font-size:13px;color:var(--muted);margin:6px 0 0}
 .err{color:var(--bad)}
+.stock{margin-top:10px;padding:8px 10px;border-radius:10px;background:var(--stage);font-size:14px}
+.stock.ok b{color:var(--good)} .stock.bad b{color:var(--bad)}
+.stock ul{margin:4px 0 0;padding-left:18px}
 </style>
 </head>
 <body>
@@ -114,6 +117,7 @@ function orderCard(j){ const k=j.kit, f=j.fulfillment||{status:'new'};
     <p style="margin:8px 0 0"><b>${esc(k.name||'')}</b>${k.email?` · <a href="mailto:${esc(k.email)}">${esc(k.email)}</a>`:''}<br>${addr(k.shipping)}</p>
     <div class="row"><a class="btn" href="/app?job=${j.id}" target="_blank" rel="noopener">Open design</a><a class="btn" href="/admin/api/jobs/${j.id}/parts.xml">Brickwith parts file</a><a class="btn" href="https://www.brickwith.com/en/part-list/upload" target="_blank" rel="noopener">Brickwith upload</a></div>
     <p class="note">Upload the parts file at Brickwith, then add the baseplate by hand: ${j.plate===48?'GDS-2238 (48 x 48)':'GDS-2237 (32 x 32)'}, green.</p>
+    ${stockHtml(j)}
   </div><form data-ful="${j.id}">
     <label class="f">Status</label><select name="status">${STATUSES.map(s=>`<option${s===f.status?' selected':''}>${s}</option>`).join('')}</select>
     <label class="f">Brickwith order number</label><input name="supplierOrder" maxlength="80" value="${esc(f.supplierOrder||'')}">
@@ -122,9 +126,25 @@ function orderCard(j){ const k=j.kit, f=j.fulfillment||{status:'new'};
     <div class="row"><button class="btn primary" type="submit">Save</button><span class="small muted" data-saved>${f.at?'Saved '+when(f.at):''}</span></div>
   </form></div>`; }
 
+// GoBricks' stock for the kit's parts today: checked when the kit is ordered, and again with Check stock before
+// ordering at Brickwith (Brickwith sells GoBricks' parts, so its stock follows; the check is a guide, not a promise)
+function stockHtml(j){ const s=j.stock;
+  const btn=data.stock?`<button class="btn" data-stock="${j.id}" style="margin-top:6px">${s?'Check again':'Check stock'}</button>`:'<span class="small muted">Stock checks are off on this server.</span>';
+  if(!s) return `<div class="stock"><span class="muted">GoBricks stock not checked yet.</span><br>${btn}</div>`;
+  const lot=(x,extra)=>`<li>${esc(x.name||x.no)} (${esc(x.no)}), ${esc(x.color)}: needs ${x.need}${extra?', '+extra:''}</li>`;
+  if(s.error) return `<div class="stock bad"><b>Couldn't check stock</b> <span class="small muted">${when(s.at)}</span><div class="small">${esc(s.error)}</div>${btn}</div>`;
+  const body=s.ok?`<b>All ${s.lots} lots in stock at GoBricks</b>`
+    :`<b>${s.short.length+s.notMade.length} of ${s.lots} lots can't be filled</b>`
+     +(s.short.length?`<div class="small">Short of stock:<ul>${s.short.map(x=>lot(x,`GoBricks has ${x.has}`)).join('')}</ul></div>`:'')
+     +(s.notMade.length?`<div class="small">No longer made in that color (the catalog snapshot is out of date; rerun scripts/gobricks.js):<ul>${s.notMade.map(x=>lot(x)).join('')}</ul></div>`:'')
+     +'<div class="small muted">Wait for a restock, or order these elsewhere (BrickLink) and the rest at Brickwith.</div>';
+  return `<div class="stock ${s.ok?'ok':'bad'}">${body} <span class="small muted">· ${when(s.at)}${s.total?` · about ¥${s.total.toFixed(2)} at today's prices`:''}</span><br>${btn}</div>`; }
+
 document.addEventListener('submit',async e=>{ const form=e.target.closest('[data-ful]'); if(!form) return; e.preventDefault();
   const body=Object.fromEntries(new FormData(form)); const out=form.querySelector('[data-saved]');
   try{ await api(`/admin/api/jobs/${form.dataset.ful}/fulfillment`,{method:'POST',body:JSON.stringify(body)}); out.textContent='Saved'; load(); }catch(err){ out.textContent=err.message; } });
+document.addEventListener('click',async e=>{ const b=e.target.closest('[data-stock]'); if(!b) return; b.disabled=true; b.textContent='Checking…';
+  try{ await api(`/admin/api/jobs/${b.dataset.stock}/stock`,{method:'POST',body:'{}'}); load(); }catch(err){ b.textContent=err.message; } });
 document.addEventListener('click',async e=>{ const b=e.target.closest('[data-retry]'); if(!b) return; b.disabled=true;
   try{ await api(`/admin/api/jobs/${b.dataset.retry}/retry`,{method:'POST',body:'{}'}); load(); }catch(err){ b.textContent=err.message; } });
 

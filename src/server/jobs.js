@@ -15,8 +15,9 @@ const MAX_RESUMES = 2; // times a job cut off by a restart is picked up again (a
 // kitCents(plate): the kit's price for a design on that baseplate, or null when kits aren't on sale.
 // preview(design): what a customer sees before ordering the kit (preview.js); the full design after.
 // notify(job, 'ready' | 'kit'): email the owner (mail.js), when the job has an email; never fails a job.
+// onKit(job): a kit order came in (the server checks the supplier's stock for it); never fails the order.
 function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, fixRun = null, now = () => Date.now(),
-  kitCents = () => null, preview = null, notify = null }) {
+  kitCents = () => null, preview = null, notify = null, onKit = null }) {
   fs.mkdirSync(dir, { recursive: true });
   const jobs = new Map();
   const file = (id) => path.join(dir, `${id}.json`);
@@ -46,6 +47,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     if (ev.type === 'done' || ev.type === 'error' || ev.type === 'draft' || ev.type === 'part') save(j); // part: where a restart picks up
   }
 
+  const ordered = (j) => { if (onKit) Promise.resolve().then(() => onKit(j)).catch((e) => console.error(`Stock check for ${j.id} failed: ${e.message}`)); };
   const tell = (j, kind) => { if (!notify || !j.email) return;
     Promise.resolve().then(() => notify(j, kind)).catch((e) => console.error(`Email (${kind}) for ${j.id} failed: ${e.message}`)); };
   function launch(j, fn) {
@@ -131,7 +133,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
           part: parts.length ? `${parts[parts.length - 1].n} of ${parts[parts.length - 1].of}` : null, error: err ? err.message : null,
           pieces: j.result && j.result.stats ? j.result.stats.pieces : null, problems: j.result ? (j.result.errors || 0) + (j.result.warnings || 0) : null,
           paid: !!j.paid, kit: j.kit ? { at: j.kit.at, amount: j.kit.amount, currency: j.kit.currency, name: j.kit.name, email: j.kit.email, shipping: j.kit.shipping, test: !!j.kit.test } : null,
-          fulfillment: j.fulfillment || null });
+          fulfillment: j.fulfillment || null, stock: j.stock || null });
       }
       return out.sort((a, b) => b.createdAt - a.createdAt);
     },
@@ -149,6 +151,14 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       if (status === 'shipped' && j.fulfillment.tracking && !j.fulfillment.shippedSent) { j.fulfillment.shippedSent = now(); tell(j, 'shipped'); }
       save(j);
       return { code: 200, fulfillment: j.fulfillment };
+    },
+
+    // The last stock check of a kit's parts at the supplier (server.js stockCheck), kept for the admin page.
+    setStock(id, stock) {
+      const j = load(id);
+      if (!j) return null;
+      j.stock = stock; save(j);
+      return stock;
     },
 
     // Run a failed or cut-off design again, from the part it reached (its last draft), as a restart would.
@@ -196,7 +206,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       if (!j) return { code: 404, error: 'No such job' };
       if (j.status !== 'done' || !j.result) return { code: 409, error: 'The design is not finished yet.' };
       if (j.kit) return { code: 200, ordered: true };
-      if (!stripe) { j.kit = { at: now(), test: true }; save(j); return { code: 200, ordered: true, test: true }; }
+      if (!stripe) { j.kit = { at: now(), test: true }; save(j); ordered(j); return { code: 200, ordered: true, test: true }; }
       if (session) {
         if (session !== j.kitSession) return { code: 402, error: 'This payment link is not for this kit.' };
         const s = await stripe.getSession(session);
@@ -205,7 +215,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
         j.kit = { at: now(), amount: s.amount_total, currency: s.currency, session, email: cd.email || null, name: (ship && ship.name) || cd.name || null, shipping: ship ? ship.address : cd.address || null };
         save(j);
         if (!j.email && cd.email) j.email = String(cd.email).toLowerCase();
-        tell(j, 'kit');
+        tell(j, 'kit'); ordered(j);
         return { code: 200, ordered: true };
       }
       const cents = kitCents(plateOf(j));

@@ -53,7 +53,7 @@ async function quote(inventory, opts = {}) {
   return {
     supplier: 'GoBricks', currency: 'CNY', total: Number(cost.toFixed(2)), pieces, lots: r.made.length,
     items: r.made.map((i) => ({ no: i.no, color: i.color, gds: i.gds, price: i.price, q: i.q })),
-    outOfStock: r.outOfStock.map((i) => ({ no: i.no, name: name(i), color: i.color, q: i.q, gds: i.gds })),
+    outOfStock: r.outOfStock.map((i) => ({ no: i.no, name: name(i), color: i.color, q: i.q, gds: i.gds, stock: i.stock })),
     notMade: r.notMade.map((i) => ({ no: i.no, name: name(i), color: i.color, q: i.q })),
   };
 }
@@ -71,16 +71,17 @@ function cleanLots(list) {
   return out;
 }
 
-// Quotes for the server: the same parts list is asked about once a day at most (in flight or answered).
+// Quotes for the server: the same parts list is asked about once a day at most (in flight or answered);
+// {fresh: true} asks again anyway (the admin's stock check before ordering a kit).
 function makeQuoter({ fetchImpl = fetch, ttl = 24 * 3600e3, max = 500, now = Date.now } = {}) {
   const cache = new Map();
   const keyOf = (lots) => JSON.stringify(lots.map((l) => [l.no, l.color, l.q]).sort());
   const fresh = (e) => !!e && now() - e.at < ttl;
   return {
     cached: (lots) => fresh(cache.get(keyOf(lots))),
-    quote(lots) {
+    quote(lots, { fresh: again = false } = {}) {
       const k = keyOf(lots), e = cache.get(k);
-      if (fresh(e)) return e.p;
+      if (fresh(e) && !again) return e.p;
       const p = quote(lots, { fetchImpl }).then((q) => ({ ...q, at: new Date(now()).toISOString() }));
       cache.set(k, { at: now(), p }); p.catch(() => cache.delete(k));
       if (cache.size > max) cache.delete(cache.keys().next().value);

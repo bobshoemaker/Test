@@ -14,7 +14,7 @@ const { prepareDesign } = require('./pipeline');
 const { createJobs } = require('./jobs');
 const { makeStripe } = require('./payments');
 const { anthropicKey, makeAnthropicClient } = require('./client');
-const { makeQuoter, cleanLots } = require('./gobricks');
+const { makeQuoter, cleanLots, LDRAW_COLOR } = require('./gobricks');
 
 const ROOT = path.resolve(__dirname, '../..');
 loadDotEnv(path.join(ROOT, '.env'));
@@ -195,6 +195,7 @@ const JOBS = createJobs({
   // the kit's price by baseplate: Classic (32) and Grand (48); unset means kits aren't on sale yet
   kitCents: (plate) => Number(plate === 48 ? process.env.BRICKHOUSE_KIT_GRAND_CENTS : process.env.BRICKHOUSE_KIT_CLASSIC_CENTS) || null,
   preview: makePreview,
+  onKit: (j) => QUOTER && SUPPLIER === 'gobricks' && stockCheck(j.id),
   notify: async (j, kind) => {
     if (!MAILER) return;
     const link = `${j.origin}/app?job=${j.id}`, name = j.result && j.result.design && j.result.design.name;
@@ -326,11 +327,33 @@ function isAdmin(req) {
   return !!m && sameSecret(m[1], adminToken());
 }
 const adminCookie = (req, value, maxAge) => `bh_admin=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${(req.headers['x-forwarded-proto'] || '') === 'https' ? '; Secure' : ''}`;
-// A design's parts as a BrickLink XML wanted list, for Brickwith's part-list upload (the baseplate is added by hand)
-function partsXml(design) {
+// A design's parts to order (the inventory without the baseplate, which is added by hand)
+function orderRows(design) {
   const { COLORS, compile } = require('../engine/engine.js');
-  const rows = compile(design).inventory.filter((e) => e.kind !== 'baseplate' && COLORS[e.color]);
+  return compile(design).inventory.filter((e) => e.kind !== 'baseplate' && COLORS[e.color]);
+}
+// A design's parts as a BrickLink XML wanted list, for Brickwith's part-list upload
+function partsXml(design) {
+  const { COLORS } = require('../engine/engine.js');
+  const rows = orderRows(design);
   return '<INVENTORY>\n' + rows.map((r) => `  <ITEM><ITEMTYPE>P</ITEMTYPE><ITEMID>${r.no}</ITEMID><COLOR>${COLORS[r.color].bl}</COLOR><MINQTY>${r.q}</MINQTY></ITEM>`).join('\n') + '\n</INVENTORY>\n';
+}
+// A kit's stock check: today's GoBricks stock for the parts the admin is about to order at Brickwith (run when
+// the kit is ordered, and again from the admin page). Kept on the job: lots short of stock (with what GoBricks has),
+// lots it doesn't make (the snapshot in suppliers.js has gone stale), and today's total in yuan. A failure is kept
+// too, so the admin sees the check didn't happen; the order itself never depends on it.
+async function stockCheck(id) {
+  const j = JOBS.get(id, { full: true }), d = j && j.result && j.result.design;
+  if (!d) return null;
+  const lots = orderRows(d).filter((e) => LDRAW_COLOR[e.color] !== undefined).map((e) => ({ no: e.no, color: e.color, q: e.q, name: e.name }));
+  let stock;
+  try {
+    const q = await QUOTER.quote(lots, { fresh: true });
+    stock = { at: Date.now(), ok: !q.outOfStock.length && !q.notMade.length, lots: lots.length, total: q.total, currency: q.currency,
+      short: q.outOfStock.map(({ no, name, color, q: need, stock: has, gds }) => ({ no, name, color, need, has: has || 0, gds })),
+      notMade: q.notMade.map(({ no, name, color, q: need }) => ({ no, name, color, need })) };
+  } catch (e) { stock = { at: Date.now(), error: e.message }; }
+  return JOBS.setStock(id, stock);
 }
 async function handleAdmin(req, res, url) {
   if (!ADMIN_PASSWORD) return send(res, 503, { error: 'Set BRICKHOUSE_ADMIN_PASSWORD to use the admin page.' });
@@ -343,8 +366,8 @@ async function handleAdmin(req, res, url) {
   }
   if (req.method === 'POST' && url.pathname === '/admin/logout') { res.setHeader('set-cookie', adminCookie(req, '', 0)); return send(res, 200, { ok: true }); }
   if (!isAdmin(req)) return send(res, 401, { error: 'Sign in first.' });
-  if (req.method === 'GET' && url.pathname === '/admin/api/jobs') return send(res, 200, { jobs: JOBS.list(), supplier: SUPPLIER, mail: !!MAILER, payments: !!JOBS.fee });
-  const m = /^\/admin\/api\/jobs\/([a-f0-9-]{36})\/(parts\.xml|fulfillment|retry)$/.exec(url.pathname);
+  if (req.method === 'GET' && url.pathname === '/admin/api/jobs') return send(res, 200, { jobs: JOBS.list(), supplier: SUPPLIER, mail: !!MAILER, payments: !!JOBS.fee, stock: !!QUOTER });
+  const m = /^\/admin\/api\/jobs\/([a-f0-9-]{36})\/(parts\.xml|fulfillment|retry|stock)$/.exec(url.pathname);
   if (!m) return send(res, 404, { error: 'Not found' });
   const [, id, what] = m;
   if (req.method === 'GET' && what === 'parts.xml') {
@@ -358,6 +381,11 @@ async function handleAdmin(req, res, url) {
     const r = JOBS.setFulfillment(id, body); return send(res, r.code, r);
   }
   if (req.method === 'POST' && what === 'retry') { const r = JOBS.retry(id); return send(res, r.code, r); }
+  if (req.method === 'POST' && what === 'stock') {
+    if (!QUOTER) return send(res, 503, { error: 'GoBricks quotes are off on this server (BRICKHOUSE_GOBRICKS_QUOTES=0).' });
+    const stock = await stockCheck(id);
+    return stock ? send(res, 200, { stock }) : send(res, 404, { error: 'No finished design.' });
+  }
   send(res, 405, { error: 'Method not allowed' });
 }
 

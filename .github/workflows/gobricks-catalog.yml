@@ -1,0 +1,39 @@
+# Monthly GoBricks catalog refresh: asks GoBricks' part-list matcher again what it makes (scripts/gobricks.js
+# --fresh, ten requests) and, when anything changed, opens a pull request with the new src/engine/suppliers.js,
+# what changed and whether the tests still pass. A part-color GoBricks dropped fails a design held to it, so
+# merge only once the tests pass (redesign or fix what they name). Needs the repository setting
+# "Allow GitHub Actions to create and approve pull requests" (Settings > Actions > General).
+name: GoBricks catalog refresh
+on:
+  schedule:
+    - cron: '17 9 1 * *' # the 1st of each month
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - name: Ask GoBricks what it makes now
+        run: node scripts/gobricks.js --fresh --report "$RUNNER_TEMP/report.md"
+      - name: Open a pull request if anything changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet src/engine/suppliers.js; then echo "No change."; exit 0; fi
+          if npm test > "$RUNNER_TEMP/test.log" 2>&1; then tests="Tests pass with the new catalog."; else tests="**Tests fail with the new catalog**: fix or redesign what they name before merging."; fi
+          grep -E '^# (pass|fail)' "$RUNNER_TEMP/test.log" || true
+          branch="gobricks-catalog-$(date -u +%Y-%m-%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git commit -am "GoBricks catalog refresh $(date -u +%Y-%m-%d)"
+          git push -u origin "$branch"
+          { cat "$RUNNER_TEMP/report.md"; echo; echo "$tests"; echo; echo "Made by the monthly refresh (.github/workflows/gobricks-catalog.yml)."; } > "$RUNNER_TEMP/body.md"
+          gh pr create --base "${{ github.event.repository.default_branch }}" --head "$branch" --title "GoBricks catalog refresh $(date -u +%Y-%m-%d)" --body-file "$RUNNER_TEMP/body.md"

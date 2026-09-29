@@ -157,12 +157,18 @@ test('the design is a preview until its kit is ordered and paid; a design-fee pa
 
 test('without Stripe a kit order is a test order that unlocks at once; kits need a finished design', async () => {
   let finish; const run = (p, emit) => new Promise((r) => { finish = () => { emit({ type: 'done', design: { name: 'h' } }); r(); }; });
-  const jobs = createJobs({ dir: tmp(), run, preview: () => ({ preview: true }) });
+  const kits = [];
+  const jobs = createJobs({ dir: tmp(), run, preview: () => ({ preview: true }), onKit: (j) => { kits.push(j.id); throw new Error('matcher down'); } });
   const { id } = await jobs.create({ notes: 'x', photos: [] }, 'https://site.test');
   assert.equal((await jobs.kit(id, {})).code, 409);
   finish(); await until(() => jobs.get(id).status === 'done');
-  assert.deepEqual(await jobs.kit(id, {}), { code: 200, ordered: true, test: true });
+  assert.deepEqual(await jobs.kit(id, {}), { code: 200, ordered: true, test: true }, 'a failed stock check never fails the order');
   assert.deepEqual([jobs.get(id).kit.test, jobs.get(id).result.design], [true, { name: 'h' }]);
+  // the order starts a stock check, whose result the admin list shows
+  await until(() => kits.length === 1); assert.deepEqual(kits, [id]);
+  const stock = { at: 1, ok: false, lots: 2, short: [{ no: '3005', color: 'Tan', need: 4, has: 1 }], notMade: [] };
+  jobs.setStock(id, stock);
+  assert.deepEqual(jobs.list().find((r) => r.id === id).stock, stock);
 });
 
 test('the admin list, fulfillment (shipped with tracking emails once) and running a failed design again', async () => {
