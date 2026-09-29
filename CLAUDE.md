@@ -57,6 +57,12 @@ closing gift that realtors give clients: a brick model of the house they just bo
   mode builds walls, roofs, lot and planting in separate appended turns; each compile result
   carries renders of the draft (front, front three-quarter and both back corners, capped so a
   request stays under the API's image limit) for Claude to compare with the photos.
+- Photo check (`checkPhotos` in designer.js; the tool and its instructions in prompt.js): before a design request is
+  saved or paid for, and before a survey, a quick low-effort look (`BRICKHOUSE_SURVEY_MODEL`) says what each photo
+  shows; `photoVerdict`, plain code, refuses a photo of a different house from the rest, a building that isn't a home,
+  or no building, a set with no clear outside view, and a floor plan that isn't one (422, naming the photos; the app
+  outlines them). Inside shots and blurry ones pass; when in doubt it favours the owner. Tested with a fake client;
+  not yet tried against real photos.
 - Survey (`surveyHouse` in designer.js, `POST /api/survey`, `scripts/survey.js`): a cheap first
   look (low effort by default; `BRICKHOUSE_SURVEY_MODEL` / `BRICKHOUSE_SURVEY_EFFORT`) that lists
   what the photos show and asks up to five questions about what they leave open (a roof hidden

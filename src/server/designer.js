@@ -4,7 +4,7 @@
 // out in studs (footprint.js) and every compile checks the design's walls against it.
 const { compile } = require('../engine/engine.js');
 const { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask,
-  SURVEY_SPEC, SURVEY_TOOL, surveyTask, LANDSCAPE_STYLES } = require('./prompt');
+  SURVEY_SPEC, SURVEY_TOOL, surveyTask, PHOTO_CHECK_SPEC, PHOTO_CHECK_TOOL, photoCheckTask, LANDSCAPE_STYLES } = require('./prompt');
 const { layoutFootprint, skeletonOps, checkFootprint, describeLayout } = require('./footprint');
 const { scaleFor } = require('./scale');
 
@@ -96,6 +96,43 @@ async function surveyHouse({ client, model, photos = [], plan = null, notes = ''
     recommended: 'photos',
   });
   return { summary: str(input.summary, 600), seen: (Array.isArray(input.seen) ? input.seen : []).slice(0, 20).map((x) => str(x, 200)), questions, usage };
+}
+
+// The screen every design request passes: the photos must show one home (not another building, not
+// something else, not two different houses). The rules are here, in code; Claude only says what each
+// photo shows. Returns {ok, problems: [{photo, shows, note}], message} with a message for the owner.
+const REFUSED = { different_home: 'looks like a different house from the others', not_home: "doesn't look like a home",
+  not_building: "doesn't show a building" };
+function photoVerdict(input, photoCount, hasPlan) {
+  const seen = new Map();
+  for (const p of Array.isArray(input && input.photos) ? input.photos : []) {
+    const n = Math.round(Number(p && p.photo));
+    if (n >= 1 && n <= photoCount && !seen.has(n)) seen.set(n, { photo: n, shows: String(p.shows), note: String(p.note || '').slice(0, 200) });
+  }
+  const all = Array.from({ length: photoCount }, (_, i) => seen.get(i + 1) || { photo: i + 1, shows: 'unclear', note: '' });
+  const problems = all.filter((p) => REFUSED[p.shows]);
+  const lines = problems.map((p) => `Photo ${p.photo} ${REFUSED[p.shows]}${p.note ? ` (${p.note.replace(/\.$/, '')})` : ''}.`);
+  if (!problems.length && photoCount && !all.some((p) => p.shows === 'home'))
+    lines.push("We couldn't see the outside of the house clearly. Please add a clear photo of the front.");
+  if (hasPlan && input && input.planIsFloorPlan === false) lines.push("The floor plan doesn't look like a floor plan of a home.");
+  if (!lines.length) return { ok: true, problems: [], message: '' };
+  const fix = problems.some((p) => p.shows === 'different_home') ? ' Please use photos of just one house.' : problems.length ? ' Please remove it and try again.' : '';
+  return { ok: false, problems, message: lines.join(' ') + fix };
+}
+
+async function checkPhotos({ client, model, photos = [], plan = null, effort = 'low', maxTokens = 16000, onEvent = () => {} }) {
+  if (!photos.length && !plan) return { ok: true, problems: [], message: '' };
+  const params = { model, max_tokens: maxTokens, system: PHOTO_CHECK_SPEC, tools: [PHOTO_CHECK_TOOL],
+    messages: [{ role: 'user', content: [...photos.map(imageBlock), ...(plan ? [imageBlock(plan)] : []),
+      { type: 'text', text: photoCheckTask({ photoCount: photos.length, hasPlan: !!plan }) }] }] };
+  if (effort) params.output_config = { effort };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const msg = await callClaude(client, params, onEvent);
+    if (msg.stop_reason === 'refusal') return { ok: false, problems: [], message: "These photos can't be used for a model. Please send photos of the outside of your home." };
+    const use = (msg.content || []).find((b) => b.type === 'tool_use' && b.name === PHOTO_CHECK_TOOL.name);
+    if (use) return photoVerdict(use.input, photos.length, !!plan);
+  }
+  throw new Error("We couldn't check the photos just now. Please try again in a moment.");
 }
 
 // Survey answers ({questionId: optionId, or free text}) to the choices the design follows.
@@ -375,4 +412,4 @@ async function designHouse({
 
 const REPAIR_TURNS = 3;
 
-module.exports = { designHouse, surveyHouse, resolveChoices, planFootprint, extractJson, summarize, problemList, COMPILE_TOOL };
+module.exports = { designHouse, surveyHouse, checkPhotos, photoVerdict, resolveChoices, planFootprint, extractJson, summarize, problemList, COMPILE_TOOL };

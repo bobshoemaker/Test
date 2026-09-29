@@ -11,6 +11,12 @@ function makeFakeClient({ delayMs = 600 } = {}) {
     messages: {
       create: async function (params) {
         this.calls = this.calls || [];
+        if (params.tools && params.tools[0] && params.tools[0].name === 'submit_photo_check') {
+          // the scripted check passes every photo
+          const n = params.messages[0].content.filter((b) => b.type === 'image').length - (/floor plan/.test(params.messages[0].content.at(-1).text) ? 1 : 0);
+          return { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'toolu_fake_check', name: 'submit_photo_check',
+            input: { photos: Array.from({ length: n }, (_, i) => ({ photo: i + 1, shows: 'home', note: 'a house (scripted)' })), planIsFloorPlan: true } }] };
+        }
         if (params.tools && params.tools[0] && params.tools[0].name === 'submit_survey') {
           await wait();
           return { role: 'assistant', stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'toolu_fake_survey', name: 'submit_survey', input: {
