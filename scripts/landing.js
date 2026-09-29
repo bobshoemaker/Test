@@ -9,8 +9,11 @@ const { bundleHtml } = require('../src/server/bundle');
 
 const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(ROOT, 'src/viewer/img');
-// [design, view, file, zoom (smaller is closer)]
-const SHOTS = [['634-unit-a', 'q', 'sample-634.jpg', 0.72], ['savannah-dr', 'q', 'sample-savannah.jpg', 0.8]];
+// [design, view, file, zoom (smaller is closer), building-guide step as a share of the build (optional)],
+// drawn on the page's warm background
+const SHOTS = [['634-unit-a', 'q', 'sample-634.jpg', 0.72], ['savannah-dr', 'q', 'sample-savannah.jpg', 0.8], ['savannah-dr', 'f', 'sample-savannah-front.jpg', 0.62],
+  ['634-unit-a', 'q', 'sample-634-step.jpg', 0.72, 0.42]];
+const BACKGROUND = '#EFE6D8';
 
 function playwright() {
   try { return require('playwright'); } catch { /* the global install */ }
@@ -23,13 +26,17 @@ function playwright() {
   if (process.env.BRICKHOUSE_CHROMIUM) opts.executablePath = process.env.BRICKHOUSE_CHROMIUM;
   const browser = await playwright().chromium.launch(opts);
   fs.mkdirSync(OUT, { recursive: true });
-  for (const [name, view, file, zoom] of SHOTS) {
+  for (const [name, view, file, zoom, step] of SHOTS) {
     const page = await browser.newPage({ viewport: { width: 1232, height: 1100 }, deviceScaleFactor: 1 });
     await page.route('**/three.min.js', (r) => r.fulfill({ body: three, contentType: 'text/javascript' }));
     await page.setContent(bundleHtml(fs.readFileSync(path.join(ROOT, 'designs', name + '.json'), 'utf8')), { waitUntil: 'load' });
     await page.waitForFunction(() => document.querySelector('#cv') && document.querySelector('#cv').width > 0);
-    await page.addStyleTag({ content: '.tools,.showcase,.modebadge{visibility:hidden!important} .grid{grid-template-columns:1fr!important} .panel,header{display:none!important} .stage{height:860px!important;border-radius:0!important}' });
-    await page.evaluate(([v, z]) => { window.dispatchEvent(new Event('resize')); setView(v); goal.radius *= z; }, [view, zoom]); // eslint-disable-line no-undef
+    await page.addStyleTag({ content: `.tools,.showcase,.modebadge{visibility:hidden!important} .grid{grid-template-columns:1fr!important} .panel,header{display:none!important} .stage{height:860px!important;border-radius:0!important} :root{--stage:${BACKGROUND}!important}` });
+    await page.evaluate(([v, z, st]) => { // eslint-disable-line no-undef
+      window.dispatchEvent(new Event('resize')); applyTheme(); setView(v); goal.radius *= z;
+      if (st != null) { document.querySelector('[data-tab="manual"]').click(); const s = document.getElementById('slider');
+        s.value = Math.round(st * Number(s.max)); s.dispatchEvent(new Event('input')); }
+    }, [view, zoom, step]);
     await page.waitForTimeout(1500);
     await page.locator('#cv').screenshot({ path: path.join(OUT, file), type: 'jpeg', quality: 86 });
     console.log(`${file}: ${Math.round(fs.statSync(path.join(OUT, file)).size / 1024)} KB`);
