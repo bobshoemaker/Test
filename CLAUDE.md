@@ -109,7 +109,10 @@ closing gift that realtors give clients: a brick model of the house they just bo
   runs it only once Stripe confirms that job's session is paid, and only once; `GET
   /api/jobs/<id>?after=&have=` is its progress, polled by the viewer; `POST /api/jobs/<id>/fix`
   gives a finished job up to two more rounds. Jobs run server-side and are saved to
-  `designs/generated/jobs/`; results to `designs/generated/`. There is no unpaid design endpoint. `POST /api/quote {lots}` returns GoBricks' price and stock
+  `designs/generated/jobs/`; results to `designs/generated/`, which are private: `/api/designs` and
+  `/designs/generated/…` list and serve them only to a request made on the server's own machine (no proxy header),
+  and each customer sees theirs through its job link. The upload page and the home page's questions promise that we
+  use photos and address only for the model and kit, never sell them or share them for advertising: keep it true. There is no unpaid design endpoint. `POST /api/quote {lots}` returns GoBricks' price and stock
   for a parts list today (cached a day per list; `BRICKHOUSE_GOBRICKS_QUOTES=0` turns it off, `BRICKHOUSE_CNY_PER_USD`
   sets the viewer's dollar rate). `POST /api/lookup {address}` returns the place and ranked candidate
   photos (the dev view's Find photos); `GET /api/photo/<mapillary id>` proxies one image.
@@ -126,7 +129,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
 - The app at `/app` is consumer-facing in the home page's theme (warm palette, Jersey 10 headings, pill buttons;
   tabs Model, Guide, Kit, Make yours). "Make yours" (`/app#design`) is an upload page of its own, the sample house hidden,
   until the first draft of their house comes back. `?dev=1` turns on the technical view in that browser (`?dev=0` off): the design
-  list (it lists every customer's house), checker counts and problems, connection colors, part numbers, suppliers and
+  list (samples only, unless the server is on your own machine), checker counts and problems, connection colors, part numbers, suppliers and
   prices, the piece target and the design code editor, all marked `dev-only`; standalone copies are technical.
 - `src/viewer/`: single-page three.js (r128, CDN) viewer, at `/app`: model, manual (sub-builds shown on
   their own), parts and BrickLink XML, design editor, photo upload, and "Lift roof" for designs

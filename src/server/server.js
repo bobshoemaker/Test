@@ -61,9 +61,16 @@ function send(res, code, body, type = 'application/json; charset=utf-8') {
   res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
 }
 
-function listDesigns() {
+// Customers' houses (designs/generated) are private: each customer sees theirs through its job link.
+// Only a request made on this machine itself (local development, no proxy in front) may list or open them.
+function onThisMachine(req) {
+  const a = req.socket.remoteAddress || '';
+  return !req.headers['x-forwarded-for'] && (a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1');
+}
+
+function listDesigns(all) {
   const out = [];
-  for (const dir of ['designs', 'designs/generated']) {
+  for (const dir of all ? ['designs', 'designs/generated'] : ['designs']) {
     const abs = path.join(ROOT, dir);
     if (!fs.existsSync(abs)) continue;
     for (const f of fs.readdirSync(abs)) if (f.endsWith('.json')) out.push((dir === 'designs' ? '' : 'generated/') + f.replace(/\.json$/, ''));
@@ -262,9 +269,10 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/health') {
       return send(res, 200, { ok: true, model: FAKE ? 'fake' : MODEL, effort: EFFORT, ready: FAKE || !!anthropicKey(), fee: JOBS.fee, maxPhotos: MAX_PHOTOS, streetPhotos: !!process.env.MAPILLARY_TOKEN, quote: !!QUOTER, cnyPerUsd: CNY_PER_USD });
     }
-    if (req.method === 'GET' && url.pathname === '/api/designs') return send(res, 200, listDesigns());
+    if (req.method === 'GET' && url.pathname === '/api/designs') return send(res, 200, listDesigns(onThisMachine(req)));
     const m = /^\/designs\/((?:generated\/)?[a-z0-9._-]+)\.json$/i.exec(url.pathname);
     if (req.method === 'GET' && m) {
+      if (m[1].startsWith('generated/') && !onThisMachine(req)) return send(res, 404, { error: 'No such design' });
       const file = path.join(ROOT, 'designs', m[1] + '.json');
       if (!fs.existsSync(file)) return send(res, 404, { error: 'No such design' });
       return send(res, 200, fs.readFileSync(file));
