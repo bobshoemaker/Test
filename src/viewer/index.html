@@ -122,6 +122,7 @@ textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-ra
 .addr{display:flex;gap:8px;margin-top:6px}
 .addrlabel{display:block;margin-top:14px;font-weight:700;font-size:14px}
 .privacy{margin:14px 0 0;padding:10px 12px;border-radius:10px;background:var(--stage);font-size:13px;line-height:1.45}
+.fewphotos{margin:12px 0 0;padding:9px 12px;border-radius:10px;border:1.5px solid var(--accent);font-size:13.5px;line-height:1.45}
 .addrwhy{margin:6px 0 0;font-size:13px;color:var(--muted)}
 .addr input{flex:1;min-width:0;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-size:15px}
 .cands{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:10px}
@@ -268,6 +269,7 @@ html:not(.upload) .seeex{display:none}
             <div class="row" id="candRow" hidden><button class="btn" id="useCands">Add selected photos</button></div>
             <textarea class="notes" id="notes" rows="2" placeholder="Anything the photos don't show, like the roof color or which side the garage is on"></textarea>
             <div class="survey" id="survey" hidden></div>
+            <p class="fewphotos" id="fewPhotos" role="status" hidden></p>
             <div class="row"><button class="btn" id="surveyBtn">Check my photos first</button><button class="btn primary" id="designBtn">Design from photos</button><button class="btn" id="stopBtn" hidden>Stop</button><button class="btn" id="lastBtn" hidden>Show my last design</button></div>
             <div class="out" id="photoStatus" aria-live="polite"></div>
             <p class="privacy"><b>Your privacy.</b> We use your photos and address only to design your model and send your kit. We never sell them or share them for advertising, and your house isn't shown to anyone else: you see it through your own private link.</p>

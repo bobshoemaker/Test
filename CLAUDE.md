@@ -138,7 +138,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   offscreen, posting its step to the page. Neither loads with reduced motion.
 - The app at `/app` is consumer-facing in the home page's theme (warm palette, Jersey 10 headings, pill buttons;
   tabs Model, Guide, Kit, Make yours). "Make yours" (`/app#design`) is an upload page of its own, the sample house hidden,
-  until the first draft of their house comes back. `?dev=1` turns on the technical view in that browser (`?dev=0` off): the design
+  until the first draft of their house comes back. With one or two photos (or none, only a description) it notes above the Design button that
+  the sides we can't see get guessed, so the model won't be as accurate (not a block). `?dev=1` turns on the technical view in that browser (`?dev=0` off): the design
   list (samples only, unless the server is on your own machine), checker counts and problems, connection colors, part numbers, suppliers and
   prices, the piece target and the design code editor, all marked `dev-only`; standalone copies are technical.
 - `src/viewer/`: single-page three.js (r128, CDN) viewer, at `/app`: model, manual (sub-builds shown on

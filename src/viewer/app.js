@@ -591,13 +591,20 @@ function failed(res,j){ const e=new Error(j.error||`Server error ${res.status}`)
   if(res.status===422){ e.plain=true; flagPhotos((j.problems||[]).map(p=>p.photo)); } return e; }
 function flagPhotos(nums){ $('thumbs').querySelectorAll('img').forEach(im=>im.classList.toggle('flagged',nums.includes(+im.dataset.i+1))); }
 function setBusy(b){ $('planBtn').disabled=b; $('surveyBtn').disabled=b; $('designBtn').disabled=b; $('pickBtn').disabled=b; $('addrBtn').disabled=b; $('useCands').disabled=b; $('stopBtn').hidden=!b; $('compileBtn').disabled=b; $('revertBtn').disabled=b; }
+// Few photos mean guessed sides: say so before they design (a note, not a block)
+const FEW_PHOTOS=3;
+function fewPhotosNote(){ const n=photos.length, el=$('fewPhotos'), described=$('notes').value.trim();
+  el.hidden=n>=FEW_PHOTOS||(!n&&!described);
+  el.textContent=!n?'Without photos, the model is built from your description alone, so it will only be a rough likeness. Photos of the house make it far more accurate.'
+    :`With only ${n} photo${n>1?'s':''}, we'll have to guess what the ${n>1?'other sides':'sides and back'} of the house look like, so the model won't be as accurate. Add photos of the sides, the back and the garage if you can (up to ${(health&&health.maxPhotos)||12}).`; }
+$('notes').addEventListener('input',fewPhotosNote);
 function renderThumbs(){
   photoUrls.forEach(u=>URL.revokeObjectURL(u)); photoUrls=photos.map(f=>URL.createObjectURL(f));
   const html=photoUrls.map((u,i)=>`<img src="${u}" alt="House photo ${i+1}">`).join('');
   $('thumbs').innerHTML=photoUrls.map((u,i)=>`<img src="${u}" alt="House photo ${i+1}" title="Click to remove" data-i="${i}" style="cursor:pointer">`).join('');
   $('refPhotos').innerHTML=html; $('refWrap').hidden=!photos.length;
   $('designBtn').textContent=(photos.length?`Design from ${photos.length} photo${photos.length>1?'s':''}`:'Design from description')+feeText();
-  $('surveyBtn').hidden=!photos.length; if(survey){ survey=null; $('survey').hidden=true; $('survey').innerHTML=''; } // new photos: ask again
+  fewPhotosNote(); $('surveyBtn').hidden=!photos.length; if(survey){ survey=null; $('survey').hidden=true; $('survey').innerHTML=''; } // new photos: ask again
 }
 async function toPayload(file,maxSide=1568){
   // Downscale on the device: Claude works at about 1.5 megapixels and uploads stay small. Floor plans
