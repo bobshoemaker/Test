@@ -117,3 +117,12 @@ test('a restart leaves unpaid jobs alone and gives back a cut-off fix round', as
   assert.deepEqual([later.resumeInterrupted(), runs, later.get(old.id).status], [[], 0, 'error']);
   assert.deepEqual([after.get(done.id).status, after.get(done.id).fixesLeft, after.get(done.id).result.design.name], ['done', MAX_FIXES, 'kept']);
 });
+
+test("a job serves its own photos by index, for the viewer to show beside the model", async () => {
+  const jobs = createJobs({ dir: tmp(), run: async () => {} });
+  const { id } = await jobs.create({ notes: 'x', photos: [{ mediaType: 'image/jpeg', data: 'AAAA' }, { mediaType: 'image/png', data: 'BBBB' }] }, 'https://site.test');
+  assert.equal(jobs.get(id).photos, 2);
+  assert.deepEqual(jobs.photo(id, 1), { mediaType: 'image/png', data: 'BBBB' });
+  assert.equal(jobs.photo(id, 2), null);
+  assert.equal(jobs.photo('not-a-job', 0), null);
+});

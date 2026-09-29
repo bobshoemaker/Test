@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Brickhouse: your home, brick by brick</title>
 <meta name="description" content="Send a few photos of any house and we'll design a brick model of it, with a step-by-step building guide and every piece listed. For your first home, the house you grew up in, or a gift.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -138,6 +138,8 @@ footer{padding:36px 0 48px;color:var(--muted);font-size:14px}
 footer p{margin:4px 0;max-width:80ch}
 footer a{color:inherit}
 @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+/* no page zoom on phones (no double-tap zoom; Safari's pinch is stopped in the script) */
+html{touch-action:manipulation}
 </style>
 </head>
 <body>
@@ -304,6 +306,8 @@ footer a{color:inherit}
 </footer>
 
 <script>
+document.addEventListener('gesturestart',e=>e.preventDefault()); // Safari ignores user-scalable=no
+
 // The live model in the hero: after the page has loaded, and not for anyone who asks for less motion
 if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
   const f=document.getElementById('heroLive'), load=()=>{ f.hidden=false; f.src='/app?design=savannah-dr&hero=1'; };
