@@ -60,3 +60,16 @@ test('a request with no photos and no plan (a description only) is not checked',
   assert.equal((await checkPhotos({ client: c, model: 'm', photos: [] })).ok, true);
   assert.equal(c.calls.length, 0);
 });
+
+test('a design held to a supplier is compiled and returned with it, and Claude is told', async () => {
+  const { designHouse } = require('../src/server/designer');
+  const { makeFakeClient } = require('../src/server/fakeClient');
+  const client = makeFakeClient({ delayMs: 0 }), seen = [];
+  const create = client.messages.create.bind(client.messages);
+  client.messages.create = async (p) => { seen.push(p); return create(p); };
+  const out = await designHouse({ client, model: 'm', photos: [{ mediaType: 'image/jpeg', data: 'AAAA' }], notes: 'x', supplier: 'gobricks' });
+  assert.equal(out.design.supplier, 'gobricks');
+  assert.match(seen[0].messages[0].content.at(-1).text, /SUPPLIER\. The kit is made from GoBricks bricks/);
+  // the compile results come back under GoBricks' catalog
+  assert.equal(out.result.inventory.find((l) => l.kind === 'baseplate').gds.startsWith('GDS-2237'), true);
+});

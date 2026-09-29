@@ -22,6 +22,12 @@ the Node server (it calls Claude and renders drafts in headless Chromium).
      the kit's totals); a kit order through Stripe Checkout (with their shipping address) unlocks the full guide
      and parts list. Without a Stripe key, "Order your kit" is a test order that unlocks at once, so set Stripe up
      before launch. `node scripts/orders.js` (in the Render Shell) lists kit orders to fulfill.
+   - `BRICKHOUSE_ADMIN_PASSWORD`: turns on the admin page at `/admin` (sign in with it): every design with its
+     status and any error (Run again for a failed one), and the kit orders to fulfill, each with the customer's
+     shipping address, the parts file for Brickwith's part-list upload, and its progress (ordered, packed, shipped;
+     a tracking number emails the customer). Signed in, you see every design in full. Use a long password.
+   - `BRICKHOUSE_SUPPLIER`: customer designs are held to what GoBricks makes (the kits come from Brickwith); set it
+     to an empty value to hold them to LEGO availability instead.
    - `RESEND_API_KEY`: turns on email through Resend (resend.com): the link to each design when it's ready (to the
      email on the form or from Stripe), a kit order's confirmation, and "find my designs" by email.
      `BRICKHOUSE_MAIL_FROM` is the sender, for example `Brickhouse <hello@yourdomain.com>`, on a domain you've verified

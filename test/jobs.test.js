@@ -164,3 +164,29 @@ test('without Stripe a kit order is a test order that unlocks at once; kits need
   assert.deepEqual(await jobs.kit(id, {}), { code: 200, ordered: true, test: true });
   assert.deepEqual([jobs.get(id).kit.test, jobs.get(id).result.design], [true, { name: 'h' }]);
 });
+
+test('the admin list, fulfillment (shipped with tracking emails once) and running a failed design again', async () => {
+  const told = []; let fail = true;
+  const run = async (p, emit) => { emit({ type: 'part', n: 1, of: 5, name: 'Walls' }); emit({ type: 'draft', n: 1, design: { name: 'h', phases: [], ops: [] } });
+    if (fail) throw new Error('overloaded'); emit({ type: 'done', design: { name: 'h' }, stats: { pieces: 10 }, errors: 0, warnings: 0 }); };
+  const jobs = createJobs({ dir: tmp(), run, notify: async (j, kind) => told.push(kind) });
+  const { id } = await jobs.create({ notes: 'x', photos: [], address: '1 Elm St', email: 'a@b.test' }, 'https://s.test');
+  await until(() => jobs.get(id).status === 'error');
+  let row = jobs.list()[0];
+  assert.deepEqual([row.id, row.status, row.error, row.address, row.email, row.part], [id, 'error', 'overloaded', '1 Elm St', 'a@b.test', '1 of 5']);
+  // run again: picks up from part 1 (no seed past part 1) and finishes
+  fail = false;
+  assert.equal(jobs.retry(id).code, 200);
+  await until(() => jobs.get(id).status === 'done');
+  assert.equal(jobs.retry(id).code, 409, 'only a failed design runs again');
+  // fulfillment needs a kit order; shipped with tracking emails once
+  assert.equal(jobs.setFulfillment(id, { status: 'ordered' }).code, 404);
+  await jobs.kit(id, {});
+  assert.equal(jobs.setFulfillment(id, { status: 'lost' }).code, 400);
+  assert.equal(jobs.setFulfillment(id, { status: 'ordered', supplierOrder: 'BW-1' }).code, 200);
+  jobs.setFulfillment(id, { status: 'shipped', tracking: '1Z999' }); jobs.setFulfillment(id, { status: 'shipped', tracking: '1Z999' });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(told.filter((k) => k === 'shipped'), ['shipped']);
+  row = jobs.list()[0];
+  assert.deepEqual([row.fulfillment.status, row.fulfillment.supplierOrder, row.fulfillment.tracking, row.kit.test], ['shipped', 'BW-1', '1Z999', true]);
+});

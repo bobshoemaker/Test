@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { designHouse, surveyHouse, checkPhotos } = require('./designer');
 const { makePreview } = require('./preview');
-const { makeMailer, cleanEmail, readyEmail, kitEmail, mineEmail } = require('./mail');
+const { makeMailer, cleanEmail, readyEmail, kitEmail, shippedEmail, mineEmail } = require('./mail');
 const { scaleFor } = require('./scale');
 const { lookupAddress, fetchMapillaryImage } = require('./lookup');
 const { lookupTerrain } = require('./terrain');
@@ -49,6 +49,7 @@ const { withTopbar } = require('./bundle');
 const STATIC = {
   '/': ['src/viewer/landing.html', 'text/html; charset=utf-8'],
   '/app': ['src/viewer/index.html', 'text/html; charset=utf-8'],
+  '/admin': ['src/viewer/admin.html', 'text/html; charset=utf-8'],
   '/index.html': ['src/viewer/index.html', 'text/html; charset=utf-8'],
   '/img/sample-634.jpg': ['src/viewer/img/sample-634.jpg', 'image/jpeg'],
   '/img/sample-savannah.jpg': ['src/viewer/img/sample-savannah.jpg', 'image/jpeg'],
@@ -167,7 +168,7 @@ async function runDesign(p, emit) {
   prep.log.forEach((m) => emit({ type: 'status', message: m }));
   const renderer = await getRenderer();
   const out = await designHouse({ client, model: MODEL, effort: EFFORT, photos: p.photos, plan: p.plan, notes: prep.notes, target: p.target, choices: p.choices,
-    plate: p.plate, mode: 'parts', locked: prep.locked, render: renderer && renderer.render, planTools: renderer, onEvent: emit,
+    plate: p.plate, mode: 'parts', locked: prep.locked, render: renderer && renderer.render, planTools: renderer, onEvent: emit, supplier: SUPPLIER,
     ...(p.resume ? { fromPart: p.resume.fromPart, seed: p.resume.seed } : {}) });
   finishDesign(out, p, emit, t0);
 }
@@ -181,6 +182,9 @@ async function runFix(p, emit) {
 }
 
 // Design jobs, paid for through Stripe Checkout when STRIPE_SECRET_KEY is set (see jobs.js).
+// Kits are made from GoBricks bricks (bought at Brickwith), so every customer design is held to what GoBricks makes;
+// BRICKHOUSE_SUPPLIER sets another ("" for LEGO availability). The scripted demo client's design isn't.
+const SUPPLIER = FAKE ? null : (process.env.BRICKHOUSE_SUPPLIER !== undefined ? process.env.BRICKHOUSE_SUPPLIER || null : 'gobricks');
 // Email through Resend (mail.js): RESEND_API_KEY turns it on, BRICKHOUSE_MAIL_FROM is the sender
 const MAILER = makeMailer({ apiKey: process.env.RESEND_API_KEY, ...(process.env.BRICKHOUSE_MAIL_FROM ? { from: process.env.BRICKHOUSE_MAIL_FROM } : {}) });
 const JOBS = createJobs({
@@ -194,7 +198,8 @@ const JOBS = createJobs({
   notify: async (j, kind) => {
     if (!MAILER) return;
     const link = `${j.origin}/app?job=${j.id}`, name = j.result && j.result.design && j.result.design.name;
-    await MAILER.send({ to: j.email, ...(kind === 'kit' ? kitEmail : readyEmail)({ name, link }) });
+    const make = kind === 'kit' ? kitEmail : kind === 'shipped' ? shippedEmail : readyEmail;
+    await MAILER.send({ to: j.email, ...make({ name, link, tracking: j.fulfillment && j.fulfillment.tracking }) });
   },
 });
 const originOf = (req) => `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers['x-forwarded-host'] || req.headers.host}`;
@@ -246,7 +251,7 @@ async function handleJobs(req, res, url) {
     }
     if (req.method === 'GET' && !action) {
       // before the kit is ordered, the design comes as a preview (preview.js); the owner's own machine sees it all
-      const r = JOBS.get(id, { after: Number(url.searchParams.get('after')) || 0, have: Number(url.searchParams.get('have')) || 0, full: onThisMachine(req) });
+      const r = JOBS.get(id, { after: Number(url.searchParams.get('after')) || 0, have: Number(url.searchParams.get('have')) || 0, full: onThisMachine(req) || isAdmin(req) });
       return r ? send(res, 200, r) : send(res, 404, { error: 'No such job' });
     }
     send(res, 405, { error: 'Method not allowed' });
@@ -308,6 +313,54 @@ function authorized(req) {
   return given.length === want.length && require('node:crypto').timingSafeEqual(given, want);
 }
 
+// The admin page (/admin): every design and kit order, the parts list to order from Brickwith, fulfillment, retry.
+// BRICKHOUSE_ADMIN_PASSWORD turns it on; signing in sets an HttpOnly, SameSite=Strict cookie holding an HMAC of
+// the password, so changing the password signs everyone out. The admin also sees every design in full.
+const crypto = require('node:crypto');
+const ADMIN_PASSWORD = process.env.BRICKHOUSE_ADMIN_PASSWORD || '';
+const adminToken = () => crypto.createHmac('sha256', ADMIN_PASSWORD).update('brickhouse-admin-v1').digest('hex');
+const sameSecret = (a, b) => { const x = crypto.createHash('sha256').update(String(a)).digest(), y = crypto.createHash('sha256').update(String(b)).digest(); return crypto.timingSafeEqual(x, y); };
+function isAdmin(req) {
+  if (!ADMIN_PASSWORD) return false;
+  const m = /(?:^|;\s*)bh_admin=([a-f0-9]{64})/.exec(req.headers.cookie || '');
+  return !!m && sameSecret(m[1], adminToken());
+}
+const adminCookie = (req, value, maxAge) => `bh_admin=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${(req.headers['x-forwarded-proto'] || '') === 'https' ? '; Secure' : ''}`;
+// A design's parts as a BrickLink XML wanted list, for Brickwith's part-list upload (the baseplate is added by hand)
+function partsXml(design) {
+  const { COLORS, compile } = require('../engine/engine.js');
+  const rows = compile(design).inventory.filter((e) => e.kind !== 'baseplate' && COLORS[e.color]);
+  return '<INVENTORY>\n' + rows.map((r) => `  <ITEM><ITEMTYPE>P</ITEMTYPE><ITEMID>${r.no}</ITEMID><COLOR>${COLORS[r.color].bl}</COLOR><MINQTY>${r.q}</MINQTY></ITEM>`).join('\n') + '\n</INVENTORY>\n';
+}
+async function handleAdmin(req, res, url) {
+  if (!ADMIN_PASSWORD) return send(res, 503, { error: 'Set BRICKHOUSE_ADMIN_PASSWORD to use the admin page.' });
+  if (req.method === 'POST' && url.pathname === '/admin/login') {
+    if (limited(req, 'admin-login', 10)) return send(res, 429, { error: 'Too many tries; wait an hour.' });
+    let pw = ''; try { pw = String(JSON.parse(await readBody(req)).password || ''); } catch (e) { /* no body */ }
+    if (!sameSecret(pw, ADMIN_PASSWORD)) return send(res, 401, { error: 'Wrong password.' });
+    res.setHeader('set-cookie', adminCookie(req, adminToken(), 30 * 86400));
+    return send(res, 200, { ok: true });
+  }
+  if (req.method === 'POST' && url.pathname === '/admin/logout') { res.setHeader('set-cookie', adminCookie(req, '', 0)); return send(res, 200, { ok: true }); }
+  if (!isAdmin(req)) return send(res, 401, { error: 'Sign in first.' });
+  if (req.method === 'GET' && url.pathname === '/admin/api/jobs') return send(res, 200, { jobs: JOBS.list(), supplier: SUPPLIER, mail: !!MAILER, payments: !!JOBS.fee });
+  const m = /^\/admin\/api\/jobs\/([a-f0-9-]{36})\/(parts\.xml|fulfillment|retry)$/.exec(url.pathname);
+  if (!m) return send(res, 404, { error: 'Not found' });
+  const [, id, what] = m;
+  if (req.method === 'GET' && what === 'parts.xml') {
+    const j = JOBS.get(id, { full: true }), d = j && j.result && j.result.design;
+    if (!d) return send(res, 404, { error: 'No finished design.' });
+    res.setHeader('content-disposition', `attachment; filename="${slug(d.name || 'design')}-parts.xml"`);
+    return send(res, 200, partsXml(d), 'application/xml; charset=utf-8');
+  }
+  if (req.method === 'POST' && what === 'fulfillment') {
+    let body = {}; try { body = JSON.parse(await readBody(req)); } catch (e) { return send(res, 400, { error: e.message }); }
+    const r = JOBS.setFulfillment(id, body); return send(res, r.code, r);
+  }
+  if (req.method === 'POST' && what === 'retry') { const r = JOBS.retry(id); return send(res, r.code, r); }
+  send(res, 405, { error: 'Method not allowed' });
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/healthz') return send(res, 200, { ok: true });
@@ -336,6 +389,7 @@ const server = http.createServer(async (req, res) => {
       if (!fs.existsSync(file)) return send(res, 404, { error: 'No such design' });
       return send(res, 200, fs.readFileSync(file));
     }
+    if (url.pathname === '/admin/login' || url.pathname === '/admin/logout' || url.pathname.startsWith('/admin/api/')) return handleAdmin(req, res, url);
     if (url.pathname.startsWith('/api/jobs')) return handleJobs(req, res, url);
     if (req.method === 'POST' && url.pathname === '/api/survey') {
       if (limited(req, 'survey', 30)) return send(res, 429, { error: 'Too many checks from here; try again in an hour.' });
