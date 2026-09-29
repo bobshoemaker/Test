@@ -9,6 +9,7 @@ const crypto = require('node:crypto');
 
 const MAX_FIXES = 2; // "ask Claude to fix these" rounds included with a paid job
 const RESUME_WITHIN_MS = 24 * 3600e3; // older cut-off jobs are left alone (no surprise API spend on stale ones)
+const FULFILLMENT = ['new', 'ordered', 'packed', 'shipped', 'cancelled']; // a kit order's progress, set on the admin page
 const MAX_RESUMES = 2; // times a job cut off by a restart is picked up again (a crash that recurs stops there)
 
 // kitCents(plate): the kit's price for a design on that baseplate, or null when kits aren't on sale.
@@ -118,6 +119,51 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       return ph && typeof ph.data === 'string' ? { mediaType: ph.mediaType, data: ph.data } : null;
     },
 
+    // For the admin page: every job, newest first, with what the owner needs to run the business.
+    list() {
+      const out = [];
+      for (const f of fs.readdirSync(dir)) {
+        const j = f.endsWith('.json') ? load(f.slice(0, -5)) : null;
+        if (!j) continue;
+        const d = (j.result && j.result.design) || j.draft || {}, parts = j.events.filter((e) => e.type === 'part'), err = j.events.filter((e) => e.type === 'error').pop();
+        out.push({ id: j.id, createdAt: j.createdAt, status: j.status, name: d.name || '', address: (j.params && j.params.address) || '',
+          plate: d.plate || (j.params && j.params.plate) || 32, email: j.email || null, photos: j.params && Array.isArray(j.params.photos) ? j.params.photos.length : 0,
+          part: parts.length ? `${parts[parts.length - 1].n} of ${parts[parts.length - 1].of}` : null, error: err ? err.message : null,
+          pieces: j.result && j.result.stats ? j.result.stats.pieces : null, problems: j.result ? (j.result.errors || 0) + (j.result.warnings || 0) : null,
+          paid: !!j.paid, kit: j.kit ? { at: j.kit.at, amount: j.kit.amount, currency: j.kit.currency, name: j.kit.name, email: j.kit.email, shipping: j.kit.shipping, test: !!j.kit.test } : null,
+          fulfillment: j.fulfillment || null });
+      }
+      return out.sort((a, b) => b.createdAt - a.createdAt);
+    },
+
+    // The owner's progress on a kit order: status (ordered, packed, shipped), the supplier's order number, tracking.
+    // Marking it shipped with tracking emails the customer once (notify 'shipped').
+    setFulfillment(id, { status, supplierOrder, tracking, note } = {}) {
+      const j = load(id);
+      if (!j || !j.kit) return { code: 404, error: 'No kit order for that design.' };
+      if (!FULFILLMENT.includes(status)) return { code: 400, error: `Status is one of ${FULFILLMENT.join(', ')}.` };
+      const clip = (t, n) => String(t || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
+      const was = j.fulfillment || {}, keep = (v, k, n) => (v === undefined ? was[k] || '' : clip(v, n)); // fields not sent stay as they were
+      j.fulfillment = { status, supplierOrder: keep(supplierOrder, 'supplierOrder', 80), tracking: keep(tracking, 'tracking', 120), note: keep(note, 'note', 500), at: now(),
+        shippedSent: was.shippedSent };
+      if (status === 'shipped' && j.fulfillment.tracking && !j.fulfillment.shippedSent) { j.fulfillment.shippedSent = now(); tell(j, 'shipped'); }
+      save(j);
+      return { code: 200, fulfillment: j.fulfillment };
+    },
+
+    // Run a failed or cut-off design again, from the part it reached (its last draft), as a restart would.
+    retry(id) {
+      const j = load(id);
+      if (!j) return { code: 404, error: 'No such job' };
+      if (!['error', 'interrupted'].includes(j.status)) return { code: 409, error: `It's ${j.status}, not failed.` };
+      if (feeOn && j.sessionId && !j.paid) return { code: 409, error: 'The design fee was never paid.' };
+      const parts = j.events.filter((e) => e.type === 'part' && Number.isInteger(e.n));
+      let fromPart = parts.length ? parts[parts.length - 1].n : 1; const seed = fromPart > 1 ? j.draft : null; if (!seed) fromPart = 1;
+      emit(j, { type: 'status', message: `Running the design again from part ${fromPart}.`, resumed: fromPart });
+      launch(j, (params, e) => run({ ...params, resume: { fromPart, seed } }, e));
+      return { code: 200, status: j.status, fromPart };
+    },
+
     // The finished designs made with this email address, newest first: [{id, name, at, origin}].
     byEmail(email) {
       const out = [];
@@ -185,4 +231,4 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
   };
 }
 
-module.exports = { createJobs, MAX_FIXES, MAX_RESUMES };
+module.exports = { createJobs, MAX_FIXES, MAX_RESUMES, FULFILLMENT };

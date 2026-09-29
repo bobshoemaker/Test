@@ -44,7 +44,10 @@ const readyEmail = ({ name, link }) => mail(`Your brick house is ready: ${name |
 const kitEmail = ({ name, link }) => mail(`Your kit is ordered: ${name || 'your house'}`, 'Thank you for your order',
   [`Your kit for ${name || 'your house'} is ordered. We'll sort every piece into bags and send it to you with the baseplate.`, 'The full building guide and parts list are unlocked now, whenever you want to look ahead.'],
   { label: 'Open your guide', href: link });
+const shippedEmail = ({ name, link, tracking }) => mail(`Your kit is on its way: ${name || 'your house'}`, 'Your kit has shipped',
+  [`Your kit for ${name || 'your house'} is on its way.`, `Tracking: ${tracking}`, 'The building guide is waiting for you whenever it arrives.'],
+  { label: 'Open your guide', href: link });
 const mineEmail = ({ designs }) => mail('Your Brickhouse designs', 'Your designs',
   ['Here are the designs made with this email address. Each link opens that house.', ...designs.map((d) => ({ label: d.name || 'Your house', href: d.link }))]);
 
-module.exports = { makeMailer, cleanEmail, readyEmail, kitEmail, mineEmail };
+module.exports = { makeMailer, cleanEmail, readyEmail, kitEmail, shippedEmail, mineEmail };

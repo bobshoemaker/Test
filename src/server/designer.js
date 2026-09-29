@@ -274,7 +274,7 @@ async function callClaude(client, params, onEvent = () => {}) {
 async function designHouse({
   client, model, photos = [], plan = null, notes = '', target = 1200, mode = 'design', design = null,
   effort = null, maxRounds = 7, maxTokens = 64000, onEvent = () => {}, render = null, partsLimit = PARTS.length,
-  lockFootprint = true, locked = null, planTools = null, seed = null, fromPart = 1, choices = null, plate = 32,
+  lockFootprint = true, locked = null, planTools = null, seed = null, fromPart = 1, choices = null, plate = 32, supplier = null,
 }) {
   plate = scaleFor(plate).plate;
   if (mode === 'parts' && fromPart > 1 && !isDesign(seed)) throw new Error('Starting at a later part needs the design from the earlier parts (seed).');
@@ -290,7 +290,8 @@ async function designHouse({
     content.push({ type: 'text', text: fixTask({ design, problems: problemList(compile(design)) }) });
   } else {
     if (!photos.length && !notes) throw new Error('Add at least one photo or a description.');
-    content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target, hasPlan: !!plan, locked, lockedOps, seed: fromPart > 1 ? seed : null, fromPart, choices, plate }) });
+    content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target, hasPlan: !!plan, locked, lockedOps, seed: fromPart > 1 ? seed : null, fromPart, choices, plate })
+      + (supplier ? `\n\nSUPPLIER. The kit is made from ${supplier === 'gobricks' ? 'GoBricks' : supplier} bricks: every draft is compiled with "supplier": "${supplier}" (see Compatible bricks), so use only parts and colors the compiler says it makes.` : '') });
   }
   const messages = [{ role: 'user', content }];
   const st = { lastDraft: mode === 'parts' && fromPart > 1 ? seed : null, compiles: 0, rounds: 0 };
@@ -331,6 +332,7 @@ async function designHouse({
             continue;
           }
         }
+        if (isDesign(d) && supplier) d.supplier = supplier; // held to what the kit's supplier makes, whatever the draft says
         if (!isDesign(d)) {
           results.push({ type: 'tool_result', tool_use_id: tu.id, content: 'design needs phases and ops arrays', is_error: true });
           continue;
@@ -368,6 +370,7 @@ async function designHouse({
     if (!isDesign(final)) final = st.lastDraft;
     if (!isDesign(final)) throw new Error('Claude did not return a design.');
     final.source = 'photos';
+    if (supplier) final.supplier = supplier;
     return { design: final, result: compile(final), planProblems: checkFootprint(final, locked), locked, compiles: st.compiles, rounds: st.rounds, usage, ...(note ? { note } : {}) };
   }
 
@@ -394,7 +397,7 @@ async function designHouse({
   // Repair: when the last part ends with problems left, a few more rounds on just those, so a design
   // converges to 0 errors and 0 warnings instead of stopping short.
   // the design finish() would return: one in the reply's text, or else the last compiled draft
-  const current = () => { const d = msg ? extractJson(msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n')) : null; return isDesign(d) ? d : st.lastDraft; };
+  const current = () => { const d = msg ? extractJson(msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n')) : null; const c = isDesign(d) ? d : st.lastDraft; if (c && supplier) c.supplier = supplier; return c; };
   if (count === PARTS.length && current()) {
     for (let k = 0; k < REPAIR_TURNS; k++) {
       const d = current(), res = compile(d), plan = checkFootprint(d, locked);

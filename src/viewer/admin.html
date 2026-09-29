@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Brickhouse admin</title>
+<style>
+/* the admin page (/admin): designs and kit orders; the server gates its API behind BRICKHOUSE_ADMIN_PASSWORD */
+:root{--paper:#F7F1E8;--panel:#FFFDF9;--stage:#EFE6D8;--ink:#27211B;--muted:#6F6458;--line:#E3D8C8;--accent:#B4462A;--accent-ink:#fff;--good:#2F7D55;--bad:#B4462A;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--paper:#16120E;--panel:#201A15;--stage:#2A231C;--ink:#F2EADF;--muted:#A89A8A;--line:#3A3027;--accent:#E0714F;--accent-ink:#1B120C;--good:#7FB894;--bad:#EE6A52;color-scheme:dark}}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15px;line-height:1.45}
+.wrap{max-width:1140px;margin:0 auto;padding:18px 16px 60px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+h1{margin:0;font-size:24px} h2{font-size:18px;margin:26px 0 10px}
+a{color:var(--accent)}
+.btn{font:inherit;font-weight:600;border-radius:999px;padding:7px 14px;border:1.5px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;text-decoration:none;display:inline-block;white-space:nowrap}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:12px}
+.muted{color:var(--muted)} .small{font-size:13px}
+.flags{display:flex;flex-wrap:wrap;gap:8px}
+.flag{border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:13px;background:var(--panel)}
+.flag.off{border-color:var(--bad);color:var(--bad)}
+.order{display:grid;grid-template-columns:1.3fr 1fr;gap:14px}
+@media (max-width:760px){.order{grid-template-columns:1fr}}
+.order h3{margin:0 0 4px;font-size:17px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+label.f{display:block;font-size:13px;color:var(--muted);margin-top:6px}
+input,select,textarea{font:inherit;font-size:15px;width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.tablewrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:4px 10px}
+.st{font-weight:600} .st.done{color:var(--good)} .st.error,.st.interrupted{color:var(--bad)}
+.pill{display:inline-block;border-radius:999px;padding:1px 8px;font-size:12px;font-weight:700;background:var(--stage)}
+.login{max-width:360px;margin:60px auto}
+[hidden]{display:none!important}
+.note{font-size:13px;color:var(--muted);margin:6px 0 0}
+.err{color:var(--bad)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Brickhouse admin</h1><div class="row" style="margin:0"><a class="btn" href="/">Site</a><button class="btn" id="logout" hidden>Sign out</button></div></header>
+
+  <form class="card login" id="login" hidden>
+    <h2 style="margin-top:0">Sign in</h2>
+    <label class="f" for="pw">Admin password</label>
+    <input id="pw" type="password" autocomplete="current-password" required>
+    <div class="row"><button class="btn primary" type="submit">Sign in</button></div>
+    <p class="note err" id="loginErr"></p>
+  </form>
+
+  <main id="main" hidden>
+    <div class="flags" id="flags"></div>
+    <h2>Kit orders to fulfill <span class="pill" id="nOpen">0</span></h2>
+    <div id="orders"></div>
+    <h2>Needs attention <span class="pill" id="nAttn">0</span></h2>
+    <p class="note" style="margin-top:-4px">Designs that failed or were cut off (Run again picks up from the part they reached), and finished ones with problems left.</p>
+    <div id="attention"></div>
+    <h2>All designs <span class="pill" id="nAll">0</span></h2>
+    <div class="tablewrap"><table><thead><tr><th>Started</th><th>House</th><th>Status</th><th>Pieces</th><th>Email</th><th>Kit</th><th></th></tr></thead><tbody id="all"></tbody></table></div>
+    <p class="note">Updates every 30 seconds. Opening a design here shows it in full (guide and parts list), whether or not its kit is ordered.</p>
+  </main>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const when=t=>t?new Date(t).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+const money=(a,c)=>a==null?'test order':(a/100).toLocaleString(undefined,{style:'currency',currency:(c||'usd').toUpperCase()});
+const addr=a=>a?[a.line1,a.line2,[a.city,a.state,a.postal_code].filter(Boolean).join(' '),a.country].filter(Boolean).map(esc).join('<br>'):'<span class="muted">no address</span>';
+const STATUSES=['new','ordered','packed','shipped','cancelled'];
+let data=null;
+
+async function api(path,opts={}){ const r=await fetch(path,{credentials:'same-origin',...opts,headers:{'content-type':'application/json',...(opts.headers||{})}});
+  if(r.status===401){ showLogin(); throw new Error('signed out'); }
+  const j=await r.json().catch(()=>({})); if(!r.ok) throw new Error(j.error||('HTTP '+r.status)); return j; }
+function showLogin(){ $('login').hidden=false; $('main').hidden=true; $('logout').hidden=true; }
+
+$('login').onsubmit=async e=>{ e.preventDefault(); $('loginErr').textContent='';
+  const r=await fetch('/admin/login',{method:'POST',credentials:'same-origin',headers:{'content-type':'application/json'},body:JSON.stringify({password:$('pw').value})});
+  const j=await r.json().catch(()=>({})); if(!r.ok){ $('loginErr').textContent=j.error||'Could not sign in.'; return; }
+  $('pw').value=''; load(); };
+$('logout').onclick=async()=>{ await fetch('/admin/logout',{method:'POST',credentials:'same-origin'}); showLogin(); };
+
+async function load(){
+  try{ data=await api('/admin/api/jobs'); }catch(e){ if(e.message!=='signed out'){ showLogin(); $('loginErr').textContent=e.message; } return; }
+  $('login').hidden=true; $('main').hidden=false; $('logout').hidden=false; render(); }
+
+function render(){
+  const {jobs}=data;
+  $('flags').innerHTML=[['Payments',data.payments,'Stripe isn\'t set up: designs are free and kit orders are test orders'],['Email',data.mail,'Resend isn\'t set up'],['Held to '+(data.supplier==='gobricks'?'GoBricks':data.supplier||'a supplier'),!!data.supplier,'Designs are held to LEGO availability, not to what the kit supplier makes']]
+    .map(([k,on,off])=>`<span class="flag${on?'':' off'}" title="${esc(on?'':off)}">${esc(k)}: ${on?'on':'off'}</span>`).join('');
+  const open=jobs.filter(j=>j.kit&&!['shipped','cancelled'].includes(j.fulfillment&&j.fulfillment.status)).sort((a,b)=>a.kit.at-b.kit.at);
+  $('nOpen').textContent=open.length;
+  $('orders').innerHTML=open.length?open.map(orderCard).join(''):'<p class="muted">No kit orders waiting.</p>';
+  const attn=jobs.filter(j=>['error','interrupted'].includes(j.status)||(j.status==='done'&&j.problems>0));
+  $('nAttn').textContent=attn.length;
+  $('attention').innerHTML=attn.length?`<div class="tablewrap"><table><tbody>${attn.map(rowHtml).join('')}</tbody></table></div>`:'<p class="muted">Nothing needs attention.</p>';
+  $('nAll').textContent=jobs.length; $('all').innerHTML=jobs.map(rowHtml).join('');
+}
+function statusHtml(j){ const s=`<span class="st ${esc(j.status)}">${esc(j.status)}</span>`;
+  return s+(j.status==='running'&&j.part?` <span class="muted small">part ${esc(j.part)}</span>`:'')+(j.error?`<div class="small err">${esc(j.error)}</div>`:'')+(j.status==='done'&&j.problems?`<div class="small err">${j.problems} problem${j.problems>1?'s':''} left</div>`:''); }
+function rowHtml(j){ const f=j.fulfillment;
+  return `<tr><td class="small">${when(j.createdAt)}</td><td><b>${esc(j.name||'(untitled)')}</b><div class="small muted">${esc(j.address)} · ${j.plate===48?'Grand':'Classic'} · ${j.photos} photo${j.photos===1?'':'s'}</div></td>
+    <td>${statusHtml(j)}</td><td>${j.pieces?j.pieces.toLocaleString():''}</td><td class="small">${esc(j.email||'')}</td>
+    <td class="small">${j.kit?`${money(j.kit.amount,j.kit.currency)}<br>${esc(f?f.status:'new')}`:''}</td>
+    <td><div class="row" style="margin:0"><a class="btn" href="/app?job=${j.id}" target="_blank" rel="noopener">Open</a>${['error','interrupted'].includes(j.status)?`<button class="btn" data-retry="${j.id}">Run again</button>`:''}</div></td></tr>`; }
+function orderCard(j){ const k=j.kit, f=j.fulfillment||{status:'new'};
+  return `<div class="card order" data-id="${j.id}"><div>
+    <h3>${esc(j.name||'(untitled)')} <span class="pill">${j.plate===48?'Grand':'Classic'}</span></h3>
+    <div class="small muted">Ordered ${when(k.at)} · ${k.test?'test order':money(k.amount,k.currency)} · ${j.pieces?j.pieces.toLocaleString()+' pieces':''}</div>
+    <p style="margin:8px 0 0"><b>${esc(k.name||'')}</b>${k.email?` · <a href="mailto:${esc(k.email)}">${esc(k.email)}</a>`:''}<br>${addr(k.shipping)}</p>
+    <div class="row"><a class="btn" href="/app?job=${j.id}" target="_blank" rel="noopener">Open design</a><a class="btn" href="/admin/api/jobs/${j.id}/parts.xml">Brickwith parts file</a><a class="btn" href="https://www.brickwith.com/en/part-list/upload" target="_blank" rel="noopener">Brickwith upload</a></div>
+    <p class="note">Upload the parts file at Brickwith, then add the baseplate by hand: ${j.plate===48?'GDS-2238 (48 x 48)':'GDS-2237 (32 x 32)'}, green.</p>
+  </div><form data-ful="${j.id}">
+    <label class="f">Status</label><select name="status">${STATUSES.map(s=>`<option${s===f.status?' selected':''}>${s}</option>`).join('')}</select>
+    <label class="f">Brickwith order number</label><input name="supplierOrder" maxlength="80" value="${esc(f.supplierOrder||'')}">
+    <label class="f">Tracking number (emails the customer when marked shipped)</label><input name="tracking" maxlength="120" value="${esc(f.tracking||'')}">
+    <label class="f">Note</label><input name="note" maxlength="500" value="${esc(f.note||'')}">
+    <div class="row"><button class="btn primary" type="submit">Save</button><span class="small muted" data-saved>${f.at?'Saved '+when(f.at):''}</span></div>
+  </form></div>`; }
+
+document.addEventListener('submit',async e=>{ const form=e.target.closest('[data-ful]'); if(!form) return; e.preventDefault();
+  const body=Object.fromEntries(new FormData(form)); const out=form.querySelector('[data-saved]');
+  try{ await api(`/admin/api/jobs/${form.dataset.ful}/fulfillment`,{method:'POST',body:JSON.stringify(body)}); out.textContent='Saved'; load(); }catch(err){ out.textContent=err.message; } });
+document.addEventListener('click',async e=>{ const b=e.target.closest('[data-retry]'); if(!b) return; b.disabled=true;
+  try{ await api(`/admin/api/jobs/${b.dataset.retry}/retry`,{method:'POST',body:'{}'}); load(); }catch(err){ b.textContent=err.message; } });
+
+load(); setInterval(()=>{ if(!$('main').hidden&&!document.activeElement.closest('form')) load(); },30000);
+</script>
+</body>
+</html>

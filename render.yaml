@@ -24,6 +24,8 @@ services:
         sync: false
       - key: BRICKHOUSE_KIT_GRAND_CENTS          # the kit's price in cents, Grand (48 x 48)
         sync: false
+      - key: BRICKHOUSE_ADMIN_PASSWORD           # turns on /admin: designs, kit orders, the Brickwith parts file, fulfillment
+        sync: false
       - key: RESEND_API_KEY                      # email (the design's link, kit orders, find my designs) through Resend
         sync: false
       - key: BRICKHOUSE_MAIL_FROM                # the sender, on a domain verified at Resend, e.g. Brickhouse <hello@yourdomain.com>

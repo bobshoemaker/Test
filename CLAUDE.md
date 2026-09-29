@@ -135,7 +135,13 @@ closing gift that realtors give clients: a brick model of the house they just bo
   guide steps, and the Kit tab's totals and colors, no list. `POST /api/jobs/<id>/kit` orders the kit (Stripe Checkout
   for `BRICKHOUSE_KIT_CLASSIC_CENTS` / `BRICKHOUSE_KIT_GRAND_CENTS` with a US shipping address, metadata kind "kit";
   `{session}` confirms it on return, which unlocks the full design); with no Stripe key it's a test order that unlocks
-  at once. `scripts/orders.js` lists kit orders to fulfill. `POST /api/quote {lots}` returns GoBricks' price and stock
+  at once. `scripts/orders.js` lists kit orders to fulfill. The admin page (`/admin`, `src/viewer/admin.html`;
+  `BRICKHOUSE_ADMIN_PASSWORD`, an HttpOnly SameSite=Strict cookie holding an HMAC of it): kit orders to fulfill (shipping
+  address, the Brickwith parts file from `/admin/api/jobs/<id>/parts.xml` without the baseplate, status new, ordered,
+  packed, shipped or cancelled with the Brickwith order number and tracking; shipped with tracking emails the customer
+  once), designs that failed or have problems (Run again, from the part they reached), and all designs; the admin sees
+  every design in full. Customer designs are held to GoBricks (`BRICKHOUSE_SUPPLIER`, default gobricks; not the scripted
+  demo): designHouse's `supplier` stamps every draft and tells Claude. `POST /api/quote {lots}` returns GoBricks' price and stock
   for a parts list today (cached a day per list; `BRICKHOUSE_GOBRICKS_QUOTES=0` turns it off, `BRICKHOUSE_CNY_PER_USD`
   sets the viewer's dollar rate). `POST /api/lookup {address}` returns the place and ranked candidate
   photos (the dev view's Find photos); `GET /api/photo/<mapillary id>` proxies one image.
