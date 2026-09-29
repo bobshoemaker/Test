@@ -47,7 +47,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   A design with `"supplier": "gobricks"` is held to exactly what GoBricks (compatible bricks) makes, in place
   of LEGO availability (packer, mixes, texture and checker alike): `src/engine/suppliers.js` lists every
   part and palette color GoBricks makes with its catalog price, built by `scripts/gobricks.js`, which asks
-  GoBricks' part-list matcher once about every engine part in every color (`src/server/gobricks.js`; the
+  GoBricks' part-list matcher once about every engine part in every color (monthly, `--fresh`, by
+  `.github/workflows/gobricks-catalog.yml`, which opens a pull request naming what changed when anything did) (`src/server/gobricks.js`; the
   matcher takes LEGO design numbers, so the cone goes as 59900). The Parts tab shows GDS numbers and a price
   per lot, the total at catalog prices, and on the server today's price and stock (`POST /api/quote`); it
   saves the list for the part-list upload at Brickwith (brickwith.com), GoBricks' own store, which replaced Webrick.
@@ -139,7 +140,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   `BRICKHOUSE_ADMIN_PASSWORD`, an HttpOnly SameSite=Strict cookie holding an HMAC of it): kit orders to fulfill (shipping
   address, the Brickwith parts file from `/admin/api/jobs/<id>/parts.xml` without the baseplate, status new, ordered,
   packed, shipped or cancelled with the Brickwith order number and tracking; shipped with tracking emails the customer
-  once), designs that failed or have problems (Run again, from the part they reached), and all designs; the admin sees
+  once; a GoBricks stock check of the kit's parts, run when the kit is ordered and again on Check stock, naming lots short
+  of stock and any the catalog snapshot says GoBricks no longer makes, kept on the job), designs that failed or have problems (Run again, from the part they reached), and all designs; the admin sees
   every design in full. Customer designs are held to GoBricks (`BRICKHOUSE_SUPPLIER`, default gobricks; not the scripted
   demo): designHouse's `supplier` stamps every draft and tells Claude. `POST /api/quote {lots}` returns GoBricks' price and stock
   for a parts list today (cached a day per list; `BRICKHOUSE_GOBRICKS_QUOTES=0` turns it off, `BRICKHOUSE_CNY_PER_USD`

@@ -25,7 +25,8 @@ the Node server (it calls Claude and renders drafts in headless Chromium).
    - `BRICKHOUSE_ADMIN_PASSWORD`: turns on the admin page at `/admin` (sign in with it): every design with its
      status and any error (Run again for a failed one), and the kit orders to fulfill, each with the customer's
      shipping address, the parts file for Brickwith's part-list upload, and its progress (ordered, packed, shipped;
-     a tracking number emails the customer). Signed in, you see every design in full. Use a long password.
+     a tracking number emails the customer), with GoBricks' stock for its parts (checked when the kit is ordered;
+     Check stock again before ordering at Brickwith). Signed in, you see every design in full. Use a long password.
    - `BRICKHOUSE_SUPPLIER`: customer designs are held to what GoBricks makes (the kits come from Brickwith); set it
      to an empty value to hold them to LEGO availability instead.
    - `RESEND_API_KEY`: turns on email through Resend (resend.com): the link to each design when it's ready (to the
@@ -36,9 +37,16 @@ the Node server (it calls Claude and renders drafts in headless Chromium).
    - `MAPILLARY_TOKEN`: optional, for street photos from the address box.
    It also sets `BRICKHOUSE_GOBRICKS_QUOTES` (`0` turns off live GoBricks quotes on the Parts tab) and
    `BRICKHOUSE_CNY_PER_USD` (how many of GoBricks' yuan make a dollar at Brickwith, its store: about 3.5); change them
-   on the service's Environment tab.
+   on the service's Environment tab. `0` also turns off the admin page's stock check, which uses the same matcher.
 4. Apply. The first build takes a few minutes (the image includes Chromium). The site is then at
    `https://brickhouse-XXXX.onrender.com`; share that and the password.
+
+## GoBricks catalog refresh
+
+On the 1st of each month a GitHub Action (`.github/workflows/gobricks-catalog.yml`) asks GoBricks again what it makes.
+When anything changed it opens a pull request with the new catalog, a list of what was dropped, added or repriced, and
+whether the tests still pass. For it to open pull requests, turn on "Allow GitHub Actions to create and approve pull
+requests" in the repository's Settings, Actions, General. You can also run it by hand from the Actions tab.
 
 ## Costs
 

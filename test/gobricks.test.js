@@ -28,7 +28,7 @@ test('a quote maps the reply back to our parts: in stock with prices, out of sto
   assert.equal(calls[0].testList.length, 5); // the baseplate is asked about too
   assert.deepEqual(q.items, [{ no: '3008', color: 'Tan', gds: 'GDS-536-031', price: 0.71, q: 62 }, { no: '4589', color: 'Sand Green', gds: 'GDS-606-048', price: 0.1, q: 6 }]);
   assert.equal(q.total, 44.62); assert.equal(q.pieces, 68); assert.equal(q.currency, 'CNY');
-  assert.deepEqual(q.outOfStock, [{ no: '60603', name: 'Glass 1 x 4 x 3', color: 'Trans-Clear', q: 3, gds: 'GDS-878-180' }]);
+  assert.deepEqual(q.outOfStock, [{ no: '60603', name: 'Glass 1 x 4 x 3', color: 'Trans-Clear', q: 3, gds: 'GDS-878-180', stock: 0 }]);
   assert.deepEqual(q.notMade, [{ no: '3005', name: 'Brick 1 x 1', color: 'Light Gray', q: 2 }]);
   assert.equal(readReply({ itemList: [] }, lots).made.length, 0);
 });
@@ -46,6 +46,7 @@ test('the server asks about the same parts list once a day, and not again after 
   const a = await Q.quote(lots), b = await Q.quote([...lots].reverse());
   assert.equal(calls.length, 1); assert.equal(a, b); assert.equal(Q.cached(lots), true);
   t += 25 * 3600e3; await Q.quote(lots); assert.equal(calls.length, 2);
+  await Q.quote(lots, { fresh: true }); assert.equal(calls.length, 3, 'the admin\'s stock check asks again');
   let fail = true;
   const F = makeQuoter({ fetchImpl: async (...args) => { if (fail) return { ok: false, status: 503 }; return fakeFetch(calls)(...args); } });
   await assert.rejects(F.quote(lots), /GoBricks matcher: 503/);
