@@ -146,6 +146,12 @@ const photos = args.map(readImage), plan = planFile ? readImage(planFile) : null
         run.review = { matches: ev.matches, fixes: ev.fixes, usd: ev.usd, thoughts: ev.thoughts, draftsBefore: run.drafts.length };
         saveRun();
       }
+      if (ev.type === 'comparison') {
+        console.log(`${clock()} Before and after the review: ${ev.better} reads better; helped ${ev.helped.join(', ') || 'none'}, hurt ${ev.hurt.join(', ') || 'none'}. ${ev.reason}`);
+        const views = ['front', 'three-quarter', 'back-left', 'back-right'];
+        (ev.renders || []).forEach((r, i) => fs.writeFileSync(`${base}.review-after-${views[i] || i}.png`, Buffer.from(r.data, 'base64')));
+        if (run.review) { run.review.comparison = { better: ev.better, helped: ev.helped, hurt: ev.hurt, reason: ev.reason }; saveRun(); }
+      }
       if (ev.type === 'partDone') {
         const usd = require('../src/server/cost').costOf(ev.usage, model);
         console.log(`${clock()} Part ${ev.n} done${ev.summary ? ': ' + ev.summary : ''} (${ev.usage.output} output tokens, $${usd.toFixed(2)} so far)`);

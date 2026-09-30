@@ -118,8 +118,12 @@ closing gift that realtors give clients: a brick model of the house they just bo
   (`tolerance` 1: a wall line may move a stud, a door slide 2 along its wall), since the photos correct the aerial.
   After the five parts a photo review (`review`, the site model unless `BRICKHOUSE_REVIEW_MODEL`; `BRICKHOUSE_REVIEW=0`
   turns it off) compares renders from four sides with the photos on a checklist (massing and juts, roofs and eaves,
-  the front, windows, walls, the lot) and lists up to 8 fixes, which the design applies before the repair rounds;
-  for 157 Brisbane it cost $0.43 and fixed the roofs, the solar panels and the deck. The mapper also says
+  the front, windows, walls, the lot) and lists up to 8 fixes, which the design applies before the repair rounds.
+  It knows roofs are built at a fixed pitch on purpose (a low real roof still reads right that way) and never asks to
+  flatten one; SPEC says a pitched roof is always a roof op, never stacked flat fills. Then a second look compares
+  renders from before and after the fixes with the photos: if the fixes made it read worse, the earlier version is
+  restored with only the fixes that helped. (A first try let the review flatten 157 Brisbane's roofs into slabs.)
+  The mapper also says
   whether the building matches the photos; with that and the records, `found.needsCheck` flags a doubtful house.
   Every stage is recorded with its pictures, reasoning and cost (`report.stages`); a job keeps it, and the admin
   page's Site map button shows it (`sitereport.js`). Corner lots aren't laid out with their second street here. The

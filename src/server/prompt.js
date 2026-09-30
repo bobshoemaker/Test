@@ -22,7 +22,7 @@ OPS (run in list order; earlier ops claim space first, so list walls, then balco
   fill {"color":C} fills the opening with bricks of another color (doors, garage doors). Use solid colors for these: transparent bricks render as a hole. {"color":C,"small":true} uses small bricks (stone, tile surrounds). fill {} leaves the opening empty (place something there yourself).
   "trim" colors the bricks around every window (sides, sill, header; turn parts off with trimSides/trimHeader/trimSill false).
 - band {"op":"band","phase","rect":[x0,z0,x1,z1],"y":plate,"color","skip":[rects]?,"cap":"none"?} a plate course on a rectangular wall line plus a 1-stud projecting outer ring, capped with tiles (a belly band between floors). Upper walls then start at y+1. Skip the outer ring where something else needs it; skip all of it for a plain floor line.
-- roof {"op":"roof","phase","rect":[x0,z0,x1,z1],"base":plate,"color","abut":[sides]?,"gable":[sides]?,"gableColor":C?,"fascia":C?,"mix":[[color,fraction],...]?} hip roof over a wall rectangle with 1-stud eaves, built from stepped plates covered with 1x1 slopes (about a 5:12 pitch). Sides are N (low z, back), S (high z, front), W (low x), E (high x). abut: sides that lean against a taller wall (no eave). gable: sides that end in a gable (no eave; the end row is gableColor, usually the wall color). fascia colors the eave plates (gutters). mix varies the slope colors for a tile-roof look.
+- roof {"op":"roof","phase","rect":[x0,z0,x1,z1],"base":plate,"color","abut":[sides]?,"gable":[sides]?,"gableColor":C?,"fascia":C?,"mix":[[color,fraction],...]?} hip roof over a wall rectangle with 1-stud eaves, built from stepped plates covered with 1x1 slopes (about a 5:12 pitch). A brick model reads as a house when its roofs have this pitch, so build every pitched roof with a roof op, low-slope ones too: never as stacked flat fills, which read as slabs. Only a truly flat roof is a deck of plates and tiles. Sides are N (low z, back), S (high z, front), W (low x), E (high x). abut: sides that lean against a taller wall (no eave). gable: sides that end in a gable (no eave; the end row is gableColor, usually the wall color). fascia colors the eave plates (gutters). mix varies the slope colors for a tile-roof look.
   Roofs over joined wings: {"op":"roof","phase","rects":[[x0,z0,x1,z1],...],"against":[[x0,z0,x1,z1],...]?,"base":plate,"color","fascia"?,"mix"?} is ONE hip roof over the union of the rectangles (an L or T-shaped house), with valleys where wings meet. Use it whenever wings share a wall-top height; never build separate hips that butt into each other. "against" lists the rectangles of a taller building this roof leans on: the roof rises into that building's wall there and has an eave everywhere else (a lower wing or garage against a two-story house). The taller building's walls must rise above the roof where it leans.
   The compiler warns when a roof's abutted or leaning side leaves its stepped edge showing (another roof or a lower wall beside it). Fix it with one "rects" roof, "against", or a taller wall; never with a gap.
 - fill {"op":"fill","phase","kind":"tile"|"plate"|"brick","color","rects":[[x0,z0,x1,z1],...],"y":plate?,"mix":[[color,fraction],...]?,"studs":fraction?} packs a region (street, sidewalk, driveway, walks, mulch beds, hedges, balcony or bay floors). It skips space already taken, so place studded pads, posts and bollards before paving. "mix" recolors a scattered few whole pieces in close colors (a weathered roof, varied pavers) to break up a big plain area, without changing the structure; Designs get "variation": "subtle", which already gives every walls, fill and roof op without its own mix one close color on a few pieces, chosen per material; so normally leave "mix" off. Write one only when the photos show a clear pattern the default lacks (two-tone brick, a visibly patched roof), and then keep it to one close color at 4 to 8 percent: the compiler warns above 10 percent in total, which reads as noise. Walls take "mix" too. Give an op "mix": [] to keep it plain.
@@ -447,6 +447,7 @@ Go through each of these and compare the photos with the renders:
 4. Windows and doors on each side the photos show: how many, where, how big, their color and trim.
 5. Walls: colors, materials (stucco, siding, brick), trim, a band or a change of material between floors.
 6. The lot: driveway and walks, fences and gates, walls, paving, lawn, trees and big shrubs, anything on the roof (solar panels, a deck, vents).
+How the model is built: roofs are stepped plates covered with small slopes at a fixed moderate pitch, which is how a brick model reads as a house; a low-slope real roof is normal and right at that pitch. Never ask to flatten a pitched roof or to build it from flat plates; ask about a roof's shape (hip, gable, one-sided), which way it slopes, its eaves, its color and what's on it. Ask for a flat roof only where the photos show a truly flat one (a deck, a parapet).
 Report only what the photos show clearly and the model gets wrong or leaves out, and what is worth changing at this scale (the task says how many feet a stud is; a detail smaller than a stud can still be shown at one stud when it defines the house, like a second floor jutting over the garage). Don't report what the model can't show (textures, curtains) or matters of taste. Say for each fix which photo shows it and what the model should do, in plain words the builder can act on (for example "raise the two-story wing's roof pitch toward the back and give it a 1-stud eave on the front and right"). At most 8 fixes; say so when the model matches.`;
 
 const REVIEW_TOOL = {
@@ -470,9 +471,33 @@ Compare them and submit your review with submit_review.`;
 function reviewFixTask(fixes) {
   return `PHOTO REVIEW. A reviewer compared renders of your model with the photos and found these differences, most noticeable first:
 ${fixes.map((f, i) => `${i + 1}. ${f.feature ? `[${f.feature}] ` : ''}${f.problem}${f.photo ? ` (photo ${f.photo})` : ''} Fix: ${f.fix}`).join('\n')}
-Make these changes to the design, in this order, within the rules (locked walls may move up to a stud where they bend; an upper floor that juts out gets its own walls op with "slab": true). Skip one only if the compiler shows it can't be built, and say why. Compile after the changes and keep 0 errors and 0 warnings. Then reply with one sentence.`;
+Make these changes to the design, in this order, within the rules (keep every pitched roof a roof op at its usual pitch, never replaced with flat fills; locked walls may move up to a stud where they bend; an upper floor that juts out gets its own walls op with "slab": true). Skip one only if the compiler shows it can't be built, and say why. Compile after the changes and keep 0 errors and 0 warnings. Then reply with one sentence.`;
+}
+
+// The second look after the review's fixes: which version reads more like the house, and which fixes helped.
+const COMPARE_TOOL = {
+  name: 'submit_comparison',
+  description: 'Says which version of the brick model reads more like the house in the photos, and which of the fixes helped.',
+  input_schema: { type: 'object', properties: {
+    better: { type: 'string', enum: ['before', 'after'] },
+    helped: { type: 'array', items: { type: 'integer' }, description: 'Numbers of the fixes that made the model read more like the house.' },
+    hurt: { type: 'array', items: { type: 'integer' }, description: 'Numbers of the fixes that made it read less like the house.' },
+    reason: { type: 'string' },
+  }, required: ['better', 'helped', 'hurt', 'reason'] },
+};
+function compareTask({ photoList, fixes }) {
+  return `TASK
+You reviewed this brick model and these fixes were made:
+${fixes.map((f, i) => `${i + 1}. ${f.problem} Fix: ${f.fix}`).join('\n')}
+The first images are the owner's photos: ${photoList}. Then four renders of the model BEFORE the fixes (front, front three-quarter, two back corners), then the same four views AFTER them.
+Which version reads more like this house as a brick model someone would be glad to build: the massing, the roofs (a pitched roof built as flat slabs reads worse even when the real roof is low), the front, the colors? Say which fixes helped and which hurt, and submit it with submit_comparison.`;
+}
+function revertTask({ reason, helped, fixes, design }) {
+  return `COMPARISON. Side by side with the photos, the model read better before the review's changes: ${reason}
+Go back to the design below (the one before the changes)${helped.length ? ` and apply only ${helped.length > 1 ? 'these fixes' : 'this fix'}: ${helped.map((n) => `${n}. ${fixes[n - 1].fix}`).join(' ')}` : ''}. Compile it and keep 0 errors and 0 warnings, then reply with one sentence.
+${JSON.stringify(design)}`;
 }
 
 module.exports = { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask,
-  PICK_SPEC, PICK_TOOLS, pickTask, SITE_SPEC, SITE_TOOL, siteTask, REVIEW_SPEC, REVIEW_TOOL, reviewTask, reviewFixTask,
+  PICK_SPEC, PICK_TOOLS, pickTask, SITE_SPEC, SITE_TOOL, siteTask, REVIEW_SPEC, REVIEW_TOOL, reviewTask, reviewFixTask, COMPARE_TOOL, compareTask, revertTask,
   SURVEY_SPEC, SURVEY_TOOL, surveyTask, PHOTO_CHECK_SPEC, PHOTO_CHECK_TOOL, photoCheckTask, LANDSCAPE_STYLES, choicesNote, example };

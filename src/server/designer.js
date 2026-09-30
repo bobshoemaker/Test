@@ -5,7 +5,7 @@
 const { compile } = require('../engine/engine.js');
 const { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask,
   SURVEY_SPEC, SURVEY_TOOL, surveyTask, PHOTO_CHECK_SPEC, PHOTO_CHECK_TOOL, photoCheckTask, LANDSCAPE_STYLES,
-  REVIEW_SPEC, REVIEW_TOOL, reviewTask, reviewFixTask } = require('./prompt');
+  REVIEW_SPEC, REVIEW_TOOL, reviewTask, reviewFixTask, COMPARE_TOOL, compareTask, revertTask } = require('./prompt');
 const { photoList } = require('./views');
 const { layoutFootprint, skeletonOps, checkFootprint, describeLayout } = require('./footprint');
 const { scaleFor } = require('./scale');
@@ -452,12 +452,41 @@ async function designHouse({
         st.review = { model: reviewModel, matches: (Array.isArray(inp.matches) ? inp.matches : []).slice(0, 12).map((m) => str(m, 300)), fixes, thoughts, usd: costOf(reviewUsage, reviewModel),
           renders: renders.map((r) => ({ label: r.label, data: r.data })) };
         onEvent({ type: 'review', matches: st.review.matches, fixes, usd: st.review.usd, thoughts, renders: st.review.renders });
+        const say = (text) => { const last = messages[messages.length - 1];
+          if (last.role === 'user') last.content.push({ type: 'text', text }); else messages.push({ role: 'user', content: [{ type: 'text', text }] }); };
         if (fixes.length && !(budgetUsd && spent() > budgetUsd)) {
-          const text = reviewFixTask(fixes), last = messages[messages.length - 1];
-          if (last.role === 'user') last.content.push({ type: 'text', text }); else messages.push({ role: 'user', content: [{ type: 'text', text }] });
+          const before = JSON.parse(JSON.stringify(d));
+          say(reviewFixTask(fixes));
           const m2 = await turns(4, 'the photo review');
           if (m2 || !st.stopped) msg = m2;
-          st.review.after = st.lastDraft ? compile(st.lastDraft).stats.pieces : null;
+          // a second look: the fixes can make it more literal and less like the house (a low roof built as flat
+          // slabs); keep whichever version reads better, with only the fixes that helped
+          const after = current();
+          let afterRenders = [];
+          if (after && !st.stopped && !(budgetUsd && spent() > budgetUsd)) { try { afterRenders = await render(after); } catch (e) { onEvent({ type: 'status', message: `Rendering for the comparison failed: ${e.message}` }); } }
+          if (afterRenders.length) {
+            let cmp = null;
+            try {
+              cmp = await callClaude(client, { model: reviewModel, max_tokens: 16000, system: REVIEW_SPEC, tools: [COMPARE_TOOL], thinking: { type: 'adaptive', display: 'summarized' }, output_config: { effort: review.effort || 'high' },
+                messages: [{ role: 'user', content: [...photos.map(imageBlock), ...renders.map((r) => imageBlock({ mediaType: 'image/png', data: r.data })), ...afterRenders.map((r) => imageBlock({ mediaType: 'image/png', data: r.data })),
+                  { type: 'text', text: compareTask({ photoList: photoList(photos.length, views), fixes }) }] }] }, onEvent);
+            } catch (e) { onEvent({ type: 'status', message: `The comparison failed: ${e.message}` }); }
+            if (cmp) {
+              addUsage(reviewUsage, cmp);
+              const use = (cmp.content || []).find((b) => b.type === 'tool_use' && b.name === COMPARE_TOOL.name), c = (use && use.input) || {};
+              const nums = (xs) => [...new Set((Array.isArray(xs) ? xs : []).map((n) => Math.round(Number(n))).filter((n) => n >= 1 && n <= fixes.length))];
+              st.review.comparison = { better: c.better === 'before' ? 'before' : 'after', helped: nums(c.helped), hurt: nums(c.hurt), reason: str(c.reason, 600), renders: afterRenders.map((r) => ({ label: r.label, data: r.data })) };
+              onEvent({ type: 'comparison', ...st.review.comparison });
+              if (st.review.comparison.better === 'before') {
+                st.lastDraft = before; msg = null; // the version before the fixes stands, unless the fixes that helped go back on
+                const keep = st.review.comparison.helped.filter((n) => !st.review.comparison.hurt.includes(n));
+                if (keep.length && !(budgetUsd && spent() > budgetUsd)) { say(revertTask({ reason: st.review.comparison.reason, helped: keep, fixes, design: before }));
+                  const m3 = await turns(3, 'the photo review'); if (m3) msg = m3; }
+              }
+            }
+          }
+          st.review.usd = costOf(reviewUsage, reviewModel);
+          st.review.after = current() ? compile(current()).stats.pieces : null;
         }
       }
     }
