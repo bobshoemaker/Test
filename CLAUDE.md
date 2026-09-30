@@ -169,13 +169,17 @@ closing gift that realtors give clients: a brick model of the house they just bo
   photos (`views`) and the server turns the known ones into a sentence after the owner's notes (`viewsNote`), so the
   design knows which photo shows which side. A missing front or side gets a note above the Design button that those
   sides get guessed, so the model won't be as accurate (not a block). The size is a choice of three cards,
-  Mini, Classic and Grand, with the landing page's sizes and piece counts (`#sizeMini`, `#sizeClassic`, `#bigPlate`). Designs made in a browser are
-  remembered there (localStorage `brickhouse-designs`: job id, name, date) and listed as "Your designs" on the
-  upload page. Email goes through Resend (`src/server/mail.js`, `RESEND_API_KEY`, sender `BRICKHOUSE_MAIL_FROM`
+  Mini, Classic and Grand, with the landing page's sizes and piece counts (`#sizeMini`, `#sizeClassic`, `#bigPlate`). After Design, the upload page gives way to a
+  page of its own (`#sent`): thanks, the steps (photos received, designing with the live progress, ready), the private link
+  with Copy, and what happens next; the job's link lands there too until the first draft, when the house takes over.
+  Designs made in a browser are remembered there (localStorage `brickhouse-designs`: job id, name, date, status) and
+  listed in a "Your designs" card under the form; "Made one on another device?" emails a sign-in link (`POST /api/mine
+  {email}`, 5 an hour, the same answer either way), `/app?mine=<token>`: the email and an expiry signed with a server
+  secret (`BRICKHOUSE_SECRET`, or one made once in the jobs folder), good for 24 hours, which lists that email's designs
+  (`GET /api/mine?token=`) and adds them to the device. An email alone never shows anything. Email goes through Resend (`src/server/mail.js`, `RESEND_API_KEY`, sender `BRICKHOUSE_MAIL_FROM`
   on a verified domain): an optional email on the form (or the one from a Stripe checkout) gets the design's link
   once it's ready and a kit order's confirmation (jobs.js `notify`; the email is kept on the job, not in its
-  parameters), and "Made a design on another device?" (`POST /api/mine {email}`, 5 an hour) emails the links for
-  that address, answering the same either way. Without a key the email fields don't show. `?dev=1` turns on the technical view in that browser (`?dev=0` off): the design
+  parameters), and the Your designs sign-in link. Without a key the email fields don't show. `?dev=1` turns on the technical view in that browser (`?dev=0` off): the design
   list (samples only, unless the server is on your own machine), checker counts and problems, connection colors, part numbers, suppliers and
   prices, the piece target and the design code editor, all marked `dev-only`; standalone copies are technical.
 - `src/viewer/`: single-page three.js (r128, CDN) viewer, at `/app`: model, manual (sub-builds shown on

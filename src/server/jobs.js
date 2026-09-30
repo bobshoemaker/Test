@@ -175,11 +175,15 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     },
 
     // The finished designs made with this email address, newest first: [{id, name, at, origin}].
+    // The designs made with an email address, newest first: finished ones and ones still being designed
+    // (not ones whose design fee was never paid).
     byEmail(email) {
       const out = [];
       for (const f of fs.readdirSync(dir)) {
         const j = f.endsWith('.json') ? load(f.slice(0, -5)) : null;
-        if (j && j.email === email && j.result) out.push({ id: j.id, name: (j.result.design && j.result.design.name) || '', at: j.createdAt, origin: j.origin });
+        if (!j || j.email !== email || j.status === 'awaiting_payment') continue;
+        const d = (j.result && j.result.design) || j.draft || {};
+        out.push({ id: j.id, name: d.name || '', at: j.createdAt, status: j.status === 'done' ? 'ready' : j.status === 'error' ? 'problem' : 'designing', origin: j.origin });
       }
       return out.sort((a, b) => b.at - a.at);
     },

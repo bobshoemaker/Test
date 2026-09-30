@@ -170,16 +170,48 @@ textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-ra
 .sizedim{font-weight:700;font-size:14px}
 .sizeabout{font-size:13px;color:var(--muted);line-height:1.4}
 @media (max-width:600px){.sizes{grid-template-columns:1fr}}
-.mine{margin:0 0 14px;padding:10px 14px;border-radius:12px;background:var(--stage)}
-.mine h3{margin:0 0 4px;font-size:15px}
-.mine ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:2px}
-.mine a{color:var(--accent);font-weight:600}
-.mine small{color:var(--muted);margin-left:6px}
+.minecard{margin-top:14px}
+.minecard h3{margin:0 0 8px;font-size:20px}
+.minelist{margin:0;padding:0;list-style:none;display:grid;gap:8px}
+.minelist:empty{display:none}
+.minelist:not(:empty) + #mineEmpty{display:none}
+.minelist a{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--ink);text-decoration:none}
+.minelist a:hover{border-color:var(--accent)}
+.minelist b{font-weight:700;min-width:0;overflow-wrap:anywhere}
+.minelist small{color:var(--muted);font-size:13px;white-space:nowrap}
+.minelist .tag{display:inline-block;margin-left:8px;font-size:11.5px;font-weight:700;border-radius:999px;padding:1px 8px;background:var(--stage);color:var(--muted);vertical-align:1px}
+.minelist .tag.ready{background:var(--accent);color:var(--accent-ink)}
+.minecard .findmine{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.minelist:empty + .note + .findmine{border-top:0;padding-top:0;margin-top:10px}
 .opt{font-weight:400;color:var(--muted)}
 .field{display:block;width:100%;margin-top:6px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-size:15px}
-.findmine{margin:16px 0 0;padding-top:14px;border-top:1px solid var(--line);font-size:14px}
+.findmine{margin:0;font-size:14px}
 .findmine label{display:block}
 .findmine .note{margin:6px 0 0}
+/* the page after Design: thanks, what happens next, the private link */
+.sent{text-align:left}
+.sentmark{width:52px;height:52px;border-radius:999px;background:var(--accent);color:var(--accent-ink);display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+html.upload #pane-design .sent h2{font-size:40px;margin:0 0 6px}
+.sentlead{margin:0 0 14px;font-size:16px}
+.sentphotos{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 14px}
+.sentphotos img{width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}
+.steps{list-style:none;margin:0 0 16px;padding:0;display:grid;gap:0}
+.steps li{display:grid;grid-template-columns:22px 1fr;gap:12px;position:relative;padding-bottom:14px}
+.steps li:not(:last-child)::before{content:"";position:absolute;left:10px;top:22px;bottom:0;width:2px;background:var(--line)}
+.steps li.done:not(:last-child)::before{background:var(--accent)}
+.steps .dot{width:22px;height:22px;border-radius:999px;border:2px solid var(--line);background:var(--panel);box-sizing:border-box}
+.steps li.done .dot{background:var(--accent);border-color:var(--accent)}
+.steps li.now .dot{border-color:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent)}
+@media (prefers-reduced-motion:no-preference){.steps li.now .dot{animation:pulse 1.6s ease-in-out infinite}}
+@keyframes pulse{50%{box-shadow:0 0 0 7px color-mix(in srgb,var(--accent) 8%,transparent)}}
+.steps b{display:block;font-size:15px}
+.steps span:not(.dot):not(.bar){display:block;font-size:14px;color:var(--muted);margin-top:2px}
+.steps li.err span{color:var(--flag)}
+.steps .bar{display:block;height:6px;border-radius:999px;background:var(--stage);margin-top:8px;overflow:hidden;max-width:320px}
+.steps .bar i{display:block;height:100%;width:4%;background:var(--accent);border-radius:999px;transition:width .6s ease}
+.sentlinklabel{display:block;font-weight:700;font-size:14px}
+.sent .note{margin:6px 0 12px}
+.sent a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:center}
 .count{margin:2px 0 0;text-align:right;font-size:12px;color:var(--muted)}
 .addr input:user-invalid{border-color:var(--accent)}
 .addrwhy{margin:6px 0 0;font-size:13px;color:var(--muted)}
@@ -228,7 +260,7 @@ html:not(.upload) .seeex{display:none}
 <script>
 // /app#design opens straight on the upload page: set it before the first paint, not when the app's script
 // (after three.js, the engine and the part shapes) gets to it, so the sample house never flashes up first
-if(location.hash==='#design'&&!/[?&](job|hero)=/.test(location.search)) document.documentElement.classList.add('upload');
+if((location.hash==='#design'||/[?&]mine=/.test(location.search))&&!/[?&](job|hero)=/.test(location.search)) document.documentElement.classList.add('upload');
 </script>
 </head>
 <body>
@@ -328,9 +360,24 @@ if(location.hash==='#design'&&!/[?&](job|hero)=/.test(location.search)) document
         <p class="note">Part shapes (plants, slopes, rounds, windows, arches, fence): <a href="https://library.ldraw.org" target="_blank" rel="noopener">LDraw Parts Library</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>; part authors are credited in <a href="/viewer/ldraw-parts.js" target="_blank" rel="noopener">the part files</a>. LEGO is a trademark of the LEGO Group, which does not sponsor or endorse this site.</p>
       </section>
       <section class="pane" id="pane-design" hidden>
-        <div class="card">
+        <!-- after Design: the house is on its way (shown until its first draft comes back) -->
+        <div class="card sent" id="sent" hidden>
+          <div class="sentmark" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></div>
+          <h2 id="sentTitle">We're designing your house</h2>
+          <p class="sentlead" id="sentLead">Thank you! It usually takes about half an hour. You can close this page: your house keeps going on our side.</p>
+          <div class="sentphotos" id="sentPhotos"></div>
+          <ol class="steps">
+            <li class="done"><span class="dot" aria-hidden="true"></span><div><b>Photos received</b><span id="sentGot"></span></div></li>
+            <li class="now"><span class="dot" aria-hidden="true"></span><div><b>Designing your model</b><span id="subStatus" aria-live="polite">Getting started…</span><span class="bar" aria-hidden="true"><i id="subBar"></i></span></div></li>
+            <li><span class="dot" aria-hidden="true"></span><div><b>Ready to see in 3D</b><span id="sentNext">Come back to this page's link to see it, turn it around and look through the building guide.</span></div></li>
+          </ol>
+          <label class="sentlinklabel" for="sentLink">Your private link</label>
+          <div class="addr"><input id="sentLink" type="text" readonly><button class="btn" id="copyLink" type="button">Copy</button></div>
+          <p class="note">Only people with this link can see your house. Keep it to come back later.</p>
+          <div class="row"><a class="btn" href="/app#design" id="another">Start another house</a><a class="btn" href="/app" id="sentExample">See an example while you wait</a></div>
+        </div>
+        <div class="card" id="makeCard">
           <h2 style="margin-top:0">Make your house</h2>
-          <div class="mine" id="myDesigns" hidden><h3>Your designs</h3><ul id="myDesignList"></ul></div>
           <p class="note" style="margin-top:0;color:var(--ink)" id="photoIntro">Add photos of the outside of the house: the front first, then the sides, the back and the garage if you have them (up to 12). A floor plan helps us get the walls just right, and anything the photos don't show, you can tell us below.</p>
           <div id="photoControls">
             <div class="shots" id="thumbs" aria-label="Photos of the house"></div>
@@ -369,10 +416,16 @@ if(location.hash==='#design'&&!/[?&](job|hero)=/.test(location.search)) document
             <div class="out" id="photoStatus" aria-live="polite"></div>
             <p class="privacy"><b>Your privacy.</b> We use your photos, address and email only to design your model and send your kit. We never sell them or share them for advertising, and your house isn't shown to anyone else: you see it through your own private link.</p>
           </div>
-          <form class="findmine" id="findMine"><label for="findEmail">Made a design on another device? Enter your email and we'll send you the links.</label>
-            <div class="addr"><input id="findEmail" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required><button class="btn" type="submit">Send my designs</button></div>
-            <p class="note" id="findStatus" aria-live="polite"></p></form>
           <p class="seeex">Want to see one first? <a href="/app" id="seeExample">Look at an example house</a></p>
+        </div>
+        <!-- Your designs: the ones made on this device, and a sign-in link by email for the ones made elsewhere -->
+        <div class="card minecard" id="myDesigns" hidden>
+          <h3>Your designs</h3>
+          <ul class="minelist" id="myDesignList"></ul>
+          <p class="note" id="mineEmpty">The houses you design show up here, so you can come back to them.</p>
+          <form class="findmine" id="findMine"><label for="findEmail">Made one on another device? Enter the email you used and we'll send you a link that opens all your designs here.</label>
+            <div class="addr"><input id="findEmail" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required><button class="btn" type="submit">Email me a link</button></div>
+            <p class="note" id="findStatus" aria-live="polite"></p></form>
         </div>
         <div class="dev-only">
         <h2>Design code</h2>

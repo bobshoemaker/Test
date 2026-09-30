@@ -23,7 +23,9 @@ test('the mailer posts JSON to Resend with the key, and is off without one', asy
   assert.equal(makeMailer({ apiKey: '' }), null);
   const bad = makeMailer({ apiKey: 'k', fetchImpl: async () => ({ ok: false, status: 403, json: async () => ({ message: 'domain not verified' }) }) });
   await assert.rejects(bad.send({ to: 'a@b.test', subject: 's', html: 'h', text: 't' }), /Resend: domain not verified/);
-  assert.match(mineEmail({ designs: [{ name: 'A <b>', link: 'https://s/app?job=2' }] }).html, /<a href="https:\/\/s\/app\?job=2"[^>]*>A &lt;b&gt;<\/a>/);
+  const me = mineEmail({ count: 2, link: 'https://s/app?mine=t.k' });
+  assert.match(me.html, /<a href="https:\/\/s\/app\?mine=t\.k"[^>]*>See my designs<\/a>/);
+  assert.match(me.text, /the 2 designs made with this email address[\s\S]*24 hours/);
 });
 
 test('emails are checked and kept in lower case', () => {
