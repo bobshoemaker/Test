@@ -336,18 +336,24 @@ function checkFootprint(design, locked) {
     const mine = ops.filter(({ o }) => o.block === b.name);
     if (!mine.length) { probs.push(`${what}: no walls op has "block": "${b.name}". Keep the locked walls for it.`); continue; }
     const want = new Set(b.cells.map(([x, z]) => key(x, z)));
+    // tolerance t (walls mapped from an aerial, which the photos may correct): a wall line may move up to t studs,
+    // and a door may slide along its wall; 0 holds them exactly (a floor plan, an outline)
+    const t = Math.max(0, Math.round(Number(locked.tolerance) || 0));
+    const near = (k, set) => { if (set.has(k)) return true; if (!t) return false; const [x, z] = k.split(',').map(Number);
+      for (let dx = -t; dx <= t; dx++) for (let dz = -t; dz <= t; dz++) if (set.has(key(x + dx, z + dz))) return true; return false; };
     for (const { o, i } of mine) {
       let have;
       try { have = cellKeys(o.segments); } catch { have = new Set(); }
-      const missing = [...want].filter((k) => !have.has(k)), extra = [...have].filter((k) => !want.has(k));
+      const missing = [...want].filter((k) => !near(k, have)), extra = [...have].filter((k) => !near(k, want));
       if (missing.length || extra.length) {
-        probs.push(`${what} (op ${i}): the ${b.name} walls must keep the locked segments; ${[missing.length ? `missing ${listCells(missing)}` : '', extra.length ? `off the locked walls at ${listCells(extra)}` : ''].filter(Boolean).join(', ')}.`);
+        probs.push(`${what} (op ${i}): the ${b.name} walls must keep the locked segments${t ? ` (within ${t} stud${t > 1 ? 's' : ''})` : ''}; ${[missing.length ? `missing ${listCells(missing)}` : '', extra.length ? `off the locked walls at ${listCells(extra)}` : ''].filter(Boolean).join(', ')}.`);
       }
     }
     for (const lo of b.openings) {
-      const want2 = [...cellKeys([lo.cells])].sort().join(' ');
-      const ok = mine.some(({ o }) => (o.openings || []).some((p) => { try { return [...cellKeys([p.cells])].sort().join(' ') === want2; } catch { return false; } }));
-      if (!ok) probs.push(`${what}: the ${lo.kind} on the ${b.name} ${lo.side} wall must stay at cells [${lo.cells.join(', ')}] (set its courses and fill as you like).`);
+      const mineCells = [...cellKeys([lo.cells])], want2 = mineCells.slice().sort().join(' ');
+      const slid = (cells) => cells.length === mineCells.length && cells.every((k) => near(k, new Set(mineCells.flatMap((m) => { const [x, z] = m.split(',').map(Number); return [-2, -1, 0, 1, 2].flatMap((d) => [key(x + d, z), key(x, z + d)]); }))));
+      const ok = mine.some(({ o }) => (o.openings || []).some((p) => { try { const c = [...cellKeys([p.cells])]; return c.slice().sort().join(' ') === want2 || (t > 0 && slid(c)); } catch { return false; } }));
+      if (!ok) probs.push(`${what}: the ${lo.kind} on the ${b.name} ${lo.side} wall must stay at cells [${lo.cells.join(', ')}]${t ? ' (or slide it up to 2 studs along the wall)' : ''} (set its courses and fill as you like).`);
     }
   }
   return probs;

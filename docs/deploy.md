@@ -38,6 +38,8 @@ the Node server (it calls Claude and renders drafts in headless Chromium).
    - `MAPILLARY_TOKEN`: optional, for street photos from the address box.
    - `BRICKHOUSE_SITE_MODEL`: optional, a stronger model for mapping the house from above (the step that decides the
      model's walls); unset, it uses the design model, which it also falls back to if the account can't use this one.
+     It also runs the photo review after the design (renders against the photos, then fixes); `BRICKHOUSE_REVIEW_MODEL`
+     sets another model for that, and `BRICKHOUSE_REVIEW=0` turns the review off.
    It also sets `BRICKHOUSE_DESIGN_BUDGET_USD` (a design stops at this many dollars of API time, the site step
    included, and keeps its last draft; `0` for no limit), `BRICKHOUSE_GOBRICKS_QUOTES` (`0` turns off live GoBricks
    quotes on the Parts tab) and

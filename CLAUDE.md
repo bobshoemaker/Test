@@ -112,7 +112,14 @@ closing gift that realtors give clients: a brick model of the house they just bo
   the yards give way, never the house (it is shown whole even past the range, with a problem noted), and a bigger
   size is suggested only when this one can't show the house with its yard. `lockPlan` locks the walls to the map
   (footprint.js, source `site`); `siteInStuds` and `siteNoteText` give the design the lot in stud rectangles, and two
-  map images (the blocks over the aerial, the plate in studs over it) go with the photos. The mapper also says
+  map images (the blocks over the aerial, the plate in studs over it) go with the photos. A block's `upperRects` give an
+  upper floor that sits differently (a second story jutting over the garage, read from the photos): it is locked as
+  its own floor-2 block on a slab, and a jut under a stud is shown as one. Walls locked to the map bend a little
+  (`tolerance` 1: a wall line may move a stud, a door slide 2 along its wall), since the photos correct the aerial.
+  After the five parts a photo review (`review`, the site model unless `BRICKHOUSE_REVIEW_MODEL`; `BRICKHOUSE_REVIEW=0`
+  turns it off) compares renders from four sides with the photos on a checklist (massing and juts, roofs and eaves,
+  the front, windows, walls, the lot) and lists up to 8 fixes, which the design applies before the repair rounds;
+  for 157 Brisbane it cost $0.43 and fixed the roofs, the solar panels and the deck. The mapper also says
   whether the building matches the photos; with that and the records, `found.needsCheck` flags a doubtful house.
   Every stage is recorded with its pictures, reasoning and cost (`report.stages`); a job keeps it, and the admin
   page's Site map button shows it (`sitereport.js`). Corner lots aren't laid out with their second street here. The

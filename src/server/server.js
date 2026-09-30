@@ -32,6 +32,9 @@ const SURVEY_EFFORT = process.env.BRICKHOUSE_SURVEY_EFFORT || 'low';
 // to MODEL when that one isn't open to the account. A design stops at BRICKHOUSE_DESIGN_BUDGET_USD of API time
 // (0 for no limit), keeping its last draft.
 const SITE_MODEL = process.env.BRICKHOUSE_SITE_MODEL || MODEL;
+// After the five parts, a model (the site model unless BRICKHOUSE_REVIEW_MODEL says) compares renders of the design with
+// the photos and lists fixes the design then makes; BRICKHOUSE_REVIEW=0 turns it off.
+const REVIEW = process.env.BRICKHOUSE_REVIEW === '0' ? null : { model: process.env.BRICKHOUSE_REVIEW_MODEL || SITE_MODEL, effort: 'high' };
 const BUDGET_USD = process.env.BRICKHOUSE_DESIGN_BUDGET_USD !== undefined ? Number(process.env.BRICKHOUSE_DESIGN_BUDGET_USD) || null : 15;
 const FAKE = process.env.BRICKHOUSE_FAKE === '1';
 const MAX_BODY = 40 * 1024 * 1024;
@@ -185,7 +188,7 @@ async function runDesign(p, emit) {
   const out = await designHouse({ client, model: MODEL, effort: EFFORT, photos: p.photos, plan: p.plan, notes: prep.notes, target: p.target, choices: p.choices,
     plate: p.plate, mode: 'parts', locked: prep.locked, render: renderer && renderer.render, planTools: renderer, onEvent: emit, supplier: SUPPLIER,
     ...(prep.site ? { ftPerStud: prep.site.ftPerStud, siteImages: prep.site.images, siteNote: prep.site.note } : {}),
-    budgetUsd: BUDGET_USD, spentUsd: prep.site && !kept ? prep.site.costUsd || 0 : 0,
+    budgetUsd: BUDGET_USD, spentUsd: prep.site && !kept ? prep.site.costUsd || 0 : 0, review: FAKE ? null : REVIEW, views: p.views || [],
     ...(p.resume ? { fromPart: p.resume.fromPart, seed: p.resume.seed } : {}) });
   finishDesign(out, p, emit, t0, prep.site);
 }

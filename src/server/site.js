@@ -377,7 +377,8 @@ function cleanPlan(input) {
     const stories = Math.round(Number(b.stories) || 1);
     if (stories < 1 || stories > 3) problems.push(`Block "${name}" has ${b.stories} stories; use 1 to 3.`);
     names.add(name);
-    plan.blocks.push({ name, stories: Math.min(3, Math.max(1, stories)), rects, roof: ['hip', 'gable', 'flat', 'shed'].includes(b.roof) ? b.roof : 'hip', ridge: b.ridge || 'none', note: String(b.note || '').slice(0, 300) });
+    const upper = stories > 1 ? (Array.isArray(b.upperRects) ? b.upperRects : []).map(fixRect).filter(okRect) : [];
+    plan.blocks.push({ name, stories: Math.min(3, Math.max(1, stories)), rects, ...(upper.length ? { upperRects: upper } : {}), roof: ['hip', 'gable', 'flat', 'shed'].includes(b.roof) ? b.roof : 'hip', ridge: b.ridge || 'none', note: String(b.note || '').slice(0, 300) });
   }
   if (!plan.blocks.length) problems.push('No blocks came through.');
   for (const o of Array.isArray(input.openings) ? input.openings : []) {
@@ -427,6 +428,7 @@ function planShapes(toC, plan, outline, lot, outbuildings = []) {
   for (const x of plan.site.structures || []) out.push(rect(x.rect, { stroke: '#f012be', width: 2, dash: [6, 3] }), label(x.name, ...toC([(x.rect[0] + x.rect[2]) / 2, (x.rect[1] + x.rect[3]) / 2]), { size: 11, bg: 'rgba(120,0,90,.7)' }));
   plan.blocks.forEach((b, i) => {
     for (const r of b.rects) out.push(rect(r, { stroke: '#fff', width: 1.5, fill: BLOCK_COLORS[i % BLOCK_COLORS.length] }));
+    for (const r of b.upperRects || []) out.push(rect(r, { stroke: '#ffd400', width: 2, dash: [5, 3] }));
     const r0 = b.rects[0], [x, y] = toC([(r0[0] + r0[2]) / 2, (r0[1] + r0[3]) / 2]);
     out.push(label(`${b.name} · ${b.stories} st · ${b.roof}`, x, y, { size: 12, bold: true }));
   });
@@ -506,7 +508,7 @@ async function mapHouse({ client, callClaude, model, fallbackModel, effort = 'hi
 const up4 = (x) => Math.ceil(x * 4 - 1e-9) / 4;
 const FRONT_MIN_FT = 12, BACK_MIN_FT = 4; // the yard a model needs at least: a drive apron and walk in front, a strip behind
 function fitPlan(plan, { plate = 32, lotRect = null } = {}) {
-  const sc = scaleFor(plate), P = sc.size, rows = sc.streetRows, rects = plan.blocks.flatMap((b) => b.rects);
+  const sc = scaleFor(plate), P = sc.size, rows = sc.streetRows, rects = plan.blocks.flatMap((b) => [...b.rects, ...(b.upperRects || [])]);
   const [hu0, hv0, hu1, hv1] = [Math.min(...rects.map((r) => r[0])), Math.min(...rects.map((r) => r[1])), Math.max(...rects.map((r) => r[2])), Math.max(...rects.map((r) => r[3]))];
   const site = plan.site || {}, drives = site.driveways || [], lot = lotRect || site.lot || null;
   const houseW = hu1 - hu0, houseD = hv1 - hv0;
@@ -542,14 +544,30 @@ function fitPlan(plan, { plate = 32, lotRect = null } = {}) {
     backFt: Math.round(backFt), houseFt: [Math.round(houseW), Math.round(houseD)], notes, problems, sizes, recommended: best.plate };
 }
 const SCALE_ROOMS = [{ name: 'scale', label: '10 x 10', rectPx: [0, 0, 10, 10] }, { name: 'scale', label: '10 x 10', rectPx: [0, 0, 10, 10] }];
-function lockPlan(plan, fit) {
+// A jut the photos show is at least a stud, so it shows at any scale: an upper floor's edge past the floor below by
+// less than a stud is pushed out to one.
+function widenJuts(upper, ground, s) {
+  const [g0, h0, g1, h1] = bboxOf(ground.flatMap((r) => [[r[0], r[1]], [r[2], r[3]]]));
+  const push = (d) => (d > 0.3 && d < s ? s : d); // how far an edge juts past the floor below, at least a stud
+  return upper.map(([u0, v0, u1, v1]) => [
+    u0 < g0 ? g0 - push(g0 - u0) : u0, v0 < h0 ? h0 - push(h0 - v0) : v0,
+    u1 > g1 ? g1 + push(u1 - g1) : u1, v1 > h1 ? h1 + push(v1 - h1) : v1].map(round1));
+}
+const UPPER = ' (upper floor)';
+function lockPlan(plan, fit, { tolerance = 1 } = {}) {
   const sc = scaleFor(fit.plate), toPx = ([u0, v0, u1, v1]) => [u0, -v1, u1, -v0];
-  const blocks = [...plan.blocks].sort((a, b) => b.stories - a.stories).map((b) => ({ name: b.name, levels: b.stories, rectsPx: b.rects.map(toPx) }));
+  // a block whose upper floor sits differently is two: its ground floor, and the upper floor as floor 2 on a slab
+  const blocks = [...plan.blocks].sort((a, b) => b.stories - a.stories).flatMap((b) => (b.upperRects
+    ? [{ name: b.name, levels: 1, rectsPx: b.rects.map(toPx) }, { name: b.name + UPPER, floor: 2, levels: b.stories - 1, rectsPx: widenJuts(b.upperRects, b.rects, fit.ftPerStud).map(toPx) }]
+    : [{ name: b.name, levels: b.stories, rectsPx: b.rects.map(toPx) }]));
   const openings = plan.openings.map((o) => ({ block: o.block, kind: o.kind, atPx: [o.at[0], -o.at[1]], widthFt: o.widthFt, ...(o.note ? { note: o.note } : {}) }));
-  const L = layoutFootprint({ street: 'S', rooms: SCALE_ROOMS, blocks, openings, stairs: [] },
+  // every floor is drawn in the same feet, so the floors' anchors are one point
+  const L = layoutFootprint({ street: 'S', rooms: SCALE_ROOMS, blocks, openings, stairs: [], anchors: [{ floor: 1, atPx: [0, 0] }, { floor: 2, atPx: [0, 0] }] },
     { ftPerStud: fit.ftPerStud, size: sc.size, streetRows: sc.streetRows, frontYard: fit.frontRows, centerPx: fit.center });
   L.source = 'site';
-  for (const b of L.blocks) { const p = plan.blocks.find((x) => x.name === b.name); if (p) Object.assign(b, { stories: p.stories, roof: p.roof, ridge: p.ridge, ...(p.note ? { note: p.note } : {}) }); }
+  L.tolerance = tolerance; // the photos may correct the aerial by a stud (checkFootprint)
+  for (const b of L.blocks) { const p = plan.blocks.find((x) => x.name === b.name || x.name + UPPER === b.name);
+    if (p) Object.assign(b, { stories: b.floor > 1 ? p.stories - 1 : p.upperRects ? 1 : p.stories, roof: p.roof, ridge: p.ridge, ...(p.note ? { note: p.note } : {}), ...(p.upperRects && !(b.floor > 1) ? { under: p.name + UPPER } : {}) }); }
   return L;
 }
 // The site features in studs (the locked layout's map from plan pixels, which are feet, u and -v).
@@ -588,7 +606,7 @@ function siteNoteText({ plan, locked, studs, fit, facts }) {
   L.push(`SITE PLAN FROM THE MAP. The house was found on an aerial photo and mapped from above with the photos; the locked walls come from that map, at ${fit.ftPerStud} ft per stud (set "stud": ${fit.ftPerStud} in the design${fit.ftPerStud !== scaleFor(P).ftPerStud ? `; this size is usually ${scaleFor(P).ftPerStud} ft per stud, stretched so the whole house fits` : ''}). The lot around it, in stud rectangles [x0, z0, x1, z1] (z grows toward the street; the street and sidewalk take rows ${studs.streetRows[0]} to ${studs.streetRows[1]}). Build the lot from this in parts 3 and 4, and the patio covers and sheds with the roofs in part 2.`);
   if (facts) L.push(`- Records: ${facts}`);
   if (plan.summary) L.push(`- How the house was read: ${plan.summary}`);
-  L.push(`- Blocks: ${locked.blocks.map((b) => `${b.name}: ${b.stories || b.levels} ${(b.stories || b.levels) > 1 ? 'stories' : 'story'}, ${b.roof || 'hip'} roof${b.ridge && b.ridge !== 'none' ? ` (ridge ${b.ridge})` : ''}${b.note ? ` (${b.note})` : ''}`).join('; ')}.`);
+  L.push(`- Blocks: ${locked.blocks.map((b) => `${b.name}: ${b.floor > 1 ? 'on floor 2, standing on its own slab (walls op with "slab": true), ' : ''}${b.stories || b.levels} ${(b.stories || b.levels) > 1 ? 'stories' : 'story'}, ${b.floor > 1 || !b.under ? `${b.roof || 'hip'} roof` : 'the upper floor above it'}${b.ridge && b.ridge !== 'none' ? ` (ridge ${b.ridge})` : ''}${b.note ? ` (${b.note})` : ''}`).join('; ')}.`);
   if (studs.lot) {
     const lt = studs.lot, parts = [];
     parts.push(lt.left >= 0 ? `left lot line at x = ${lt.left}` : 'the lot runs past the left edge');

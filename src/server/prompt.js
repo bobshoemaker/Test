@@ -151,7 +151,7 @@ function lockedNote(locked, ops) {
   if (!locked) return '';
   const [title, what] = LOCKED_FROM[locked.source] || LOCKED_FROM.plan;
   return `
-LOCKED WALLS FROM THE ${title}. These walls ops were laid out from the ${what} at ${locked.scale.ftPerStud} ft per stud, with the street along z=${(locked.size || 32) - 1}. Start the design from them. Keep every op's "block" and "segments", and each listed opening's "cells", exactly as given: every compile checks them and reports changes as errors. Everything else is yours to set from the photos: courses and base (heights, raised floors, foundations), colors, trim, each opening's courses and fill, windows and other openings, and more walls ops for the same block (a foundation course or a parapet) with the same block and segments.
+LOCKED WALLS FROM THE ${title}. These walls ops were laid out from the ${what} at ${locked.scale.ftPerStud} ft per stud, with the street along z=${(locked.size || 32) - 1}. Start the design from them. ${locked.tolerance ? `These walls were read from an aerial photo, which misses what the photos show from the ground, so they bend a little: you may move a wall line by up to ${locked.tolerance} stud and slide a listed opening up to 2 studs along its wall where the photos show the map is off (a block a stud too deep, a garage door further left). Keep every op's "block", and make an upper floor that juts out past the one below (over a garage, a bay) its own walls op with "slab": true where the photos show it; the map may give it already, as a block on floor 2. Bigger changes are reported as errors on every compile.` : `Keep every op's "block" and "segments", and each listed opening's "cells", exactly as given: every compile checks them and reports changes as errors.`} Everything else is yours to set from the photos: courses and base (heights, raised floors, foundations), colors, trim, each opening's courses and fill, windows and other openings, and more walls ops for the same block (a foundation course or a parapet) with the same block and segments.
 ${JSON.stringify(ops)}
 Block rectangles for roofs ("rects"; blocks with the same wall-top height share one roof): ${JSON.stringify(locked.blocks.filter((b) => b.cells.length).map((b) => ({ block: b.name, rects: b.cellRects })))}
 ${locked.sideStreet ? `Corner lot: a second street runs along x = ${locked.sideStreet.side === 'left' ? 0 : (locked.size || 32) - 1} (columns ${locked.sideStreet.columns.join(' to ')} are kept free for its street and sidewalk; build them in part 3).` : ''}
@@ -392,7 +392,7 @@ const SITE_SPEC = `You map a house from above for a brick model of it. The model
 Coordinates are feet on the grid printed on the aerial images: u to the right as seen from the street facing the house, v away from the street. (0, 0) is the front left corner of the building's outline (orange); negative v is in front of the house, toward the street. The aerial images are turned so the street is at the bottom.
 
 Report with submit_site_plan:
-- blocks: the house split into parts that differ in height or roof, such as a two-story wing, the one-story main house, an attached garage, a rear addition. Each block is one or more rectangles [u0, v0, u1, v1] (u0 < u1, v0 < v1) along its outside walls. The orange outline is traced from the roof, so it takes in the eaves (1 to 2 ft) and is simplified: the walls sit a little inside it. Together the blocks should cover the outline. Add parts the outline misses when the photos or the aerial show them (a newer addition), and leave out what isn't enclosed (a patio cover, a carport, a pergola go in site.structures). stories: counted from the photos. roof: hip, gable, flat or shed, and the ridge's direction (side to side runs parallel to the street). List the tallest blocks first.
+- blocks: the house split into parts that differ in height or roof, such as a two-story wing, the one-story main house, an attached garage, a rear addition. Each block is one or more rectangles [u0, v0, u1, v1] (u0 < u1, v0 < v1) along its outside walls (the ground floor's). When an upper floor sits differently from the floor below, give it upperRects, the upper floor's own rectangles: a second story that juts out over the garage door or the porch (look at the photos for its underside and the shadow it casts; it is often 1 to 3 ft), a cantilevered bay, or a smaller upper floor set back. The aerial shows only the roof, so read these from the photos. The orange outline is traced from the roof, so it takes in the eaves (1 to 2 ft) and is simplified: the walls sit a little inside it. Together the blocks should cover the outline. Add parts the outline misses when the photos or the aerial show them (a newer addition), and leave out what isn't enclosed (a patio cover, a carport, a pergola go in site.structures). stories: counted from the photos. roof: hip, gable, flat or shed, and the ridge's direction (side to side runs parallel to the street). List the tallest blocks first.
 - openings: every garage door and the front door, and the back doors the photos show (sliding and French doors): the point on its wall line [u, v], its block, kind and width in feet.
 - site, in the same feet: driveways, walks, patios and paved yards, pools, lawn and planting beds (rectangles); trees (a point and the canopy's diameter); fences and walls (lines [u0, v0, u1, v1] with their kind from the photos: wood fence, block wall, iron fence, picket fence, gate); other structures (patio covers, sheds, carports); the lot (the white lot line when there is one, else your estimate from fences, driveways and the neighbours); and streetEdge, the v of the back of the sidewalk in front of the lot.
 - summary: a few sentences on how you read the house: its parts, stories and additions, and what in the aerial and the photos showed each.
@@ -409,7 +409,7 @@ const SITE_TOOL = (() => {
     input_schema: { type: 'object', properties: {
       summary: { type: 'string' },
       blocks: { type: 'array', items: { type: 'object', properties: {
-        name: { type: 'string' }, stories: { type: 'integer' }, rects,
+        name: { type: 'string' }, stories: { type: 'integer' }, rects, upperRects: { ...rects, description: 'The upper floors\' rectangles, when they differ from the ground floor (a jut over the garage, a bay, a set-back).' },
         roof: { type: 'string', enum: ['hip', 'gable', 'flat', 'shed'] }, ridge: { type: 'string', enum: ['side to side', 'front to back', 'none'] }, note: { type: 'string' },
       }, required: ['name', 'stories', 'rects', 'roof'] } },
       openings: { type: 'array', items: { type: 'object', properties: {
@@ -436,6 +436,43 @@ The model is the ${plateName} size; the whole house has to fit it, so get the to
 Map the house and submit it with submit_site_plan.`;
 }
 
+// The photo review: after the design is built, a (stronger) model compares its renders with the owner's photos,
+// feature by feature, and lists what to fix; the design loop then applies the fixes.
+const REVIEW_SPEC = `You check a brick model of a real house against the owner's photos before it goes to them, the way an architect checks a scale model against the building. You get the photos (with the view each shows, when known) and renders of the model from four sides, and you report what differs, most noticeable first, with submit_review.
+
+Go through each of these and compare the photos with the renders:
+1. Massing: how many stories each part has, which parts are taller, and whether an upper floor juts out past the floor below (over a garage door or a porch: look for its underside and the shadow it casts) or is set back.
+2. Roofs: shape (hip, gable, shed or flat), which way each slopes and how steeply, where ridges run, how deep the eaves are (exposed rafter tails, a fascia), roof color.
+3. The front: porch and its posts or columns, the entry door, the garage door (width, color, windows in it, a light above it).
+4. Windows and doors on each side the photos show: how many, where, how big, their color and trim.
+5. Walls: colors, materials (stucco, siding, brick), trim, a band or a change of material between floors.
+6. The lot: driveway and walks, fences and gates, walls, paving, lawn, trees and big shrubs, anything on the roof (solar panels, a deck, vents).
+Report only what the photos show clearly and the model gets wrong or leaves out, and what is worth changing at this scale (the task says how many feet a stud is; a detail smaller than a stud can still be shown at one stud when it defines the house, like a second floor jutting over the garage). Don't report what the model can't show (textures, curtains) or matters of taste. Say for each fix which photo shows it and what the model should do, in plain words the builder can act on (for example "raise the two-story wing's roof pitch toward the back and give it a 1-stud eave on the front and right"). At most 8 fixes; say so when the model matches.`;
+
+const REVIEW_TOOL = {
+  name: 'submit_review',
+  description: "Reports how the brick model differs from the owner's photos, most noticeable first.",
+  input_schema: { type: 'object', properties: {
+    matches: { type: 'array', items: { type: 'string' }, description: 'What the model gets right, briefly.' },
+    fixes: { type: 'array', items: { type: 'object', properties: {
+      feature: { type: 'string', description: 'massing, roof, front, windows, walls or lot' }, photo: { type: 'integer', description: 'the photo that shows it' },
+      problem: { type: 'string' }, fix: { type: 'string' } }, required: ['feature', 'problem', 'fix'] } },
+  }, required: ['matches', 'fixes'] },
+};
+
+function reviewTask({ photoList, ftPerStud, notes }) {
+  return `TASK
+The first images are the owner's photos: ${photoList}. The last four are renders of the brick model: the front, the front three-quarter, and the two back corners. The model is at ${ftPerStud} ft per stud; a brick course is ${Math.round(1.2 * ftPerStud * 10) / 10} ft tall.${notes ? `\nWhat the design says about the house: ${notes}` : ''}
+Compare them and submit your review with submit_review.`;
+}
+
+// The fixes, as the design loop's next turn.
+function reviewFixTask(fixes) {
+  return `PHOTO REVIEW. A reviewer compared renders of your model with the photos and found these differences, most noticeable first:
+${fixes.map((f, i) => `${i + 1}. ${f.feature ? `[${f.feature}] ` : ''}${f.problem}${f.photo ? ` (photo ${f.photo})` : ''} Fix: ${f.fix}`).join('\n')}
+Make these changes to the design, in this order, within the rules (locked walls may move up to a stud where they bend; an upper floor that juts out gets its own walls op with "slab": true). Skip one only if the compiler shows it can't be built, and say why. Compile after the changes and keep 0 errors and 0 warnings. Then reply with one sentence.`;
+}
+
 module.exports = { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask,
-  PICK_SPEC, PICK_TOOLS, pickTask, SITE_SPEC, SITE_TOOL, siteTask,
+  PICK_SPEC, PICK_TOOLS, pickTask, SITE_SPEC, SITE_TOOL, siteTask, REVIEW_SPEC, REVIEW_TOOL, reviewTask, reviewFixTask,
   SURVEY_SPEC, SURVEY_TOOL, surveyTask, PHOTO_CHECK_SPEC, PHOTO_CHECK_TOOL, photoCheckTask, LANDSCAPE_STYLES, choicesNote, example };
