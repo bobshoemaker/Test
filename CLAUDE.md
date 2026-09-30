@@ -202,7 +202,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
 - The app at `/app` is consumer-facing in the home page's theme (warm palette, Jersey 10 headings, pill buttons;
   tabs Model, Guide, Kit, Make yours), under the same top bar as the home page: one component, `src/viewer/topbar.html`, that the server (and
   `bundle.js`) puts in place of each page's `<!-- topbar -->`, so it doesn't move between pages; its button reads
-  "See an example" on the upload page). "Make yours" (`/app#design`) is an upload page of its own, the sample house hidden,
+  "See an example" on the upload page). The upload page (above the Design button), the Model tab (under "What we filled
+  in") and the home page's questions say the model takes some artistic license: a brick interpretation, not an exact
+  or photorealistic copy; keep that said wherever the model is sold. "Make yours" (`/app#design`) is an upload page of its own, the sample house hidden,
   until the first draft of their house comes back. Photos go in through a checklist, a tile per view (front, front left
   corner, front right corner, back) with a small map of where to stand, then "More" for extras; the views go with the
   photos (`views`) and the server turns the known ones into a sentence after the owner's notes (`viewsNote`), so the

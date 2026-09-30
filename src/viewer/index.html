@@ -317,6 +317,7 @@ if((location.hash==='#design'||/[?&]mine=/.test(location.search))&&!/[?&](job|he
         <ul class="facts" id="facts"></ul>
         <h2>What we filled in</h2>
         <p class="note" style="margin-top:0" id="assumed"></p>
+        <p class="note" id="license">Your model is a brick interpretation of your home, not an exact replica. To make it buildable and recognizable at this scale, we simplify some details, round sizes to whole bricks, and fill in what the photos don't show, so it won't match your house exactly or look photorealistic.</p>
         <label class="toggle dev-only"><input type="checkbox" id="stress"> Color by connection strength</label>
         <div class="legend dev-only"><span><i style="background:#D64B34"></i>under 0.5 joints per stud</span><span><i style="background:#E8A93A"></i>0.5 to 1</span><span><i style="background:#3E9E68"></i>1 or more</span></div>
       </section>
@@ -412,6 +413,7 @@ if((location.hash==='#design'||/[?&]mine=/.test(location.search))&&!/[?&](job|he
             <p class="count" id="notesCount" aria-live="polite">0 / 500</p>
             <div class="survey" id="survey" hidden></div>
             <p class="fewphotos" id="fewPhotos" role="status" hidden></p>
+            <p class="note" id="licenseNote">We take some artistic license: your model is a brick interpretation of your home, not an exact or photorealistic copy.</p>
             <div class="row"><button class="btn" id="surveyBtn" hidden>Check my photos first</button><button class="btn primary" id="designBtn">Design from photos</button><button class="btn" id="stopBtn" hidden>Stop</button><button class="btn" id="lastBtn" hidden>Show my last design</button></div>
             <div class="out" id="photoStatus" aria-live="polite"></div>
             <p class="privacy"><b>Your privacy.</b> We use your photos, address and email only to design your model and send your kit. We never sell them or share them for advertising, and your house isn't shown to anyone else: you see it through your own private link.</p>
