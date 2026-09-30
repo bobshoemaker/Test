@@ -777,6 +777,7 @@ async function askServer(mode){
     if(photos.length) status('Checking your photos…');
     const res=await fetch('/api/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}), j=await res.json();
     if(!res.ok) throw failed(res,j);
+    rememberDesign(j.id,'',{address:houseAddress(),status:j.checkout?'unpaid':'designing'});
     if(j.checkout){ status('Taking you to the secure payment page for the design fee…'); location.href=j.checkout; return; }
     jobId=j.id; showSent(); watchJob(j.id,false);
   }catch(e){ status(esc(e.message),true,e.plain); setBusy(false); }
@@ -801,15 +802,21 @@ async function openMine(token){
 const MINE='brickhouse-designs';
 function myDesigns(){ try{ const a=JSON.parse(localStorage.getItem(MINE)||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
 function rememberDesign(id,name,more={}){ try{ const a=myDesigns(), old=a.find(d=>d.id===id)||{};
-  const e={id,name:name||old.name||'',at:more.at||old.at||Date.now(),status:more.status||old.status||undefined};
+  const e={id,name:name||old.name||'',address:more.address||old.address||undefined,at:more.at||old.at||Date.now(),status:more.status||old.status||undefined};
   localStorage.setItem(MINE,JSON.stringify([e,...a.filter(d=>d.id!==id)].sort((x,y)=>y.at-x.at).slice(0,50))); }catch(e){} renderMine(); }
-const TAGS={ready:'Ready',designing:'Designing',problem:'Needs a look'};
+const TAGS={ready:'Ready',designing:'Designing',problem:'Needs a look',unpaid:'Not started'};
 function renderMine(){ const a=myDesigns();
   // the card: the list, and the email link when the site can send one; not on the page after Design
   $('myDesigns').hidden=!$('sent').hidden||(!a.length&&$('findMine').hidden);
-  $('myDesignList').innerHTML=a.map(d=>`<li><a href="/app?job=${encodeURIComponent(d.id)}"><b>${esc(d.name||'Your house')}${d.status&&TAGS[d.status]?`<span class="tag ${d.status}">${TAGS[d.status]}</span>`:''}</b>`
+  $('myDesignList').innerHTML=a.map(d=>`<li><a href="/app?job=${encodeURIComponent(d.id)}"><b>${esc(d.name||d.address||'Your house')}${d.status&&TAGS[d.status]?`<span class="tag ${d.status}">${TAGS[d.status]}</span>`:''}</b>`
     +`<small>${new Date(d.at).toLocaleDateString(undefined,{month:'short',day:'numeric',year:new Date(d.at).getFullYear()===new Date().getFullYear()?undefined:'numeric'})}</small></a></li>`).join(''); }
 renderMine();
+// bring the list up to date from the server: names once a draft has one, the address, and where each design has got to
+(async()=>{ const a=myDesigns(); if(!a.length) return;
+  try{ const r=await fetch('/api/jobs/summary',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ids:a.map(d=>d.id)})}); if(!r.ok) return;
+    const {designs}=await r.json(), by=new Map(designs.map(d=>[d.id,d]));
+    const next=a.map(d=>{ const s=by.get(d.id); return s?{...d,name:s.name||d.name,address:s.address||d.address,status:s.status,at:s.at||d.at}:d; });
+    localStorage.setItem(MINE,JSON.stringify(next)); renderMine(); }catch(e){} })();
 function watchJob(id,keep){
   jobId=id; rememberDesign(id); if(!keep){ jobAfter=0; jobHave=0; } jobT0=Date.now(); setBusy(true); $('stopBtn').hidden=true;
   try{ history.replaceState(null,'','?job='+id); }catch(e){}

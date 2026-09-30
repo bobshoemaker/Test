@@ -172,8 +172,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   Mini, Classic and Grand, with the landing page's sizes and piece counts (`#sizeMini`, `#sizeClassic`, `#bigPlate`). After Design, the upload page gives way to a
   page of its own (`#sent`): thanks, the steps (photos received, designing with the live progress, ready), the private link
   with Copy, and what happens next; the job's link lands there too until the first draft, when the house takes over.
-  Designs made in a browser are remembered there (localStorage `brickhouse-designs`: job id, name, date, status) and
-  listed in a "Your designs" card under the form; "Made one on another device?" emails a sign-in link (`POST /api/mine
+  Designs made in a browser are remembered there (localStorage `brickhouse-designs`: job id, name, address, date,
+  status) and listed in a "Your designs" card under the form, by name or, until a draft names it, its address; each
+  page load brings the list up to date (`POST /api/jobs/summary {ids}`, only for ids the device holds); "Made one on another device?" emails a sign-in link (`POST /api/mine
   {email}`, 5 an hour, the same answer either way), `/app?mine=<token>`: the email and an expiry signed with a server
   secret (`BRICKHOUSE_SECRET`, or one made once in the jobs folder), good for 24 hours, which lists that email's designs
   (`GET /api/mine?token=`) and adds them to the device. An email alone never shows anything. Email goes through Resend (`src/server/mail.js`, `RESEND_API_KEY`, sender `BRICKHOUSE_MAIL_FROM`
