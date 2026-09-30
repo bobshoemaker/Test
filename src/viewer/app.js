@@ -865,6 +865,8 @@ async function pollJob(gen=pollGen){
   renderReview(j.review||null,j.status); // the admin's check (only the admin's view carries it)
   if(j.status==='awaiting_payment'){ status(`This design is waiting for its design fee.`); setBusy(false); return; }
   // finished, and being checked by our team before its owner sees it (jobs.js hold): look again now and then
+  // received and paid, and our team is looking the photos over before the design starts (jobs.js intake)
+  if(j.status==='intake'){ status('We have your photos. Our team is looking them over before your design starts; we\'ll show your house here when it\'s ready.'); $('subBar').style.width='5%'; setBusy(false); setTimeout(()=>pollJob(gen),20000); return; }
   if(j.status==='review'){ status('Your design is done, and our team is checking it against your photos. We\'ll show it to you here as soon as it\'s approved.'); $('subBar').style.width='95%'; setBusy(false); setTimeout(()=>pollJob(gen),20000); return; }
   // cut off by a restart: the server picks it up again at the part it was on (jobs.resumeInterrupted)
   if(j.status==='interrupted'){ status('Picking your design up where it left off…'); setTimeout(()=>pollJob(gen),4000); return; }

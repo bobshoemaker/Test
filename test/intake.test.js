@@ -1,7 +1,7 @@
 // The intake form's free text is cleaned and limited on the server, and the address is required.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { cleanText, cleanAddress, parseDesignRequest, viewsNote, mineToken, mineEmailOf } = require('../src/server/server');
+const { cleanText, cleanAddress, parseDesignRequest, viewsNote, mineToken, mineEmailOf, designPhotos } = require('../src/server/server');
 const { partsTask } = require('../src/server/prompt');
 
 test('free text loses control characters, line breaks and double quotes, and is cut to its limit', () => {
@@ -46,4 +46,17 @@ test('the Your designs link: signed, for its own email only, and only for 24 hou
   assert.equal(mineEmailOf(`${other}.${sig}`, 2000), null, 'another email with this signature');
   assert.equal(mineEmailOf(`${p}.${'A'.repeat(43)}`, 2000), null);
   for (const bad of [null, '', 'abc', `${p}.`]) assert.equal(mineEmailOf(bad, 2000), null);
+});
+
+test('the photos a design uses: the owner\'s less any our team left out, then our team\'s, with a sentence on which is which', () => {
+  const ph = (x) => ({ mediaType: 'image/jpeg', data: x });
+  const req = parseDesignRequest({ photos: [ph('a'), ph('b'), ph('c')], views: ['front', 'left', null], notes: 'blue door' });
+  // as the owner sent them: unchanged
+  const same = designPhotos(req);
+  assert.deepEqual(same.photos.map((p) => p.data), ['a', 'b', 'c']); assert.equal(same.notes, req.notes);
+  // our team left out photo 2, called photo 3 the back and added an aerial
+  const d = designPhotos({ ...req, views: ['front', 'left', 'back'], viewsChanged: true, dropped: [1], teamPhotos: [{ ...ph('z'), view: 'aerial' }] });
+  assert.deepEqual(d.photos.map((p) => p.data), ['a', 'c', 'z']); assert.deepEqual(d.views, ['front', 'back', 'aerial']);
+  assert.match(d.notes, /^blue door Which photo shows what: photo 1 shows the front of the house, straight on, photo 2 shows the back, photo 3 \(added by our team\) shows the house from above/);
+  assert.doesNotMatch(d.notes, /front left corner/);
 });

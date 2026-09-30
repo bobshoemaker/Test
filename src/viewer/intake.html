@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Prepare a design · Brickhouse admin</title>
+<style>
+/* preparing a paid request before its design (/admin/intake?job=…): the owner's photos and notes, the admin's own photos
+   (an aerial, say), the house picked on the map, and instructions for the design; the API is the admin's */
+:root{--paper:#F7F1E8;--panel:#FFFDF9;--stage:#EFE6D8;--ink:#27211B;--muted:#6F6458;--line:#E3D8C8;--accent:#B4462A;--accent-ink:#fff;--good:#2F7D55;--bad:#B4462A;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--paper:#16120E;--panel:#201A15;--stage:#2A231C;--ink:#F2EADF;--muted:#A89A8A;--line:#3A3027;--accent:#E0714F;--accent-ink:#1B120C;--good:#7FB894;--bad:#EE6A52;color-scheme:dark}}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15px;line-height:1.45}
+.wrap{max-width:1000px;margin:0 auto;padding:18px 16px 80px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+h1{margin:0;font-size:24px} h2{font-size:18px;margin:0 0 8px}
+a{color:var(--accent)}
+.btn{font:inherit;font-weight:600;border-radius:999px;padding:7px 14px;border:1.5px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;text-decoration:none;display:inline-block;white-space:nowrap}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn:disabled{opacity:.5;cursor:default}
+button:focus-visible,a:focus-visible,select:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:14px}
+.muted{color:var(--muted)} .small{font-size:13px} .err{color:var(--bad)}
+.note{font-size:13px;color:var(--muted);margin:4px 0 10px}
+dl.facts{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:0}
+dl.facts dt{color:var(--muted);font-size:13px} dl.facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.ph{display:grid;gap:6px;min-width:0}
+.ph img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px;background:var(--stage);display:block}
+.ph.out img{opacity:.35}
+.ph label{font-size:13px;display:flex;gap:6px;align-items:center}
+select,textarea{font:inherit;font-size:15px;width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink)}
+textarea{min-height:110px;resize:vertical;line-height:1.4}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:10px}
+.map{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:14px;margin-top:10px}
+@media (max-width:760px){.map{grid-template-columns:1fr}}
+.map img{width:100%;border-radius:10px;display:block}
+.cands{display:grid;gap:6px;max-height:520px;overflow:auto}
+.cand{display:flex;gap:8px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:7px 9px;font-size:14px;cursor:pointer}
+.cand input{width:auto;margin-top:3px}
+.cand b{min-width:1.6em}
+.cand:has(input:checked){border-color:var(--accent);background:var(--stage)}
+.start{position:sticky;bottom:0;background:var(--paper);padding:10px 0;border-top:1px solid var(--line)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Prepare the design</h1><a class="btn" href="/admin">Back to admin</a></header>
+  <p class="err" id="fail" hidden></p>
+  <div id="main" hidden>
+    <section class="card">
+      <h2 id="house">…</h2>
+      <dl class="facts" id="facts"></dl>
+    </section>
+    <section class="card">
+      <h2>The owner's photos</h2>
+      <p class="note">Say which view each shows (it tells the design and the map step where the owner stood), and leave out any that would mislead it. Tap a photo to open it full size.</p>
+      <div class="photos" id="photos"></div>
+    </section>
+    <section class="card">
+      <h2>Add photos</h2>
+      <p class="note">Your own references, up to 4: an aerial or satellite view, a side the owner didn't photograph. They go to the design after the owner's, marked as added by our team. Use images we may use for a product we sell.</p>
+      <input type="file" id="addInput" accept="image/jpeg,image/png,image/webp" multiple hidden>
+      <div class="photos" id="added"></div>
+      <div class="row"><button class="btn" id="addBtn" type="button">Choose photos</button></div>
+    </section>
+    <section class="card">
+      <h2>The house on the map</h2>
+      <p class="note">The buildings near the address, numbered on a public-domain aerial (north up; the red dot is where the address lookup landed, often a few lots off). Pick the house, and the design maps that building instead of choosing one itself.</p>
+      <div class="row"><button class="btn" id="mapBtn" type="button">Find the buildings</button><span class="small muted" id="mapNote"></span></div>
+      <div class="map" id="map" hidden><img id="mapImg" alt="The numbered buildings near the address on an aerial photo"><div class="cands" id="cands"></div></div>
+    </section>
+    <section class="card">
+      <h2>Instructions for the design</h2>
+      <p class="note">What the design should know or do that the photos don't settle: "the garage is detached, behind the house", "the upper floor overhangs the garage by about 2 ft", "leave out the neighbour's tree". The design follows these.</p>
+      <textarea id="instr" maxlength="2000" placeholder="Anything the design should follow"></textarea>
+    </section>
+    <div class="start"><div class="row" style="margin:0"><button class="btn primary" id="startBtn" type="button">Start the design</button><span class="small" id="startNote"></span></div></div>
+  </div>
+</div>
+<script>
+const $=(id)=>document.getElementById(id);
+const esc=(s)=>String(s==null?'':s).replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const job=new URLSearchParams(location.search).get('job')||'';
+const VIEWS=[['','Not sure'],['front','Front, straight on'],['left','Front left corner'],['right','Front right corner'],['back','Back'],['aerial','From above']];
+const SIZE={16:'Mini',32:'Classic',48:'Grand'};
+const viewSelect=(v,id)=>`<select id="${id}" aria-label="What this photo shows">${VIEWS.map(([k,l])=>`<option value="${k}"${k===(v||'')?' selected':''}>${esc(l)}</option>`).join('')}</select>`;
+let info=null, added=[], cands=[];
+function fail(m){ $('fail').innerHTML=m; $('fail').hidden=false; }
+async function api(path,opts){ const r=await fetch(`/admin/api/jobs/${job}/${path}`,opts), j=await r.json().catch(()=>({}));
+  if(r.status===401) throw new Error('Sign in on the <a href="/admin">admin page</a> first, then come back.');
+  if(!r.ok) throw new Error(esc(j.error||`Server error ${r.status}`)); return j; }
+async function load(){
+  if(!/^[a-f0-9-]{36}$/.test(job)) return fail('No design given.');
+  try{ info=await api('intake'); }catch(e){ return fail(e.message); }
+  $('house').textContent=info.address||'(no address)';
+  const rows=[['Size',`${SIZE[info.plate]||info.plate} (${info.plate} × ${info.plate})`],['Requested',new Date(info.createdAt).toLocaleString()],['Email',info.email||'none given'],
+    ['Owner\'s notes',info.notes||'none'],...(info.choices||[]).map((c)=>[c.question,c.answer]),...(info.plan?[['Floor plan','included']]:[])];
+  $('facts').innerHTML=rows.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+  $('photos').innerHTML=Array.from({length:info.photos},(_,i)=>`<div class="ph" id="ph${i}"><a href="/api/jobs/${job}/photos/${i}" target="_blank" rel="noopener"><img src="/api/jobs/${job}/photos/${i}" alt="The owner's photo ${i+1}" loading="lazy"></a>
+    <span class="small muted">Photo ${i+1}</span>${viewSelect(info.views[i],'v'+i)}<label><input type="checkbox" id="out${i}"> Leave it out</label></div>`).join('')||'<p class="muted">No photos.</p>';
+  for(let i=0;i<info.photos;i++) $('out'+i).onchange=(e)=>$('ph'+i).classList.toggle('out',e.target.checked);
+  if(info.status!=='intake'){ $('startBtn').disabled=true; $('startNote').innerHTML=`This design is ${esc(info.status)}${info.begun?', started from here':''}. <a href="/app?job=${job}" target="_blank" rel="noopener">Open it</a>`; }
+  $('main').hidden=false;
+}
+// the admin's own photos, made smaller on the device as the upload page does
+async function shrink(file,maxSide=1568){ const bmp=await createImageBitmap(file), s=Math.min(1,maxSide/Math.max(bmp.width,bmp.height));
+  const c=document.createElement('canvas'); c.width=Math.round(bmp.width*s); c.height=Math.round(bmp.height*s); c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+  return {mediaType:'image/jpeg',data:c.toDataURL('image/jpeg',0.88).split(',')[1]}; }
+function renderAdded(){ $('added').innerHTML=added.map((a,i)=>`<div class="ph"><img src="data:${a.mediaType};base64,${a.data}" alt="Added photo ${i+1}">${viewSelect(a.view,'av'+i)}<button class="btn" type="button" data-rm="${i}">Remove</button></div>`).join('');
+  added.forEach((a,i)=>{ $('av'+i).onchange=(e)=>{ a.view=e.target.value; }; });
+  $('added').querySelectorAll('[data-rm]').forEach((b)=>b.onclick=()=>{ added.splice(+b.dataset.rm,1); renderAdded(); });
+  $('addBtn').disabled=added.length>=4; }
+$('addBtn').onclick=()=>$('addInput').click();
+$('addInput').onchange=async(e)=>{ for(const f of [...e.target.files].slice(0,4-added.length)){ try{ added.push({...(await shrink(f)),view:added.length?'':'aerial'}); }catch(err){ fail(`Couldn't read ${esc(f.name)}.`); } } e.target.value=''; renderAdded(); };
+$('mapBtn').onclick=async()=>{ $('mapBtn').disabled=true; $('mapNote').textContent='Looking up the address and the buildings around it (about half a minute)…';
+  try{ const m=await api('candidates',{method:'POST'}); cands=m.candidates; $('mapImg').src=m.image;
+    $('cands').innerHTML=`<label class="cand"><input type="radio" name="pick" value="" checked><span>Let the design pick it from the photos</span></label>`
+      +cands.map((c)=>`<label class="cand"><input type="radio" name="pick" value="${c.n}"><b>${c.n}</b><span>${esc(c.line)}</span></label>`).join('');
+    $('map').hidden=false; $('mapNote').textContent=`${cands.length} buildings. Pick the house by its number.`; }
+  catch(e){ $('mapNote').innerHTML=`<span class="err">${e.message}</span>`; }
+  $('mapBtn').disabled=false; };
+$('startBtn').onclick=async()=>{
+  const n=(document.querySelector('input[name=pick]:checked')||{}).value, c=cands.find((x)=>String(x.n)===n);
+  const body={views:Array.from({length:info.photos},(_,i)=>$('v'+i).value||null), drop:Array.from({length:info.photos},(_,i)=>i).filter((i)=>$('out'+i).checked),
+    add:added, instructions:$('instr').value.trim(), pickAt:c?{lat:c.lat,lon:c.lon}:null};
+  $('startBtn').disabled=true; $('startNote').textContent='Starting…';
+  try{ await api('begin',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+    $('startNote').innerHTML=`Started${c?`, on building ${c.n}`:''}. It takes about half an hour; it will wait for your check when it's done. <a href="/app?job=${job}" target="_blank" rel="noopener">Watch it</a> · <a href="/admin">Back to admin</a>`; }
+  catch(e){ $('startNote').innerHTML=`<span class="err">${e.message}</span>`; $('startBtn').disabled=false; } };
+load();
+</script>
+</body>
+</html>

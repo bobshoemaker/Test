@@ -279,6 +279,7 @@ async function callClaude(client, params, onEvent = () => {}) {
  * @param {object} [o.review] parts mode: {model, effort} of a photo review after the five parts: that model compares
  *                   renders of the model with the photos feature by feature, and the design applies its fixes (needs render)
  * @param {Array<string|null>} [o.views] which view each photo shows (views.js), for the review
+ * @param {string} [o.teamNotes] instructions from our team, who checked the photos before the design (binding, unlike notes)
  * @param {string} [o.task]   mode 'fix': instructions in place of fixing the compile problems (reviseTask)
  * @param {number} [o.budgetUsd] stop when the API cost passes this (with spentUsd already spent before the
  *                   design loop, by the site step); the last compiled draft is kept
@@ -287,7 +288,7 @@ async function designHouse({
   client, model, photos = [], plan = null, notes = '', target = 1200, mode = 'design', design = null,
   effort = null, maxRounds = 7, maxTokens = 64000, onEvent = () => {}, render = null, partsLimit = PARTS.length,
   lockFootprint = true, locked = null, planTools = null, seed = null, fromPart = 1, choices = null, plate = 32, supplier = null,
-  ftPerStud = null, siteImages = [], siteNote = '', budgetUsd = null, spentUsd = 0, review = null, views = [], task = null,
+  ftPerStud = null, siteImages = [], siteNote = '', budgetUsd = null, spentUsd = 0, review = null, views = [], task = null, teamNotes = '',
 }) {
   plate = scaleFor(plate).plate;
   // a scale fitted to this house: every draft carries it (the walls are locked at it); the size's own needs nothing
@@ -308,7 +309,7 @@ async function designHouse({
   } else {
     if (!photos.length && !notes) throw new Error('Add at least one photo or a description.');
     content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target, hasPlan: !!plan, locked, lockedOps, seed: fromPart > 1 ? seed : null, fromPart, choices, plate,
-      ftPerStud: stud, siteNote: mode === 'parts' ? siteNote : '' })
+      ftPerStud: stud, siteNote: mode === 'parts' ? siteNote : '', teamNotes })
       + (supplier ? `\n\nSUPPLIER. The kit is made from ${supplier === 'gobricks' ? 'GoBricks' : supplier} bricks: every draft is compiled with "supplier": "${supplier}" (see Compatible bricks), so use only parts and colors the compiler says it makes.` : '') });
   }
   const messages = [{ role: 'user', content }];

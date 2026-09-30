@@ -9,7 +9,7 @@ const { reviseTask } = require('./prompt');
 const { makePreview } = require('./preview');
 const { makeMailer, cleanEmail, readyEmail, kitEmail, shippedEmail, mineEmail } = require('./mail');
 const { scaleFor, sizeName } = require('./scale');
-const { okPhoto, cleanViews, viewsNote: viewsNoteOf } = require('./views');
+const { okPhoto, cleanViews, viewsNote: viewsNoteOf, VIEWS } = require('./views');
 const { lookupAddress, fetchMapillaryImage } = require('./lookup');
 const { lookupTerrain } = require('./terrain');
 const { prepareDesign } = require('./pipeline');
@@ -36,6 +36,8 @@ const SITE_MODEL = process.env.BRICKHOUSE_SITE_MODEL || MODEL;
 // After the five parts, a model (the site model unless BRICKHOUSE_REVIEW_MODEL says) compares renders of the design with
 // the photos and lists fixes the design then makes; BRICKHOUSE_REVIEW=0 turns it off.
 const REVIEW = process.env.BRICKHOUSE_REVIEW === '0' ? null : { model: process.env.BRICKHOUSE_REVIEW_MODEL || SITE_MODEL, effort: 'high' };
+// every paid request waits for the admin to look over its photos before its design starts (=0 turns it off)
+const INTAKE = process.env.BRICKHOUSE_HOLD_BEFORE_DESIGN !== '0';
 // every finished design waits for the admin's approval before its owner sees it (BRICKHOUSE_HOLD_FOR_REVIEW=0 turns it off)
 const HOLD = process.env.BRICKHOUSE_HOLD_FOR_REVIEW !== '0';
 const REVISE_BUDGET_USD = 5; // one requested change
@@ -64,6 +66,7 @@ const STATIC = {
   '/': ['src/viewer/landing.html', 'text/html; charset=utf-8'],
   '/app': ['src/viewer/index.html', 'text/html; charset=utf-8'],
   '/admin': ['src/viewer/admin.html', 'text/html; charset=utf-8'],
+  '/admin/intake': ['src/viewer/intake.html', 'text/html; charset=utf-8'], // preparing a request before its design (its API is the admin's)
   '/index.html': ['src/viewer/index.html', 'text/html; charset=utf-8'],
   '/img/sample-634.jpg': ['src/viewer/img/sample-634.jpg', 'image/jpeg'],
   '/img/sample-savannah.jpg': ['src/viewer/img/sample-savannah.jpg', 'image/jpeg'],
@@ -165,6 +168,7 @@ function parseDesignRequest(body) {
     views: cleanViews(body.photos, body.views, MAX_PHOTOS), // which view each kept photo shows, for the site step
     target: Math.max(300, Math.min(3000, Number(body.target) || sc.target)),
     notes: withViews(cleanText(body.notes, NOTES_MAX), body), // the checklist's views follow the owner's notes
+    ownerNotes: cleanText(body.notes, NOTES_MAX), // the notes alone, for when our team changes the photos before the design
     // The owner's answers to the survey, as {question, answer, detail}; the design follows them.
     choices: (Array.isArray(body.choices) ? body.choices : []).slice(0, 8)
       .map((c) => c && ({ question: cleanText(c.question, 200), answer: cleanText(c.answer, ANSWER_MAX), detail: cleanText(c.detail, 300) }))
@@ -191,22 +195,35 @@ function finishDesign(out, p, emit, t0, site = null) {
     saved: `generated/${name}`, note: out.note || null, model: FAKE ? 'fake' : MODEL });
 }
 
+// The photos a design uses: the owner's (less any our team left out) then the ones our team added before the design, with
+// which view each shows and a sentence saying so (the owner's notes come first; they may say more).
+const MAX_TEAM_PHOTOS = 4;
+function designPhotos(p) {
+  const drop = new Set(p.dropped || []), photos = [], views = [], team = [];
+  (p.photos || []).forEach((ph, i) => { if (!drop.has(i)) { photos.push(ph); views.push((p.views || [])[i] || null); team.push(false); } });
+  (p.teamPhotos || []).forEach((t) => { photos.push({ mediaType: t.mediaType, data: t.data }); views.push(t.view || null); team.push(true); });
+  if (p.ownerNotes === undefined || (!drop.size && !(p.teamPhotos || []).length && !p.viewsChanged)) return { photos, views, notes: p.notes }; // as the owner sent them
+  const said = views.map((v, i) => (v && VIEWS[v] ? `photo ${i + 1}${team[i] ? ' (added by our team)' : ''} shows ${VIEWS[v]}` : team[i] ? `photo ${i + 1} was added by our team` : null)).filter(Boolean);
+  return { photos, views, notes: [p.ownerNotes, said.length ? `Which photo shows what: ${said.join(', ')} (left and right as seen from the street).` : ''].filter(Boolean).join(' ') };
+}
+
 // The same steps as scripts/design.js: address facts, the house found and mapped from above (or walls locked to
 // the plan or the building outline), then the house built in parts with renders of each draft (pipeline.js).
 // A resumed job reuses the site it mapped (jobs.js keeps it), so its walls stay the ones the draft was built on.
-async function runDesign(p, emit) {
+async function runDesign(p0, emit) {
   const client = makeClient(), t0 = Date.now();
   if (!client) throw new Error(NO_KEY);
+  const dp = designPhotos(p0), p = { ...p0, photos: dp.photos, views: dp.views, notes: dp.notes };
   const renderer = await getRenderer(), kept = (p.resume && p.resume.site) || null;
   if (p.address && !kept) emit({ type: 'status', message: 'Looking up the building, streets and slope…' });
   const prep = await prepareDesign({ address: p.address, notes: p.notes, plan: p.plan, plate: p.plate, frontStreet: p.frontStreet, site: kept,
-    photos: FAKE ? [] : p.photos, views: p.views || [], client, model: MODEL, siteModel: SITE_MODEL, tools: renderer, onEvent: emit });
+    photos: FAKE ? [] : p.photos, views: p.views || [], client, model: MODEL, siteModel: SITE_MODEL, tools: renderer, onEvent: emit, pickAt: p.pickAt || null });
   prep.log.forEach((m) => emit({ type: 'status', message: m }));
   if (prep.site && !kept) emit({ type: 'siteDone', site: prep.site, report: prep.report || null });
   const out = await designHouse({ client, model: MODEL, effort: EFFORT, photos: p.photos, plan: p.plan, notes: prep.notes, target: p.target, choices: p.choices,
     plate: p.plate, mode: 'parts', locked: prep.locked, render: renderer && renderer.render, planTools: renderer, onEvent: emit, supplier: SUPPLIER,
     ...(prep.site ? { ftPerStud: prep.site.ftPerStud, siteImages: prep.site.images, siteNote: prep.site.note } : {}),
-    budgetUsd: BUDGET_USD, spentUsd: prep.site && !kept ? prep.site.costUsd || 0 : 0, review: FAKE ? null : REVIEW, views: p.views || [],
+    budgetUsd: BUDGET_USD, spentUsd: prep.site && !kept ? prep.site.costUsd || 0 : 0, review: FAKE ? null : REVIEW, views: p.views || [], teamNotes: p.instructions || '',
     ...(p.resume ? { fromPart: p.resume.fromPart, seed: p.resume.seed } : {}) });
   finishDesign(out, p, emit, t0, prep.site);
 }
@@ -235,8 +252,8 @@ function selectionOf(design, ids) {
 async function runRevise(p, emit) {
   const client = makeClient(), t0 = Date.now();
   if (!client) throw new Error(NO_KEY);
-  const renderer = await getRenderer();
-  const out = await designHouse({ client, model: MODEL, effort: EFFORT, photos: p.photos, notes: p.notes, target: p.target, plate: p.plate, mode: 'fix', design: p.design,
+  const renderer = await getRenderer(), dp = designPhotos(p); // the photos the design was made from, our team's included
+  const out = await designHouse({ client, model: MODEL, effort: EFFORT, photos: dp.photos, notes: dp.notes, target: p.target, plate: p.plate, mode: 'fix', design: p.design,
     task: reviseTask({ design: p.design, note: p.note, selection: p.selection || [] }), render: renderer && renderer.render, supplier: SUPPLIER,
     ftPerStud: p.design && p.design.stud, budgetUsd: REVISE_BUDGET_USD, onEvent: emit });
   emit({ type: 'cost', usd: out.costUsd });
@@ -253,7 +270,7 @@ const JOBS = createJobs({
   dir: path.join(ROOT, 'designs/generated/jobs'),
   stripe: makeStripe({ secretKey: process.env.STRIPE_SECRET_KEY, ...(process.env.BRICKHOUSE_STRIPE_API ? { apiBase: process.env.BRICKHOUSE_STRIPE_API } : {}) }), // the override is for local tests
   feeCents: Number(process.env.BRICKHOUSE_DESIGN_FEE_CENTS || 1500), currency: process.env.BRICKHOUSE_CURRENCY || 'usd',
-  run: runDesign, fixRun: runFix, reviseRun: runRevise, hold: HOLD,
+  run: runDesign, fixRun: runFix, reviseRun: runRevise, hold: HOLD, intake: INTAKE,
   // the kit's price by baseplate: Mini (16), Classic (32) and Grand (48); unset means that size isn't on sale yet
   kitCents: (plate) => Number(process.env[`BRICKHOUSE_KIT_${sizeName(plate).toUpperCase()}_CENTS`]) || null,
   preview: makePreview,
@@ -473,7 +490,7 @@ async function handleAdmin(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/admin/logout') { res.setHeader('set-cookie', adminCookie(req, '', 0)); return send(res, 200, { ok: true }); }
   if (!isAdmin(req)) return send(res, 401, { error: 'Sign in first.' });
   if (req.method === 'GET' && url.pathname === '/admin/api/jobs') return send(res, 200, { jobs: JOBS.list(), supplier: SUPPLIER, mail: !!MAILER, payments: !!JOBS.fee, stock: !!QUOTER });
-  const m = /^\/admin\/api\/jobs\/([a-f0-9-]{36})\/(parts\.xml|fulfillment|retry|stock|site|revise|undo|approve)$/.exec(url.pathname);
+  const m = /^\/admin\/api\/jobs\/([a-f0-9-]{36})\/(parts\.xml|fulfillment|retry|stock|site|revise|undo|approve|intake|candidates|begin)$/.exec(url.pathname);
   if (!m) return send(res, 404, { error: 'Not found' });
   const [, id, what] = m;
   if (req.method === 'GET' && what === 'parts.xml') {
@@ -502,6 +519,33 @@ async function handleAdmin(req, res, url) {
     const r = JOBS.revise(id, { note: body.note, selection, parts: selection.reduce((n, s) => n + s.count, 0) }); return send(res, r.code, r);
   }
   if (req.method === 'POST' && what === 'undo') { const r = JOBS.undo(id); return send(res, r.code, r); }
+  // before the design: the request to look over, the buildings near the address to pick the house from, and starting it
+  if (req.method === 'GET' && what === 'intake') { const r = JOBS.intakeOf(id); return r ? send(res, 200, r) : send(res, 404, { error: 'No such job' }); }
+  if (req.method === 'POST' && what === 'candidates') {
+    const r = JOBS.intakeOf(id);
+    if (!r || !r.address) return send(res, 404, { error: 'This request has no address.' });
+    const tools = await getRenderer();
+    if (!tools) return send(res, 503, { error: 'The map needs the renderer (Playwright) on this server.' });
+    try {
+      const place = await require('./lookup').geocode(r.address);
+      if (!place) return send(res, 404, { error: `The address wasn't found: ${r.address}` });
+      const { findCandidates, candidateLine } = require('./site'), { frame } = require('./terrain'), { toLL } = frame(place);
+      const f = await findCandidates({ address: r.address, place, tools });
+      return send(res, 200, { image: `data:${f.mapImage.mediaType || 'image/jpeg'};base64,${f.mapImage.data}`, pin: { lat: place.lat, lon: place.lon },
+        candidates: f.candidates.map((c) => ({ n: c.n, line: candidateLine(c).replace(/^\d+\.\s*/, ''), ...toLL(c.c) })) });
+    } catch (e) { return send(res, 502, { error: e.message }); }
+  }
+  if (req.method === 'POST' && what === 'begin') {
+    let body = {}; try { body = JSON.parse(await readBody(req)); } catch (e) { return send(res, 400, { error: e.message }); }
+    const r0 = JOBS.intakeOf(id); if (!r0) return send(res, 404, { error: 'No such job' });
+    const views = Array.isArray(body.views) ? body.views.slice(0, r0.photos).map((v) => (VIEWS[v] ? v : null)) : null;
+    const add = (Array.isArray(body.add) ? body.add : []).slice(0, MAX_TEAM_PHOTOS).filter(okPhoto).map((ph) => ({ mediaType: ph.mediaType, data: ph.data, view: VIEWS[ph.view] ? ph.view : null }));
+    const drop = (Array.isArray(body.drop) ? body.drop : []).map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n < r0.photos);
+    if (drop.length >= r0.photos && !add.length) return send(res, 400, { error: 'Keep at least one photo.' });
+    const pk = body.pickAt && Number.isFinite(Number(body.pickAt.lat)) && Number.isFinite(Number(body.pickAt.lon)) ? { lat: Number(body.pickAt.lat), lon: Number(body.pickAt.lon) } : null;
+    const r = JOBS.begin(id, { views, drop, add, pickAt: pk, instructions: String(body.instructions || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 2000) });
+    return send(res, r.code, r);
+  }
   if (req.method === 'POST' && what === 'approve') { const r = JOBS.approve(id); return send(res, r.code, r); }
   if (req.method === 'POST' && what === 'stock') {
     if (!QUOTER) return send(res, 503, { error: 'GoBricks quotes are off on this server (BRICKHOUSE_GOBRICKS_QUOTES=0).' });
@@ -567,4 +611,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, cleanText, cleanAddress, parseDesignRequest, partsXml, viewsNote, mineToken, mineEmailOf };
+module.exports = { server, cleanText, cleanAddress, parseDesignRequest, partsXml, viewsNote, mineToken, mineEmailOf, designPhotos };

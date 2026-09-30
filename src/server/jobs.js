@@ -18,7 +18,9 @@ const MAX_RESUMES = 2; // times a job cut off by a restart is picked up again (a
 // onKit(job): a kit order came in (the server checks the supplier's stock for it); never fails the order.
 // hold: every finished design waits for the admin's approval before its owner sees it (or gets its email);
 // meanwhile the admin can ask for changes in words (reviseRun), undo them, and approve.
-function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, fixRun = null, reviseRun = null, hold = false, now = () => Date.now(),
+// intake: a paid request waits (status "intake") for the admin to look over its photos and add what the design needs (their
+// own photos, the house picked on the map, instructions) before it runs (begin).
+function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, fixRun = null, reviseRun = null, hold = false, intake = false, now = () => Date.now(),
   kitCents = () => null, preview = null, notify = null, onKit = null }) {
   fs.mkdirSync(dir, { recursive: true });
   const jobs = new Map();
@@ -82,7 +84,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       const { email = null, ...rest } = params;
       const j = { id: crypto.randomUUID(), createdAt: now(), status: feeOn ? 'awaiting_payment' : 'queued', params: rest, events: [], fixes: 0, email, origin };
       jobs.set(j.id, j);
-      if (!feeOn) { save(j); launch(j, run); return { id: j.id }; }
+      if (!feeOn) { if (intake) { j.status = 'intake'; save(j); } else { save(j); launch(j, run); } return { id: j.id }; }
       const s = await stripe.createCheckout({ jobId: j.id, amountCents: feeCents, currency, name: 'Brick model design fee',
         successUrl: `${origin}/app?job=${j.id}&session={CHECKOUT_SESSION_ID}`, cancelUrl: `${origin}/app?job=${j.id}&canceled=1` });
       j.sessionId = s.id; save(j);
@@ -101,7 +103,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
           j.paid = { at: now(), amount: s.amount_total, currency: s.currency };
           if (!j.email && s.customer_details && s.customer_details.email) j.email = String(s.customer_details.email).toLowerCase();
         }
-        launch(j, run);
+        if (intake && !j.begun) { j.status = 'intake'; save(j); } else launch(j, run);
       }
       return { code: 200, status: j.status };
     },
@@ -142,7 +144,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       if (!j) return null;
       const d = (j.result && j.result.design) || j.draft || {};
       return { id: j.id, name: d.name || '', address: (j.params && j.params.address) || '', at: j.createdAt,
-        status: j.status === 'done' && !held(j) ? 'ready' : j.status === 'error' ? 'problem' : j.status === 'awaiting_payment' ? 'unpaid' : 'designing' };
+        status: j.status === 'done' && !held(j) ? 'ready' : j.status === 'error' ? 'problem' : j.status === 'awaiting_payment' ? 'unpaid' : 'designing' }; // intake too
     },
 
     // For the admin page: every job, newest first, with what the owner needs to run the business.
@@ -269,6 +271,31 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
         successUrl: `${origin}/app?job=${j.id}&kit={CHECKOUT_SESSION_ID}`, cancelUrl: `${origin}/app?job=${j.id}` });
       j.kitSession = s.id; save(j);
       return { code: 200, checkout: s.url };
+    },
+
+    // What the admin sees to prepare a request before its design: the owner's request (photos by index, served by photo()).
+    intakeOf(id) {
+      const j = load(id);
+      if (!j) return null;
+      const p = j.params || {};
+      return { id: j.id, status: j.status, createdAt: j.createdAt, address: p.address || '', notes: p.ownerNotes !== undefined ? p.ownerNotes : p.notes || '', plate: p.plate || 32, choices: p.choices || [],
+        views: p.views || [], photos: Array.isArray(p.photos) ? p.photos.length : 0, plan: !!p.plan, email: j.email || null, begun: j.begun || null };
+    },
+
+    // The admin starts the design, with what they added: their own photos (views like "aerial"), photos of the owner's
+    // to leave out, views corrected, the house picked on the map ({lat, lon}), and instructions for the design.
+    begin(id, { views = null, drop = [], add = [], instructions = '', pickAt = null } = {}) {
+      const j = load(id);
+      if (!j) return { code: 404, error: 'No such job' };
+      if (j.status !== 'intake') return { code: 409, error: `It's ${j.status}, not waiting to start.` };
+      const p = j.params, keep = (p.photos || []).map((_, i) => !drop.includes(i));
+      if (Array.isArray(views)) { const nv = (p.photos || []).map((_, i) => views[i] || null); p.viewsChanged = JSON.stringify(nv) !== JSON.stringify((p.photos || []).map((_, i) => (p.views || [])[i] || null)); p.views = nv; }
+      p.dropped = (p.photos || []).map((_, i) => i).filter((i) => !keep[i]); // photo() still serves them, for the owner's page
+      p.teamPhotos = add; p.instructions = instructions || ''; p.pickAt = pickAt || null;
+      j.begun = { at: now(), photosAdded: add.length, dropped: p.dropped.length, picked: !!pickAt, instructions: !!instructions };
+      emit(j, { type: 'status', message: 'Our team looked over the photos; starting the design.' });
+      launch(j, run);
+      return { code: 200, status: j.status };
     },
 
     // The admin asks for a change in words, about the pieces they selected (selection: [{op, phase, kind, parts: [...]}]):

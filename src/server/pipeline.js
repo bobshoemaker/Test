@@ -16,10 +16,11 @@ const siteForDesign = (m) => ({ locked: m.locked, ftPerStud: m.fit.ftPerStud, no
 
 // Returns {notes, terrain, place, locked, lockSource, log[], site?, report?}. Lookups are best effort: a failed
 // geocode, map query or site step leaves the notes as they were and says why in log.
-// site: a site mapped earlier (siteForDesign), reused as it is.
+// site: a site mapped earlier (siteForDesign), reused as it is. pickAt: {lat, lon} of the building our team picked as the
+// house before the design (the site step maps it instead of picking one itself).
 async function prepareDesign({ address = null, place = null, notes = '', plan = null, plate = 32, frontStreet = null,
   lockToOutline = true, geocode = null, fetchImpl, photos = [], views = [], client = null, model = null, siteModel = null,
-  tools = null, onEvent = () => {}, site = null, mapSiteImpl = null } = {}) {
+  tools = null, onEvent = () => {}, site = null, mapSiteImpl = null, pickAt = null } = {}) {
   const log = [], sc = scaleFor(plate);
   let terrain = null, locked = null, lockSource = null;
   if (site) {
@@ -36,7 +37,7 @@ async function prepareDesign({ address = null, place = null, notes = '', plan = 
     try {
       const mapSite = mapSiteImpl || require('./site').mapSite;
       const m = await mapSite({ address, place, photos, views, client, callClaude: require('./designer').callClaude, model, siteModel,
-        plate: sc.plate, tools, onEvent, ...(fetchImpl ? { fetchImpl } : {}) });
+        plate: sc.plate, tools, onEvent, pickAt, ...(fetchImpl ? { fetchImpl } : {}) });
       const s = siteForDesign(m);
       notes = [notes, place.label ? `Address: ${place.label}.` : '', s.terrainNote].filter(Boolean).join(' ');
       if (s.locked) log.push(`Walls locked to the map of the house, at ${s.ftPerStud} ft per stud.`);
