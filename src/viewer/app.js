@@ -623,8 +623,8 @@ function status(html,err,plain){ if(err&&!plain&&!DEV&&TECHNICAL.test(html)) htm
 // A failed response as an Error; the photo check (422) says which photos to change, and marks them
 function failed(res,j){ const e=new Error(j.error||`Server error ${res.status}`);
   if(res.status===422){ e.plain=true; flagPhotos((j.problems||[]).map(p=>p.photo)); } return e; }
-function flagPhotos(nums){ $('thumbs').querySelectorAll('img').forEach(im=>im.classList.toggle('flagged',nums.includes(+im.dataset.i+1))); }
-function setBusy(b){ $('planBtn').disabled=b; $('surveyBtn').disabled=b; $('designBtn').disabled=b; $('pickBtn').disabled=b; $('addrBtn').disabled=b; $('useCands').disabled=b; $('stopBtn').hidden=!b; $('compileBtn').disabled=b; $('revertBtn').disabled=b; }
+function flagPhotos(nums){ $('thumbs').querySelectorAll('img[data-i]').forEach(im=>im.closest('.shot').classList.toggle('flagged',nums.includes(+im.dataset.i+1))); }
+function setBusy(b){ $('planBtn').disabled=b; $('surveyBtn').disabled=b; $('designBtn').disabled=b; $('thumbs').querySelectorAll('button').forEach(x=>x.disabled=b); $('addrBtn').disabled=b; $('useCands').disabled=b; $('stopBtn').hidden=!b; $('compileBtn').disabled=b; $('revertBtn').disabled=b; }
 // No page zoom on phones: Safari ignores user-scalable=no, so its pinch gesture is stopped here (the model's
 // own pinch-to-zoom uses touch events, which this doesn't touch)
 document.addEventListener('gesturestart',e=>e.preventDefault());
@@ -632,19 +632,51 @@ document.addEventListener('gesturestart',e=>e.preventDefault());
 $('refPhotos').addEventListener('click',e=>{ const im=e.target.closest('img'); if(!im) return; $('lightImg').src=im.src; $('lightImg').alt=im.alt; $('lightbox').hidden=false; });
 $('lightbox').onclick=()=>{ $('lightbox').hidden=true; };
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') $('lightbox').hidden=true; });
-// Few photos mean guessed sides: say so before they design (a note, not a block)
-const FEW_PHOTOS=3;
+// The photo checklist: one photo for each view the model needs, then any extras. Each tile shows where to stand
+// (a map from above: the house, the street along the bottom, the camera and what it sees). The views go to the
+// server with the photos, so the design knows which photo shows which side.
+const SHOTS=[
+  {key:'front',name:'Front',hint:'Straight on, the whole house in view',cam:[32,57],at:[32,40]},
+  {key:'left',name:'Left corner',hint:'From the front left, so that side shows too',cam:[7,55],at:[19,39]},
+  {key:'right',name:'Right corner',hint:'From the front right, so that side shows too',cam:[57,55],at:[45,39]},
+  {key:'back',name:'Back',hint:'From the yard, if you can get there',cam:[32,5],at:[32,16]},
+];
+const photoView=new Map(); // photo file -> the view it was added for (none for extras)
+let shotFor=null; // the tile whose photo the file picker is choosing
+function shotMap(s){
+  const [cx,cy]=s.cam, a=Math.atan2(s.at[1]-cy,s.at[0]-cx), L=17, w=0.5;
+  const p=(d)=>`${(cx+L*Math.cos(a+d)).toFixed(1)},${(cy+L*Math.sin(a+d)).toFixed(1)}`;
+  return `<svg viewBox="0 0 64 64" aria-hidden="true"><line x1="2" y1="61" x2="62" y2="61" stroke="var(--muted)" stroke-width="2" stroke-dasharray="4 3"/>`
+    +`<rect x="18" y="16" width="28" height="24" rx="1.5" fill="var(--panel)" stroke="var(--ink)" stroke-width="2"/><path d="M18 16 L26 28 L18 40 M46 16 L38 28 L46 40 M26 28 H38" fill="none" stroke="var(--muted)" stroke-width="1.3"/>`
+    +`<path d="M${cx},${cy} L${p(-w)} L${p(w)} Z" fill="var(--accent)" opacity=".28"/><circle cx="${cx}" cy="${cy}" r="4" fill="var(--accent)"/></svg>`;
+}
+const PLUS='<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M32 18 V46 M18 32 H46" stroke="var(--muted)" stroke-width="3" stroke-linecap="round"/></svg>';
+const TICK='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>';
+// photos go in checklist order (front first), then the extras in the order they were added
+function orderPhotos(){ photos=[...SHOTS.map(s=>photos.find(f=>photoView.get(f)===s.key)).filter(Boolean),...photos.filter(f=>!photoView.get(f))]; }
+const photoViews=()=>photos.map(f=>photoView.get(f)||null);
+// Missing views mean guessed sides: say so before they design (a note, not a block)
+const SIDE_OF={left:'the left side',right:'the right side',back:'the back'};
 function fewPhotosNote(){ const n=photos.length, el=$('fewPhotos'), described=$('notes').value.trim();
-  el.hidden=n>=FEW_PHOTOS||(!n&&!described);
+  const missing=SHOTS.filter(s=>!photos.some(f=>photoView.get(f)===s.key)).map(s=>s.key);
+  el.hidden=!n?!described:(!missing.length||(n>=4&&!missing.includes('front')));
+  const sides=missing.filter(k=>SIDE_OF[k]).map(k=>SIDE_OF[k]), list=sides.length>1?sides.slice(0,-1).join(', ')+' and '+sides.at(-1):sides[0];
   el.textContent=!n?'Without photos, the model is built from your description alone, so it will only be a rough likeness. Photos of the house make it far more accurate.'
-    :`With only ${n} photo${n>1?'s':''}, we'll have to guess what the ${n>1?'other sides':'sides and back'} of the house look like, so the model won't be as accurate. Add photos of the sides, the back and the garage if you can (up to ${(health&&health.maxPhotos)||12}).`; }
+    :missing.includes('front')?'Add a photo of the front of the house: the whole model is built around it.'
+    :`Without a photo of ${list}, we'll have to guess what ${sides.length>1?'they look':'it looks'} like, so the model won't be as accurate. Add ${sides.length>1?'them':'one'} above if you can.`; }
 $('notes').addEventListener('input',fewPhotosNote);
 // the notes are kept short (the server holds them to 500 characters too)
 $('notes').addEventListener('input',()=>{ const n=$('notes').value.length; $('notesCount').textContent=`${n} / 500`; });
 function renderThumbs(){
-  photoUrls.forEach(u=>URL.revokeObjectURL(u)); photoUrls=photos.map(f=>URL.createObjectURL(f));
+  orderPhotos(); photoUrls.forEach(u=>URL.revokeObjectURL(u)); photoUrls=photos.map(f=>URL.createObjectURL(f));
   const html=photoUrls.map((u,i)=>`<img src="${u}" alt="House photo ${i+1}">`).join('');
-  $('thumbs').innerHTML=photoUrls.map((u,i)=>`<img src="${u}" alt="House photo ${i+1}" title="Click to remove" data-i="${i}" style="cursor:pointer">`).join('');
+  const max=(health&&health.maxPhotos)||12, dis=busyCtl?' disabled':'';
+  const tile=(i,name,hint,pic,slot)=>`<div class="shot${i!=null?' filled':''}"><button type="button" class="shotpick" data-slot="${slot}"${dis} aria-label="${i!=null?`${esc(name)}: change photo`:`Add ${esc(name.toLowerCase())} photo`}">`
+    +`<span class="shotpic">${i!=null?`<img src="${photoUrls[i]}" alt="" data-i="${i}"><span class="shotok">${TICK}</span>`:pic}</span><span class="shotname">${esc(name)}</span>${hint?`<span class="shothint">${esc(hint)}</span>`:''}</button>`
+    +(i!=null?`<button type="button" class="shotdel" data-del="${i}"${dis} aria-label="Remove this photo">×</button>`:'')+`</div>`;
+  const named=SHOTS.map(s=>{ const i=photos.findIndex(f=>photoView.get(f)===s.key); return tile(i<0?null:i,s.name,i<0?s.hint:'',shotMap(s),s.key); });
+  const extras=photos.map((f,i)=>photoView.get(f)?'':tile(i,'More','','','more')).join('');
+  $('thumbs').innerHTML=named.join('')+extras+(photos.length<max?tile(null,'More (optional)','Sides, garage, roof, yard or details',PLUS,'more'):'');
   $('refPhotos').innerHTML=html; $('refWrap').hidden=!photos.length;
   $('designBtn').textContent=(photos.length?`Design from ${photos.length} photo${photos.length>1?'s':''}`:'Design from description')+feeText();
   fewPhotosNote(); $('surveyBtn').hidden=!photos.length; if(survey){ survey=null; $('survey').hidden=true; $('survey').innerHTML=''; } // new photos: ask again
@@ -657,7 +689,6 @@ async function toPayload(file,maxSide=1568){
   c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
   return {mediaType:'image/jpeg', data:c.toDataURL('image/jpeg',0.88).split(',')[1]};
 }
-$('pickBtn').onclick=()=>$('photoInput').click();
 // Optional floor plan: the walls are laid out from it. Without one, a looked-up address locks the
 // walls to the county or OpenStreetMap building outline; without either, they come from the photos.
 let planFile=null;
@@ -667,13 +698,22 @@ $('planInput').onchange=e=>{ planFile=e.target.files[0]||null; e.target.value=''
 const chosenPlate=()=>$('sizeMini').checked?16:$('bigPlate').checked?48:32; // the size cards: Mini, Classic, Grand
 const houseAddress=()=>$('addrInput').value.trim().slice(0,200)||undefined; // the server adds its building, street and slope facts
 $('photoInput').accept='image/jpeg,image/png,image/webp';
-// photos add up across picks (the same file twice counts once); click a thumbnail to remove it
+// A view's tile takes one photo (tapping a filled one swaps it); "More" takes several. The same file twice counts once.
+$('thumbs').onclick=e=>{ if(busyCtl) return;
+  const del=e.target.closest('[data-del]');
+  if(del){ const f=photos[Number(del.dataset.del)]; photos=photos.filter(p=>p!==f); photoView.delete(f); renderThumbs(); status(''); return; }
+  const pick=e.target.closest('[data-slot]'); if(!pick) return;
+  shotFor=pick.dataset.slot==='more'?null:pick.dataset.slot; $('photoInput').multiple=!shotFor; $('photoInput').click(); };
 $('photoInput').onchange=e=>{ const max=(health&&health.maxPhotos)||12, same=(a,b)=>a.name===b.name&&a.size===b.size;
-  const add=[...e.target.files].filter(f=>!photos.some(p=>same(p,f))), room=max-photos.length;
+  const files=[...e.target.files]; e.target.value=''; if(!files.length) return;
+  if(shotFor){ const f=files[0], was=photos.find(p=>photoView.get(p)===shotFor), dup=photos.find(p=>same(p,f));
+    if(was){ photos=photos.filter(p=>p!==was); photoView.delete(was); }
+    if(dup){ photos=photos.filter(p=>p!==dup); photoView.delete(dup); } // moved to this view
+    if(photos.length>=max){ status(`Up to ${max} photos: remove one first.`); renderThumbs(); return; }
+    photos.push(f); photoView.set(f,shotFor); renderThumbs(); status(''); return; }
+  const add=files.filter(f=>!photos.some(p=>same(p,f))), room=max-photos.length;
   photos=[...photos,...add.slice(0,Math.max(0,room))]; renderThumbs();
-  status(add.length>room?`Up to ${max} photos; ${add.length-Math.max(0,room)} left out. Click a photo to remove it.`:''); e.target.value=''; };
-$('thumbs').onclick=e=>{ const i=e.target&&e.target.dataset&&e.target.dataset.i; if(i===undefined||busyCtl) return;
-  photos.splice(Number(i),1); renderThumbs(); status(''); };
+  status(add.length>room?`Up to ${max} photos; ${add.length-Math.max(0,room)} left out. Remove one to add another.`:''); };
 
 // ---------- address lookup: POST /api/lookup, then pick candidate street photos ----------
 let cands=[];
@@ -730,7 +770,7 @@ async function askServer(mode){
     setBusy(true); status('Preparing photos…');
     const plate=chosenPlate();
     const body={notes,target:plate===48?Math.max(target,2400):plate===16?Math.min(target,350):target,plate,address:houseAddress(),email:$('emailInput').value.trim()||undefined,
-      plan:planFile?await toPayload(planFile,2400):undefined, photos:await Promise.all(photos.map(f=>toPayload(f))),
+      plan:planFile?await toPayload(planFile,2400):undefined, photos:await Promise.all(photos.map(f=>toPayload(f))),views:photoViews(),
       credits:photos.map(f=>photoCredit.get(f)).filter(Boolean), choices:surveyChoices()};
     if(photos.length) status('Checking your photos…');
     const res=await fetch('/api/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}), j=await res.json();
@@ -818,7 +858,7 @@ $('surveyBtn').onclick=async()=>{
   const ctl=new AbortController(); busyCtl=ctl; setBusy(true);
   status('Taking a quick look at the photos for anything they leave open…');
   try{
-    const body={notes:$('notes').value.trim().slice(0,1500),photos:await Promise.all(photos.map(f=>toPayload(f))),address:houseAddress(),
+    const body={notes:$('notes').value.trim().slice(0,1500),photos:await Promise.all(photos.map(f=>toPayload(f))),views:photoViews(),address:houseAddress(),
       plate:chosenPlate(),plan:planFile?await toPayload(planFile,2400):undefined};
     const res=await fetch('/api/survey',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body),signal:ctl.signal});
     const j=await res.json(); if(!res.ok) throw failed(res,j);
@@ -885,7 +925,7 @@ async function boot(){
   // email: the link to the design, and finding designs by email; both only when the site can send it
   for(const id of ['emailLabel','emailInput','emailWhy','findMine']) $(id).hidden=!health.mail;
   $('photoIntro').textContent=DEV?`Enter the address to find street photos${health.streetPhotos?'':' (needs MAPILLARY_TOKEN)'}, or pick up to ${health.maxPhotos} exterior photos, front first, then each side, the back, the garage and any yard or patio: Claude builds only what a photo, the floor plan or your notes show, so a side no photo shows gets guessed. Claude (${health.model}) studies them, writes a design, compiles it here, fixes what the checker flags, and saves it.`
-    :`Add photos of the outside of the house: the front first, then the sides, the back and the garage if you have them (up to ${health.maxPhotos}). A floor plan helps us get the walls just right, and anything the photos don't show, you can tell us below.`;
+    :`Add a photo for each view below: the front, both front corners and the back. Tap a tile to take or choose its photo, and add more (the sides, the garage, details) if you have them, up to ${health.maxPhotos} in all. Anything the photos don't show, you can tell us below.`;
   renderThumbs();
   // Back from Stripe (?job=…&session=…): confirm the payment and start the design; ?job=… alone
   // picks up a design in progress or finished.
