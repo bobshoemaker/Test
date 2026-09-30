@@ -270,16 +270,46 @@ async function handleJobs(req, res, url) {
   } catch (e) { send(res, 502, { error: e && e.message ? e.message : String(e) }); }
 }
 
-// POST /api/mine {email}: emails the links to the designs made with that address. The answer is the same
-// whether or not there are any, so it can't be used to learn whose email has designs.
+// "Your designs" on another device: POST /api/mine {email} emails a sign-in link, /app?mine=<token>, and
+// GET /api/mine?token= lists that address's designs for it. Typing an email alone never shows anything (anyone
+// could type anyone's), so the list needs the token, which only the inbox gets: the email and an expiry, signed
+// with a server secret (BRICKHOUSE_SECRET, or one made once and kept with the jobs). It works for 24 hours.
+const MINE_TTL_MS = 24 * 3600e3;
+let mineSecret = null;
+function secret() {
+  if (mineSecret) return mineSecret;
+  if (process.env.BRICKHOUSE_SECRET) return (mineSecret = process.env.BRICKHOUSE_SECRET);
+  const f = path.join(ROOT, 'designs/generated/jobs/.secret');
+  try { mineSecret = fs.readFileSync(f, 'utf8').trim(); } catch (e) { /* first run */ }
+  if (!mineSecret) { mineSecret = require('node:crypto').randomBytes(32).toString('hex'); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, mineSecret, { mode: 0o600 }); }
+  return mineSecret;
+}
+const sign = (s) => require('node:crypto').createHmac('sha256', secret()).update('brickhouse-mine-v1|' + s).digest('base64url');
+function mineToken(email, now = Date.now()) { const p = Buffer.from(JSON.stringify({ e: email, x: now + MINE_TTL_MS })).toString('base64url'); return `${p}.${sign(p)}`; }
+function mineEmailOf(token, now = Date.now()) {
+  const [p, sig] = String(token || '').split('.');
+  if (!p || !sig || sig.length !== 43) return null;
+  const want = Buffer.from(sign(p)), got = Buffer.from(sig);
+  if (got.length !== want.length || !require('node:crypto').timingSafeEqual(got, want)) return null;
+  try { const { e, x } = JSON.parse(Buffer.from(p, 'base64url').toString('utf8')); return typeof e === 'string' && x > now ? e : null; } catch (e) { return null; }
+}
+// GET /api/mine?token=: the designs for the link's email, [{id, name, at, status}]
+function handleMineList(res, token) {
+  const email = mineEmailOf(token);
+  if (!email) return send(res, 401, { error: 'That link has expired. Enter your email again for a new one.' });
+  send(res, 200, { designs: JOBS.byEmail(email).slice(0, 50).map(({ id, name, at, status }) => ({ id, name, at, status })) });
+}
+// POST /api/mine {email}: the answer is the same whether or not there are any designs, so it can't be used to
+// learn whose email has designs.
 async function handleMine(req, res) {
   if (!MAILER) return send(res, 503, { error: 'Email isn\'t set up on this site yet.' });
   let email;
   try { email = cleanEmail(JSON.parse(await readBody(req)).email); } catch (e) { return send(res, 400, { error: e.message }); }
   if (!email) return send(res, 400, { error: 'Please enter a valid email address.' });
   if (limited(req, 'mine', 5)) return send(res, 429, { error: 'Too many requests from here; try again in an hour.' });
-  const designs = JOBS.byEmail(email).slice(0, 20).map((d) => ({ name: d.name, link: `${d.origin || originOf(req)}/app?job=${d.id}` }));
-  if (designs.length) try { await MAILER.send({ to: email, ...mineEmail({ designs }) }); } catch (e) { console.error(`Find my designs email failed: ${e.message}`); }
+  const designs = JOBS.byEmail(email);
+  if (designs.length) try { await MAILER.send({ to: email, ...mineEmail({ count: designs.length, link: `${designs[0].origin || originOf(req)}/app?mine=${mineToken(email)}` }) }); }
+  catch (e) { console.error(`Your designs email failed: ${e.message}`); }
   send(res, 200, { ok: true });
 }
 
@@ -438,6 +468,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/lookup') return handleLookup(req, res);
     if (req.method === 'POST' && url.pathname === '/api/mine') return handleMine(req, res);
+    if (req.method === 'GET' && url.pathname === '/api/mine') return handleMineList(res, url.searchParams.get('token'));
     if (req.method === 'POST' && url.pathname === '/api/quote') return handleQuote(req, res);
     const ph = /^\/api\/photo\/(\d{1,20})$/.exec(url.pathname);
     if (req.method === 'GET' && ph) return handlePhoto(res, ph[1]);
@@ -456,4 +487,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, cleanText, cleanAddress, parseDesignRequest, partsXml, viewsNote };
+module.exports = { server, cleanText, cleanAddress, parseDesignRequest, partsXml, viewsNote, mineToken, mineEmailOf };

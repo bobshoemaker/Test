@@ -619,7 +619,9 @@ const photoCredit=new WeakMap(); // File -> credit for photos found by address l
 const TECHNICAL=/claude|anthropic|\bai\b|api|key|\.env|brickhouse_|model|token|mapillary|stripe_|http \d|server error|fetch|json|undefined|econn|timeout/i;
 // e.plain: a message meant for the owner as it is (the photo check's), never swapped for the generic one
 function status(html,err,plain){ if(err&&!plain&&!DEV&&TECHNICAL.test(html)) html='Something went wrong on our side. Please try again in a little while.';
-  $('photoStatus').innerHTML=err?`<span class="status-err">${html}</span>`:html; }
+  $('photoStatus').innerHTML=err?`<span class="status-err">${html}</span>`:html;
+  // on the page after Design, the progress shows under "Designing your model"
+  if(!$('sent').hidden&&html){ $('subStatus').innerHTML=html; $('subStatus').closest('li').classList.toggle('err',!!err); } }
 // A failed response as an Error; the photo check (422) says which photos to change, and marks them
 function failed(res,j){ const e=new Error(j.error||`Server error ${res.status}`);
   if(res.status===422){ e.plain=true; flagPhotos((j.problems||[]).map(p=>p.photo)); } return e; }
@@ -662,7 +664,7 @@ function fewPhotosNote(){ const n=photos.length, el=$('fewPhotos'), described=$(
   el.hidden=!n?!described:(!missing.length||(n>=4&&!missing.includes('front')));
   const sides=missing.filter(k=>SIDE_OF[k]).map(k=>SIDE_OF[k]), list=sides.length>1?sides.slice(0,-1).join(', ')+' and '+sides.at(-1):sides[0];
   el.textContent=!n?'Without photos, the model is built from your description alone, so it will only be a rough likeness. Photos of the house make it far more accurate.'
-    :missing.includes('front')?'Add a photo of the front of the house: the whole model is built around it.'
+    :missing.includes('front')?'Put a photo of the front of the house in the Front tile: the whole model is built around it.'
     :`Without a photo of ${list}, we'll have to guess what ${sides.length>1?'they look':'it looks'} like, so the model won't be as accurate. Add ${sides.length>1?'them':'one'} above if you can.`; }
 $('notes').addEventListener('input',fewPhotosNote);
 // the notes are kept short (the server holds them to 500 characters too)
@@ -776,28 +778,45 @@ async function askServer(mode){
     const res=await fetch('/api/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}), j=await res.json();
     if(!res.ok) throw failed(res,j);
     if(j.checkout){ status('Taking you to the secure payment page for the design fee…'); location.href=j.checkout; return; }
-    watchJob(j.id,false);
+    jobId=j.id; showSent(); watchJob(j.id,false);
   }catch(e){ status(esc(e.message),true,e.plain); setBusy(false); }
 }
-// "Made a design on another device?": the server emails the links for that address (the same answer either way)
+// "Made one on another device?": the server emails a link (the same answer either way) that opens them all here
 $('findMine').onsubmit=async e=>{ e.preventDefault(); const email=$('findEmail').value.trim(), st=$('findStatus'); if(!email) return;
   st.textContent='Sending…';
   try{ const r=await fetch('/api/mine',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email})}), j=await r.json();
-    st.textContent=r.ok?`If we have designs for ${email}, we've emailed you the links. Check your inbox (and spam folder) in a minute.`:(j.error||'We couldn\'t send that just now.'); }
+    st.textContent=r.ok?`If we have designs for ${email}, we've emailed you a link that opens them here. Check your inbox (and spam folder) in a minute.`:(j.error||'We couldn\'t send that just now.'); }
   catch(err){ st.textContent='We couldn\'t send that just now. Please try again in a little while.'; } };
+// the emailed link, /app?mine=<token>: list that email's designs and remember them on this device
+async function openMine(token){
+  try{ history.replaceState(null,'','/app#design'); }catch(e){}
+  showTab('design');
+  try{ const r=await fetch('/api/mine?token='+encodeURIComponent(token)), j=await r.json();
+    if(!r.ok) throw new Error(j.error||'That link didn\'t work.');
+    for(const d of j.designs.slice().reverse()) rememberDesign(d.id,d.name,{at:d.at,status:d.status});
+    $('findStatus').textContent=j.designs.length?`${j.designs.length} design${j.designs.length===1?'':'s'} added to this device.`:'There are no designs for that email yet.'; }
+  catch(err){ $('findStatus').textContent=err.message; }
+  renderMine(); $('myDesigns').hidden=false; requestAnimationFrame(()=>$('myDesigns').scrollIntoView({block:'start'})); }
 // Designs made in this browser, remembered on the device (no account): listed on the upload page
 const MINE='brickhouse-designs';
 function myDesigns(){ try{ const a=JSON.parse(localStorage.getItem(MINE)||'[]'); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
-function rememberDesign(id,name){ try{ const a=myDesigns(), old=a.find(d=>d.id===id), e={id,name:name||(old&&old.name)||'',at:old?old.at:Date.now()};
-  localStorage.setItem(MINE,JSON.stringify([e,...a.filter(d=>d.id!==id)].slice(0,20))); }catch(e){} renderMine(); }
-function renderMine(){ const a=myDesigns(); $('myDesigns').hidden=!a.length;
-  $('myDesignList').innerHTML=a.map(d=>`<li><a href="/app?job=${encodeURIComponent(d.id)}">${esc(d.name||'Your house')}</a><small>${new Date(d.at).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</small></li>`).join(''); }
+function rememberDesign(id,name,more={}){ try{ const a=myDesigns(), old=a.find(d=>d.id===id)||{};
+  const e={id,name:name||old.name||'',at:more.at||old.at||Date.now(),status:more.status||old.status||undefined};
+  localStorage.setItem(MINE,JSON.stringify([e,...a.filter(d=>d.id!==id)].sort((x,y)=>y.at-x.at).slice(0,50))); }catch(e){} renderMine(); }
+const TAGS={ready:'Ready',designing:'Designing',problem:'Needs a look'};
+function renderMine(){ const a=myDesigns();
+  // the card: the list, and the email link when the site can send one; not on the page after Design
+  $('myDesigns').hidden=!$('sent').hidden||(!a.length&&$('findMine').hidden);
+  $('myDesignList').innerHTML=a.map(d=>`<li><a href="/app?job=${encodeURIComponent(d.id)}"><b>${esc(d.name||'Your house')}${d.status&&TAGS[d.status]?`<span class="tag ${d.status}">${TAGS[d.status]}</span>`:''}</b>`
+    +`<small>${new Date(d.at).toLocaleDateString(undefined,{month:'short',day:'numeric',year:new Date(d.at).getFullYear()===new Date().getFullYear()?undefined:'numeric'})}</small></a></li>`).join(''); }
 renderMine();
 function watchJob(id,keep){
   jobId=id; rememberDesign(id); if(!keep){ jobAfter=0; jobHave=0; } jobT0=Date.now(); setBusy(true); $('stopBtn').hidden=true;
   try{ history.replaceState(null,'','?job='+id); }catch(e){}
+  $('sentLink').value=`${location.origin}/app?job=${id}`;
   status(DEV?'Claude is studying the photos. This usually takes 15 to 25 minutes; you can close this page and come back with the same address.'
     :'We\'re designing your house from the photos. It takes a while to get right; you can close this page and come back to this link any time.');
+  if(!$('sent').hidden) $('subStatus').textContent='Studying your photos…';
   pollJob();
 }
 async function pollJob(){
@@ -805,7 +824,9 @@ async function pollJob(){
   try{ const r=await fetch(`/api/jobs/${jobId}?after=${jobAfter}&have=${jobHave}`); j=await r.json(); if(!r.ok) throw new Error(j.error||`Server error ${r.status}`); }
   catch(e){ status(DEV?esc(e.message):'Reconnecting… your design keeps going on our side.',DEV); setTimeout(pollJob,5000); return; } // a restart or a dropped connection
   kitInfo={kit:j.kit,kitCents:j.kitCents,kitCurrency:j.kitCurrency}; if(R) refreshOrderUI();
-  { const d=(j.result&&j.result.design)||j.draft; if(d&&d.name) rememberDesign(jobId,d.name); }
+  // no draft of theirs yet: the page after Design (opened from its link too)
+  if(!j.draft&&!ownShown&&!['done','error','awaiting_payment'].includes(j.status)&&$('sent').hidden) showSent(j.photos);
+  { const d=(j.result&&j.result.design)||j.draft; rememberDesign(jobId,d&&d.name,{status:j.status==='done'?'ready':j.status==='error'?'problem':'designing'}); }
   // the job's own photos beside the model, when this page didn't pick them (opened from the job's link)
   if(j.photos&&!photos.length&&!$('refPhotos').children.length){
     $('refPhotos').innerHTML=Array.from({length:j.photos},(_,i)=>`<img src="/api/jobs/${jobId}/photos/${i}" alt="Your photo ${i+1}" loading="lazy">`).join(''); $('refWrap').hidden=false; }
@@ -821,7 +842,7 @@ async function pollJob(){
 function handleEvent(ev,t0){
   const secs=()=>Math.round((Date.now()-t0)/1000);
   if(!DEV){ // the customer's view: what we're working on, not how
-    if(ev.type==='part') status(`Designing your house: ${esc(String(ev.name).toLowerCase())} (${ev.n} of ${ev.of})…`);
+    if(ev.type==='part'){ status(`Designing your house: ${esc(String(ev.name).toLowerCase())} (${ev.n} of ${ev.of})…`); $('subBar').style.width=`${Math.round((ev.n-0.5)/ev.of*100)}%`; }
     else if(ev.type==='draft') status('Checking every brick and refining the details…');
     else if(ev.type==='done'&&ev.design){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; showOwn(); draftOnly=false; run(t); DESIGN_TEXT=t;
       status((ev.errors||ev.warnings)?'Almost there: a few details still need finishing. <button class="btn sm primary" id="fixBtn">Finish the design</button>'
@@ -885,7 +906,22 @@ function uploadMode(){ const on=tab==='design'&&!ownShown&&!HERO_MODE; document.
   // the top bar's button: to the upload page, or from it to the example
   $('topCta').setAttribute('href',on?'/app':'/app#design'); // its label follows html.upload in CSS (topbar.html)
   if(on||tab!=='design') dirty=true; }
-function showOwn(){ if(ownShown) return; ownShown=true; uploadMode(); requestAnimationFrame(resize); }
+function showOwn(){ if(ownShown) return; ownShown=true; hideSent(); uploadMode(); requestAnimationFrame(resize); }
+// The page after Design: thanks, the steps with the live progress, the private link. It stays until the house's first
+// draft comes back (then the house itself takes over), and it's where the job's link lands until then.
+function showSent(serverPhotos){
+  const n=photos.length||serverPhotos||0, where=houseAddress(), email=$('emailInput').value.trim();
+  $('sentPhotos').innerHTML=photos.length?photoUrls.map((u,i)=>`<img src="${u}" alt="Your photo ${i+1}">`).join('')
+    :Array.from({length:serverPhotos||0},(_,i)=>`<img src="/api/jobs/${jobId}/photos/${i}" alt="Your photo ${i+1}" loading="lazy">`).join('');
+  $('sentGot').textContent=n?`${n} photo${n===1?'':'s'}${where?` of ${where}`:''}`:(where||'');
+  $('sentNext').textContent=email&&health&&health.mail?`We'll email you at ${email} as soon as it's ready. Then turn it around in 3D and look through the building guide.`
+    :'Come back to your link below to see it, turn it around in 3D and look through the building guide.';
+  if(jobId) $('sentLink').value=`${location.origin}/app?job=${jobId}`;
+  $('sent').hidden=false; $('makeCard').hidden=true; $('myDesigns').hidden=true; showTab('design'); scrollTo(0,0); }
+function hideSent(){ if($('sent').hidden) return; $('sent').hidden=true; $('makeCard').hidden=false; renderMine(); }
+$('copyLink').onclick=async()=>{ const b=$('copyLink');
+  try{ await navigator.clipboard.writeText($('sentLink').value); b.textContent='Copied'; }catch(e){ $('sentLink').select(); b.textContent='Selected'; }
+  setTimeout(()=>{ b.textContent='Copy'; },2000); };
 function showTab(t){ tab=t;
   document.querySelectorAll('.tabs button').forEach(x=>x.setAttribute('aria-selected',x.dataset.tab===t));
   ['model','manual','parts','design'].forEach(k=>$('pane-'+k).hidden=k!==t);
@@ -914,16 +950,17 @@ async function boot(){
     requestAnimationFrame(()=>requestAnimationFrame(()=>{ try{ parent.postMessage({brickhouse:'hero-ready'},location.origin); }catch(e){} }));
     if(BUILD&&!window.BRICKHOUSE_STILL) playBuildLoop();
     return; }
-  if(embedded){ $('homeLink').hidden=true; $('topCta').hidden=true; $('photoControls').hidden=true; $('findMine').hidden=true; $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }
+  if(embedded){ $('homeLink').hidden=true; $('topCta').hidden=true; $('photoControls').hidden=true; $('findMine').hidden=true; renderMine(); $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }
   try{ health=await (await fetch('/api/health')).json(); }catch(e){ health=null; }
   loadDesignList();
   const closed='Designing new houses isn\'t open just yet. Please check back soon.';
   // the form shows from the start (no jump on the usual path); it goes only when the server can't design
-  if(!health){ $('photoControls').hidden=true; $('findMine').hidden=true; $('photoIntro').textContent=DEV?'Start the server with npm start to design from photos.':closed; return; }
-  if(!health.ready){ $('photoControls').hidden=true; $('findMine').hidden=true; $('photoIntro').textContent=DEV?'Add BRICKHOUSE_ANTHROPIC_API_KEY to .env and restart the server to design from photos (or run with BRICKHOUSE_FAKE=1 to try the flow).':closed; return; }
+  if(!health){ $('photoControls').hidden=true; $('findMine').hidden=true; renderMine(); $('photoIntro').textContent=DEV?'Start the server with npm start to design from photos.':closed; return; }
+  if(!health.ready){ $('photoControls').hidden=true; $('findMine').hidden=true; renderMine(); $('photoIntro').textContent=DEV?'Add BRICKHOUSE_ANTHROPIC_API_KEY to .env and restart the server to design from photos (or run with BRICKHOUSE_FAKE=1 to try the flow).':closed; return; }
   $('photoControls').hidden=false; $('addrBtn').hidden=!health.streetPhotos;
   // email: the link to the design, and finding designs by email; both only when the site can send it
   for(const id of ['emailLabel','emailInput','emailWhy','findMine']) $(id).hidden=!health.mail;
+  renderMine();
   $('photoIntro').textContent=DEV?`Enter the address to find street photos${health.streetPhotos?'':' (needs MAPILLARY_TOKEN)'}, or pick up to ${health.maxPhotos} exterior photos, front first, then each side, the back, the garage and any yard or patio: Claude builds only what a photo, the floor plan or your notes show, so a side no photo shows gets guessed. Claude (${health.model}) studies them, writes a design, compiles it here, fixes what the checker flags, and saves it.`
     :`Add a photo for each view below: the front, both front corners and the back. Tap a tile to take or choose its photo, and add more (the sides, the garage, details) if you have them, up to ${health.maxPhotos} in all. Anything the photos don't show, you can tell us below.`;
   renderThumbs();
@@ -939,5 +976,6 @@ async function boot(){
     const r=await fetch(`/api/jobs/${qj}/start`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({session:q.get('session')})}), j=await r.json();
     if(!r.ok) status(esc(j.error||'The payment could not be confirmed.'),true); else watchJob(qj,false); }
   else if(qj) watchJob(qj,false);
+  else if(q.get('mine')) openMine(q.get('mine'));
 }
 boot();

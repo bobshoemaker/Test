@@ -47,7 +47,9 @@ const kitEmail = ({ name, link }) => mail(`Your kit is ordered: ${name || 'your 
 const shippedEmail = ({ name, link, tracking }) => mail(`Your kit is on its way: ${name || 'your house'}`, 'Your kit has shipped',
   [`Your kit for ${name || 'your house'} is on its way.`, `Tracking: ${tracking}`, 'The building guide is waiting for you whenever it arrives.'],
   { label: 'Open your guide', href: link });
-const mineEmail = ({ designs }) => mail('Your Brickhouse designs', 'Your designs',
-  ['Here are the designs made with this email address. Each link opens that house.', ...designs.map((d) => ({ label: d.name || 'Your house', href: d.link }))]);
+const mineEmail = ({ count, link }) => mail('Your Brickhouse designs', 'Your designs',
+  [`Here's the link to the ${count === 1 ? 'design' : `${count} designs`} made with this email address. It opens them on this device, and the device remembers them after that.`,
+    'The link works for 24 hours. If you didn\'t ask for it, you can ignore this email.'],
+  { label: 'See my designs', href: link });
 
 module.exports = { makeMailer, cleanEmail, readyEmail, kitEmail, shippedEmail, mineEmail };
