@@ -36,7 +36,11 @@ the Node server (it calls Claude and renders drafts in headless Chromium).
      at Resend (Domains, then add the DNS records it shows). Until then it sends from Resend's test address, which only
      delivers to your own Resend account's email.
    - `MAPILLARY_TOKEN`: optional, for street photos from the address box.
-   It also sets `BRICKHOUSE_GOBRICKS_QUOTES` (`0` turns off live GoBricks quotes on the Parts tab) and
+   - `BRICKHOUSE_SITE_MODEL`: optional, a stronger model for mapping the house from above (the step that decides the
+     model's walls); unset, it uses the design model, which it also falls back to if the account can't use this one.
+   It also sets `BRICKHOUSE_DESIGN_BUDGET_USD` (a design stops at this many dollars of API time, the site step
+   included, and keeps its last draft; `0` for no limit), `BRICKHOUSE_GOBRICKS_QUOTES` (`0` turns off live GoBricks
+   quotes on the Parts tab) and
    `BRICKHOUSE_CNY_PER_USD` (how many of GoBricks' yuan make a dollar at Brickwith, its store: about 3.5); change them
    on the service's Environment tab. `0` also turns off the admin page's stock check, which uses the same matcher.
 4. Apply. The first build takes a few minutes (the image includes Chromium). The site is then at

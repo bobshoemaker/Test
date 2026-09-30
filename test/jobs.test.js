@@ -82,16 +82,23 @@ test('the Stripe client sends a form-encoded one-off Checkout Session for the jo
 test('a job cut off by a restart is picked up again at the part it was on, from its last draft', async () => {
   const dir = tmp(), calls = [];
   // the first server: the job gets through part 1 and into part 2, then the server goes away mid-run
-  const hang = async (p, emit) => { calls.push(p.resume || null); emit({ type: 'part', n: 1, of: 5, name: 'Walls' });
+  const site = { locked: { source: 'site', blocks: [] }, ftPerStud: 2.5, note: 'SITE PLAN', images: [{ mediaType: 'image/jpeg', data: 'MAP' }], costUsd: 1.25 };
+  const hang = async (p, emit) => { calls.push(p.resume || null); if (!p.resume) emit({ type: 'siteDone', site, report: { stages: [] } }); emit({ type: 'part', n: 1, of: 5, name: 'Walls' });
     emit({ type: 'draft', n: 1, design: { name: 'walls', phases: ['a'], ops: [] }, stats: { pieces: 1 } }); emit({ type: 'part', n: 2, of: 5, name: 'Roofs' }); await new Promise(() => {}); };
   const first = createJobs({ dir, run: hang });
   const { id } = await first.create({ notes: 'house', photos: [] }, 'https://site.test');
-  await until(() => first.get(id).events.length >= 3);
+  await until(() => first.get(id).events.length >= 4);
+  // the mapped site stays on the server (the owner's poll carries only that it happened)
+  assert.deepEqual(Object.keys(first.get(id).events[0]).sort(), ['t', 'type']);
   // a restart: a new server on the same saved jobs
   const second = createJobs({ dir, run: hang });
   assert.deepEqual(second.resumeInterrupted(), [id]);
   await until(() => calls.length === 2);
-  assert.deepEqual(calls[1], { fromPart: 2, seed: { name: 'walls', phases: ['a'], ops: [] } });
+  // with the site it mapped, so the walls stay the ones the draft was built on
+  assert.deepEqual(calls[1], { fromPart: 2, seed: { name: 'walls', phases: ['a'], ops: [] }, site });
+  // and the admin can read how the house was found
+  assert.deepEqual(second.siteReport(id), { report: { stages: [] }, costUsd: 1.25 });
+  assert.equal(second.list().find((x) => x.id === id).site.ftPerStud, 2.5);
   assert.equal(second.get(id).status, 'running');
   assert.match(second.get(id).events.map((e) => e.message).join(' '), /Picking the design up again at part 2/);
   // it gives up after MAX_RESUMES, so a crash that recurs doesn't loop forever

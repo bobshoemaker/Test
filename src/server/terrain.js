@@ -5,8 +5,9 @@
 // street, facing the house"), so it needs no compass directions on the plan. A corner lot gets
 // both streets. Street View is not used: Google's terms bar building models from its imagery.
 const UA = `Brickhouse/0.4 (terrain${process.env.BRICKHOUSE_CONTACT ? '; ' + process.env.BRICKHOUSE_CONTACT : ''})`;
-// Public Overpass servers are often busy; try each in turn.
-const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
+// Public Overpass servers are often busy; try each in turn (the public instances listed on the OpenStreetMap wiki).
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter'];
 const EPQS = 'https://epqs.nationalmap.gov/v1/json';
 const { scaleFor } = require('./scale');
 const FRONTAGE_M = 20; // a street this close to the building's outline is one the lot fronts
@@ -49,6 +50,7 @@ function nearestOnLine(p, line) {
   let best = null;
   for (let i = 0; i + 1 < line.length; i++) {
     const [ax, ay] = line[i], [bx, by] = line[i + 1], dx = bx - ax, dy = by - ay;
+    if (!Number.isFinite(dx + dy)) continue; // [NaN, NaN] separates the pieces of a street
     const t = Math.max(0, Math.min(1, ((p[0] - ax) * dx + (p[1] - ay) * dy) / (dx * dx + dy * dy || 1)));
     const q = [ax + t * dx, ay + t * dy], d = Math.hypot(q[0] - p[0], q[1] - p[1]);
     if (!best || d < best.d) best = { d, q };
@@ -63,8 +65,8 @@ function nearestSegment(line, p) {
 }
 function lineToLine(a, b) {
   let best = null;
-  for (const p of a) { const n = nearestOnLine(p, b); if (n && (!best || n.d < best.d)) best = { d: n.d, from: p, to: n.q }; }
-  for (const p of b) { const n = nearestOnLine(p, a); if (n && (!best || n.d < best.d)) best = { d: n.d, from: n.q, to: p }; }
+  for (const p of a) { const n = Number.isFinite(p[0]) && nearestOnLine(p, b); if (n && (!best || n.d < best.d)) best = { d: n.d, from: p, to: n.q }; }
+  for (const p of b) { const n = Number.isFinite(p[0]) && nearestOnLine(p, a); if (n && (!best || n.d < best.d)) best = { d: n.d, from: n.q, to: p }; }
   return best;
 }
 const polygonArea = (pts) => Math.abs(pts.reduce((a, p, i) => { const q = pts[(i + 1) % pts.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0) / 2);
@@ -140,7 +142,7 @@ async function nearbyWays(center, { fetchImpl = fetch, radiusM = 80, outline = n
     const prev = seen.get(s.name);
     if (!prev) seen.set(s.name, s); else prev.line = prev.line.concat([[NaN, NaN]], s.line); // keep every piece of a street
   }
-  return { streets: [...seen.values()].map((s) => ({ ...s, line: s.line.filter((p) => Number.isFinite(p[0])) })),
+  return { streets: [...seen.values()],
     lanes: lanes.sort((a, b) => a.distanceM - b.distanceM).slice(0, 2) };
 }
 
@@ -204,8 +206,8 @@ function lineSlope(pts) { // ft per metre of t
 
 // Slopes across the baseplate: each street (left to right as seen from it) and the lot behind the
 // first street (toward the back, and left to right).
-function analyzeTerrain(samples, { plate = 32 } = {}) {
-  const PLATE_M = scaleFor(plate).widthFt * 0.3048;
+function analyzeTerrain(samples, { plate = 32, ftPerStud = null } = {}) {
+  const PLATE_M = scaleFor(plate, ftPerStud).widthFt * 0.3048;
   const streets = [];
   for (const si of [...new Set(samples.filter((p) => p.kind === 'street').map((p) => p.si))]) {
     const st = samples.filter((p) => p.kind === 'street' && p.si === si && Number.isFinite(p.ft));
@@ -224,13 +226,13 @@ function analyzeTerrain(samples, { plate = 32 } = {}) {
     streetRiseRightFt: first.riseRightFt, streetGradePct: first.gradePct, streetFt: first.levelFt };
 }
 
-const coursesAt = (plate) => (ft) => { const c = Math.round(Math.abs(ft) / scaleFor(plate).ftPerCourse * 2) / 2; return c < 1 ? 'under 1 course' : `about ${c} course${c === 1 ? '' : 's'}`; };
+const coursesAt = (plate, ftPerStud = null) => (ft) => { const c = Math.round(Math.abs(ft) / scaleFor(plate, ftPerStud).ftPerCourse * 2) / 2; return c < 1 ? 'under 1 course' : `about ${c} course${c === 1 ? '' : 's'}`; };
 
 // The note the survey and the design get. Street slopes are measured well; the lot's rise less so
 // (bare-earth data is smoothed and interpolated under the house), so it's framed as approximate.
 function terrainNote(t) {
   if (!t || !t.frontage || !t.frontage.length) return '';
-  const sc = scaleFor(t.plate), courses = coursesAt(t.plate), L = sc.last;
+  const sc = scaleFor(t.plate, t.ftPerStud), courses = coursesAt(t.plate, t.ftPerStud), L = sc.last;
   const a = t.analysis, [s0, s1] = t.frontage, side = (ft) => (ft > 0 ? 'right' : 'left');
   const b = t.building;
   // without elevations (USGS covers the US only) the note still gives the building, streets and lanes
@@ -325,4 +327,5 @@ function outlineInput(t, { frontStreet = null } = {}) {
   };
 }
 
-module.exports = { propertyHint, unitOf, outlineInput, lookupTerrain, findBuilding, nearbyStreets, nearbyWays, frontageStreets, pickStreet, samplePlan, analyzeTerrain, terrainNote, streetOf, numberOf, compass };
+module.exports = { propertyHint, unitOf, outlineInput, lookupTerrain, findBuilding, nearbyStreets, nearbyWays, frontageStreets, pickStreet, samplePlan, analyzeTerrain, terrainNote, streetOf, numberOf, compass,
+  overpass, frame, nearestOnLine, polygonArea, norm };

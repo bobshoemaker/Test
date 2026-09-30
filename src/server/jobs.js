@@ -40,11 +40,14 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
   const plateOf = (j) => (j.result && j.result.design && j.result.design.plate) || (j.params && j.params.plate) || 32;
 
   function emit(j, ev) {
-    const { design, renders, overlay, ...rest } = ev; // drafts are served separately; images stay on the server
+    const { design, renders, overlay, site, report, stage, ...rest } = ev; // drafts are served separately; images stay on the server
     if (ev.type === 'draft' && design) { j.draft = design; j.draftN = (j.draftN || 0) + 1; rest.draftN = j.draftN; }
     if (ev.type === 'done') j.result = ev;
+    // the mapped site: kept so a resumed design keeps its walls, and its report (with the map pictures) for the admin
+    if (ev.type === 'siteDone' && site) { j.site = site; j.siteReport = report || null; }
+    if (ev.type === 'site' && stage) { rest.id = stage.id; rest.title = stage.title; }
     j.events.push({ ...rest, t: now() });
-    if (ev.type === 'done' || ev.type === 'error' || ev.type === 'draft' || ev.type === 'part') save(j); // part: where a restart picks up
+    if (ev.type === 'done' || ev.type === 'error' || ev.type === 'draft' || ev.type === 'part' || ev.type === 'siteDone') save(j); // part: where a restart picks up
   }
 
   const ordered = (j) => { if (onKit) Promise.resolve().then(() => onKit(j)).catch((e) => console.error(`Stock check for ${j.id} failed: ${e.message}`)); };
@@ -109,7 +112,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
         const seed = fromPart > 1 ? j.draft : null;
         if (!seed) fromPart = 1;
         emit(j, { type: 'status', message: `Picking the design up again at part ${fromPart}.`, resumed: fromPart });
-        launch(j, (params, e) => run({ ...params, resume: { fromPart, seed } }, e));
+        launch(j, (params, e) => run({ ...params, resume: { fromPart, seed, site: j.site || null } }, e));
         ids.push(j.id);
       }
       return ids;
@@ -143,9 +146,15 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
           part: parts.length ? `${parts[parts.length - 1].n} of ${parts[parts.length - 1].of}` : null, error: err ? err.message : null,
           pieces: j.result && j.result.stats ? j.result.stats.pieces : null, problems: j.result ? (j.result.errors || 0) + (j.result.warnings || 0) : null,
           paid: !!j.paid, kit: j.kit ? { at: j.kit.at, amount: j.kit.amount, currency: j.kit.currency, name: j.kit.name, email: j.kit.email, shipping: j.kit.shipping, test: !!j.kit.test } : null,
-          fulfillment: j.fulfillment || null, stock: j.stock || null });
+          fulfillment: j.fulfillment || null, stock: j.stock || null, site: j.site ? { ftPerStud: j.site.ftPerStud, costUsd: j.site.costUsd, report: !!j.siteReport, needsCheck: !!(j.site.found && j.site.found.needsCheck) } : null });
       }
       return out.sort((a, b) => b.createdAt - a.createdAt);
+    },
+
+    // How the house was found and mapped from above, for the admin: {report, costUsd}, or null.
+    siteReport(id) {
+      const j = load(id);
+      return j && j.siteReport ? { report: j.siteReport, costUsd: j.site ? j.site.costUsd : null } : null;
     },
 
     // The owner's progress on a kit order: status (ordered, packed, shipped), the supplier's order number, tracking.

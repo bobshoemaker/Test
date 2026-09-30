@@ -8,9 +8,11 @@ const { designHouse, surveyHouse, checkPhotos } = require('./designer');
 const { makePreview } = require('./preview');
 const { makeMailer, cleanEmail, readyEmail, kitEmail, shippedEmail, mineEmail } = require('./mail');
 const { scaleFor, sizeName } = require('./scale');
+const { okPhoto, cleanViews, viewsNote: viewsNoteOf } = require('./views');
 const { lookupAddress, fetchMapillaryImage } = require('./lookup');
 const { lookupTerrain } = require('./terrain');
 const { prepareDesign } = require('./pipeline');
+const { siteReportHtml } = require('./sitereport');
 const { createJobs } = require('./jobs');
 const { makeStripe } = require('./payments');
 const { anthropicKey, makeAnthropicClient } = require('./client');
@@ -26,6 +28,11 @@ const EFFORT = process.env.BRICKHOUSE_EFFORT || null; // low | medium | high | x
 // optionally a cheaper model.
 const SURVEY_MODEL = process.env.BRICKHOUSE_SURVEY_MODEL || MODEL;
 const SURVEY_EFFORT = process.env.BRICKHOUSE_SURVEY_EFFORT || 'low';
+// Mapping the house from above (site.js) decides the model's walls, so it may use a stronger model; it falls back
+// to MODEL when that one isn't open to the account. A design stops at BRICKHOUSE_DESIGN_BUDGET_USD of API time
+// (0 for no limit), keeping its last draft.
+const SITE_MODEL = process.env.BRICKHOUSE_SITE_MODEL || MODEL;
+const BUDGET_USD = process.env.BRICKHOUSE_DESIGN_BUDGET_USD !== undefined ? Number(process.env.BRICKHOUSE_DESIGN_BUDGET_USD) || null : 15;
 const FAKE = process.env.BRICKHOUSE_FAKE === '1';
 const MAX_BODY = 40 * 1024 * 1024;
 const MAX_PHOTOS = 12; // the API takes up to 100 images a request; the design loop keeps the rest of its 90 for renders
@@ -105,17 +112,9 @@ const NOTES_MAX = 500, ADDRESS_MAX = 200, ANSWER_MAX = 200;
 const cleanText = (t, max) => String(t == null ? '' : t).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ').replace(/"/g, "'").replace(/\s+/g, ' ').trim().slice(0, max);
 // an address: some letters and some length, no more than a real one needs
 const cleanAddress = (a) => { const t = cleanText(a, ADDRESS_MAX); return t.length >= 5 && /[a-z]/i.test(t) ? t : null; };
-const okPhoto = (p) => !!p && /^image\/(jpeg|png|webp|gif)$/.test(p.mediaType) && typeof p.data === 'string';
 const cleanPhotos = (list) => (list || []).slice(0, MAX_PHOTOS).filter(okPhoto);
-// Which view each photo is, from the upload page's checklist (views[i] for photos[i]; extras have none), as a
-// sentence for the design. Only the known views go in, numbered as the photos are after cleanPhotos.
-const VIEWS = { front: 'the front of the house, straight on', left: 'the front left corner', right: 'the front right corner', back: 'the back' };
-function viewsNote(photos, views) {
-  if (!Array.isArray(views)) return '';
-  const kept = (photos || []).slice(0, MAX_PHOTOS).map((p, i) => (okPhoto(p) ? VIEWS[views[i]] || null : undefined)).filter((v) => v !== undefined);
-  const said = kept.map((v, i) => (v ? `photo ${i + 1} shows ${v}` : null)).filter(Boolean);
-  return said.length ? `The owner says ${said.join(', ')} (left and right as seen from the street).` : '';
-}
+// The upload page's checklist says which view each photo is (views.js): a sentence after the owner's notes
+const viewsNote = (photos, views) => viewsNoteOf(photos, views, MAX_PHOTOS);
 const withViews = (notes, body) => [notes, viewsNote(body.photos, body.views)].filter(Boolean).join(' ');
 
 // POST /api/survey {photos, notes}: a cheap first look; returns {summary, seen, questions} for the owner to answer.
@@ -142,6 +141,7 @@ function parseDesignRequest(body) {
   const sc = scaleFor(body.plate);
   return {
     photos: cleanPhotos(body.photos), plate: sc.plate,
+    views: cleanViews(body.photos, body.views, MAX_PHOTOS), // which view each kept photo shows, for the site step
     target: Math.max(300, Math.min(3000, Number(body.target) || sc.target)),
     notes: withViews(cleanText(body.notes, NOTES_MAX), body), // the checklist's views follow the owner's notes
     // The owner's answers to the survey, as {question, answer, detail}; the design follows them.
@@ -160,8 +160,9 @@ function parseDesignRequest(body) {
 }
 
 // Save a finished design and report it.
-function finishDesign(out, p, emit, t0) {
+function finishDesign(out, p, emit, t0, site = null) {
   if (p.credits.length) out.design.photoCredits = p.credits;
+  if (site && site.credits && site.credits.length) out.design.mapCredits = site.credits;
   const name = `${slug(out.design.name)}-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}`;
   fs.writeFileSync(path.join(ROOT, 'designs/generated', name + '.json'), JSON.stringify(out.design, null, 2));
   emit({ type: 'done', design: out.design, stats: out.result.stats, errors: out.result.errors.length + (out.planProblems || []).length, planProblems: out.planProblems || [],
@@ -169,26 +170,32 @@ function finishDesign(out, p, emit, t0) {
     saved: `generated/${name}`, note: out.note || null, model: FAKE ? 'fake' : MODEL });
 }
 
-// The same steps as scripts/design.js: address facts, walls locked to the plan or the building
-// outline, then the house built in parts with renders of each draft (src/server/pipeline.js).
+// The same steps as scripts/design.js: address facts, the house found and mapped from above (or walls locked to
+// the plan or the building outline), then the house built in parts with renders of each draft (pipeline.js).
+// A resumed job reuses the site it mapped (jobs.js keeps it), so its walls stay the ones the draft was built on.
 async function runDesign(p, emit) {
   const client = makeClient(), t0 = Date.now();
   if (!client) throw new Error(NO_KEY);
-  if (p.address) emit({ type: 'status', message: 'Looking up the building, streets and slope…' });
-  const prep = await prepareDesign({ address: p.address, notes: p.notes, plan: p.plan, plate: p.plate, frontStreet: p.frontStreet });
+  const renderer = await getRenderer(), kept = (p.resume && p.resume.site) || null;
+  if (p.address && !kept) emit({ type: 'status', message: 'Looking up the building, streets and slope…' });
+  const prep = await prepareDesign({ address: p.address, notes: p.notes, plan: p.plan, plate: p.plate, frontStreet: p.frontStreet, site: kept,
+    photos: FAKE ? [] : p.photos, views: p.views || [], client, model: MODEL, siteModel: SITE_MODEL, tools: renderer, onEvent: emit });
   prep.log.forEach((m) => emit({ type: 'status', message: m }));
-  const renderer = await getRenderer();
+  if (prep.site && !kept) emit({ type: 'siteDone', site: prep.site, report: prep.report || null });
   const out = await designHouse({ client, model: MODEL, effort: EFFORT, photos: p.photos, plan: p.plan, notes: prep.notes, target: p.target, choices: p.choices,
     plate: p.plate, mode: 'parts', locked: prep.locked, render: renderer && renderer.render, planTools: renderer, onEvent: emit, supplier: SUPPLIER,
+    ...(prep.site ? { ftPerStud: prep.site.ftPerStud, siteImages: prep.site.images, siteNote: prep.site.note } : {}),
+    budgetUsd: BUDGET_USD, spentUsd: prep.site && !kept ? prep.site.costUsd || 0 : 0,
     ...(p.resume ? { fromPart: p.resume.fromPart, seed: p.resume.seed } : {}) });
-  finishDesign(out, p, emit, t0);
+  finishDesign(out, p, emit, t0, prep.site);
 }
 
 // One more round on a finished design ("ask Claude to fix these").
 async function runFix(p, emit) {
   const client = makeClient(), t0 = Date.now();
   if (!client) throw new Error(NO_KEY);
-  const out = await designHouse({ client, model: MODEL, effort: EFFORT, photos: p.photos, notes: p.notes, target: p.target, plate: p.plate, mode: 'fix', design: p.design, onEvent: emit });
+  const out = await designHouse({ client, model: MODEL, effort: EFFORT, photos: p.photos, notes: p.notes, target: p.target, plate: p.plate, mode: 'fix', design: p.design, onEvent: emit,
+    ftPerStud: p.design && p.design.stud, budgetUsd: BUDGET_USD }); // a scale fitted to the house stays with it
   finishDesign(out, p, emit, t0);
 }
 
@@ -419,7 +426,7 @@ async function handleAdmin(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/admin/logout') { res.setHeader('set-cookie', adminCookie(req, '', 0)); return send(res, 200, { ok: true }); }
   if (!isAdmin(req)) return send(res, 401, { error: 'Sign in first.' });
   if (req.method === 'GET' && url.pathname === '/admin/api/jobs') return send(res, 200, { jobs: JOBS.list(), supplier: SUPPLIER, mail: !!MAILER, payments: !!JOBS.fee, stock: !!QUOTER });
-  const m = /^\/admin\/api\/jobs\/([a-f0-9-]{36})\/(parts\.xml|fulfillment|retry|stock)$/.exec(url.pathname);
+  const m = /^\/admin\/api\/jobs\/([a-f0-9-]{36})\/(parts\.xml|fulfillment|retry|stock|site)$/.exec(url.pathname);
   if (!m) return send(res, 404, { error: 'Not found' });
   const [, id, what] = m;
   if (req.method === 'GET' && what === 'parts.xml') {
@@ -427,6 +434,12 @@ async function handleAdmin(req, res, url) {
     if (!d) return send(res, 404, { error: 'No finished design.' });
     res.setHeader('content-disposition', `attachment; filename="${slug(d.name || 'design')}-parts.xml"`);
     return send(res, 200, partsXml(d), 'application/xml; charset=utf-8');
+  }
+  // how the house was found and mapped from above (site.js): each stage with its pictures and reasoning
+  if (req.method === 'GET' && what === 'site') {
+    const r = JOBS.siteReport(id);
+    if (!r) return send(res, 404, { error: 'This design was not mapped from above.' });
+    return send(res, 200, siteReportHtml(r.report, { costUsd: r.costUsd }), 'text/html; charset=utf-8');
   }
   if (req.method === 'POST' && what === 'fulfillment') {
     let body = {}; try { body = JSON.parse(await readBody(req)); } catch (e) { return send(res, 400, { error: e.message }); }

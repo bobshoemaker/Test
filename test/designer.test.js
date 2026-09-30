@@ -204,3 +204,34 @@ test('a run that ends with problems gets repair rounds on just those, and conver
   assert.deepEqual(seen.filter((e) => e.type === 'part').map((e) => e.name).slice(5), ['Repair 1']);
   assert.deepEqual([out.result.errors.length, out.result.warnings.length], [0, 0]);
 });
+
+test('a scale fitted to the house rides on every draft, and the map images go after the photos', async () => {
+  const client = makeFakeClient({ delayMs: 0 });
+  const sent = [];
+  const create = client.messages.create.bind(client.messages);
+  client.messages.create = async (params) => { sent.push(JSON.parse(JSON.stringify(params.messages))); return create(params); };
+  const seen = [];
+  const out = await designHouse({ client, model: 'fake', mode: 'parts', partsLimit: 1, photos: [{ mediaType: 'image/jpeg', data: 'AAAA' }], ftPerStud: 2.5,
+    siteImages: [{ mediaType: 'image/jpeg', data: 'MAP1', caption: 'the house from above' }], siteNote: 'SITE PLAN FROM THE MAP. Driveway: [24, 8, 27, 29].', onEvent: (ev) => seen.push(ev) });
+  const first = sent[0][0].content;
+  assert.deepEqual(first.filter((b) => b.type === 'image').map((b) => b.source.data), ['AAAA', 'MAP1']);
+  assert.match(first.find((b) => b.type === 'text').text, /^Map image 1: the house from above\.$/);
+  assert.match(first.at(-1).text, /2\.5 ft per stud instead of the usual 2 \(set "stud": 2\.5 in the design\)/);
+  assert.match(first.at(-1).text, /SITE PLAN FROM THE MAP\. Driveway/);
+  assert.equal(seen.find((e) => e.type === 'draft').design.stud, 2.5);
+  assert.equal(out.design.stud, 2.5);
+  assert.ok(out.costUsd >= 0);
+});
+
+test('a design stops at its cost limit and keeps the last compiled draft', async () => {
+  const client = makeFakeClient({ delayMs: 0 });
+  const create = client.messages.create.bind(client.messages);
+  client.messages.create = async (params) => ({ ...(await create(params)), usage: { input_tokens: 100000, output_tokens: 50000 } });
+  const seen = [];
+  const out = await designHouse({ client, model: 'claude-opus-5-5', mode: 'parts', photos: [{ mediaType: 'image/jpeg', data: 'AAAA' }], budgetUsd: 2, spentUsd: 1, onEvent: (ev) => seen.push(ev) });
+  // each turn costs $1.40, on top of the $1 spent before the loop: past $2 after the first, but that one has no
+  // draft yet; it stops after the second
+  assert.equal(seen.filter((e) => e.type === 'part').length, 1);
+  assert.match(out.note, /Stopped at the cost limit \(\$3\.80 of \$2\)/);
+  assert.equal(out.compiles, 1);
+});

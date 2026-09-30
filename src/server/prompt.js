@@ -11,6 +11,7 @@ WORLD
 - One 32 x 32 stud baseplate (or 16 x 16 or 48 x 48 when the task says so: then set "plate" to that size and read every 31 below as 15 or 47). x runs 0..31 from left to right as seen from the street; z runs 0..31 from back to front; the street is along z=31.
 - Heights are in plates: a brick is 3 plates tall, a plate or tile is 1. y=0 sits on the baseplate.
 - Default scale is about 2 ft per stud, so a story is 4 brick courses (12 plates); on the 48 x 48 plate it is about 1.5 ft per stud and a story is 5 or 6 courses; on the 16 x 16 plate (the Mini) it is about 4 ft per stud and a story is 2 courses. Compress the yard so the house, driveway and some front and back yard fit.
+- "stud": feet per stud, set only when the task fits the scale to a long or wide house (like "stud": 2.5 on the 32 x 32 plate, where a story is then 3 courses). The compiler's checks follow it (how many courses make a story, how big a bare stretch of ground is).
 
 OPS (run in list order; earlier ops claim space first, so list walls, then balcony and bay floors, then bands, then roofs, then landscaping, then sub-builds. Each op's "phase" must appear in "phases"; the manual builds phases in the order of that list, bottom to top)
 - walls {"op":"walls","phase","color","courses":[c0,c1],"base":plate,"segments":[[x0,z0,x1,z1],...],"openings":[...],"trim":color?,"trimSides":bool?,"trimHeader":bool?,"trimSill":bool?,"block":name?,"mix":[[color,fraction],...]?,"seat":true|"flat"?,"slab":true|{"color","rects","cover"}?}
@@ -86,9 +87,9 @@ ${choices.map((c) => `- ${c.question} ${c.answer}${c.detail ? `: ${c.detail}` : 
 `;
 }
 
-function designTask({ photoCount, notes, target, hasPlan = false, choices = null, plate = 32 }) {
+function designTask({ photoCount, notes, target, hasPlan = false, choices = null, plate = 32, ftPerStud = null }) {
   return `TASK
-Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes: "${notes}"${NOTES_ARE_FACTS}` : ''}. Aim for about ${target} pieces (parts plus window glass plus the baseplate), within 10 percent.${plateNote(plate)}${planNote(hasPlan)}${choicesNote(choices)}
+Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes: "${notes}"${NOTES_ARE_FACTS}` : ''}. Aim for about ${target} pieces (parts plus window glass plus the baseplate), within 10 percent.${plateNote(plate, ftPerStud)}${planNote(hasPlan)}${choicesNote(choices)}
 Call compile_design on your draft, fix every error and warning it reports, and compile again until it reports 0 errors and 0 warnings near the target (at most 4 compiles). Then reply with only the final design JSON.
 
 EXAMPLE of a valid design (a two-story house built from three listing photos, 778 pieces, 0 errors):
@@ -116,12 +117,17 @@ const PARTS = [
   { name: 'Details', task: 'PART 5 OF 5, DETAILS AND FINISH. Compare the renders with each photo and add what the model still lacks: window sills and trim, awning brackets, railings along stairs, lights on posts, the mailbox, pots and planters, patio furniture, gates, low walls. Spend what is left of the piece budget on things the photos show, never on filler. Check that every roof is a lift-off roof and every building has a floor. Compile results may carry "hints" about big bare areas: fill them with what the photos show (fixtures, furniture, a color mix), or leave them if the photos show them plain; hints never block. Then fix every remaining error and warning. When it compiles with 0 errors and 0 warnings, reply with one sentence; the last compiled design is kept.' },
 ];
 
-// The other plate sizes: said once in the task, since SPEC is written for 32 x 32.
-function plateNote(plate) {
-  const sc = scaleFor(plate);
-  if (sc.plate === 32) return '';
+// The other plate sizes, and a scale fitted to the house: said once in the task, since SPEC is written for 32 x 32
+// at 2 ft per stud.
+function plateNote(plate, ftPerStud = null) {
+  const sc = scaleFor(plate, ftPerStud);
+  // a door about 7 ft tall, in courses at this scale
+  const fitted = sc.fitted ? ` This house is long for this size, so its scale is fitted to it: ${sc.ftPerStud} ft per stud instead of the usual ${scaleFor(plate).ftPerStud} (set "stud": ${sc.ftPerStud} in the design). A story is about ${sc.storyCourses} courses, a door or garage door about ${Math.max(2, Math.round(7 / sc.ftPerCourse))} courses tall, and most windows 2 courses (win22; the 3-course windows are for glass doors). Keep them in proportion to that, not to the usual scale.` : '';
+  if (sc.plate === 32) return fitted ? `
+PLATE AND SCALE.${fitted}
+` : '';
   const head = `
-PLATE AND SCALE. This model is on the ${sc.plate} x ${sc.plate} baseplate: set "plate": ${sc.plate} in the design. x and z run 0..${sc.last} and the street is along z = ${sc.last}. The scale is about ${sc.ftPerStud} ft per stud, so a story is about ${sc.storyCourses} courses.`;
+PLATE AND SCALE. This model is on the ${sc.plate} x ${sc.plate} baseplate: set "plate": ${sc.plate} in the design. x and z run 0..${sc.last} and the street is along z = ${sc.last}. The scale is about ${sc.ftPerStud} ft per stud, so a story is about ${sc.storyCourses} courses.${fitted}`;
   if (sc.plate > 32) return `${head} Use the extra room for what the photos show: yards and planting, both streets of a corner lot, trim, railings and details.
 `;
   // the Mini: half the Classic's detail over the same stretch of lot, a small and inexpensive kit
@@ -136,10 +142,16 @@ PLATE AND SCALE. This model is on the ${sc.plate} x ${sc.plate} baseplate: set "
 }
 
 // The walls laid out from the floor plan, which the design has to keep (checked on every compile).
+const LOCKED_FROM = {
+  outline: ["HOUSE'S BUILDING OUTLINE (county or OpenStreetMap building footprint; it has no doors or windows, so place those from the photos)", 'outline'],
+  site: ['MAP OF THE HOUSE (read from above on an aerial photo with the photos: its blocks by height and roof, the garage doors, the front door and the back doors the photos show; the windows come from the photos)', 'map'],
+  plan: ['FLOOR PLAN', 'floor plan'],
+};
 function lockedNote(locked, ops) {
   if (!locked) return '';
+  const [title, what] = LOCKED_FROM[locked.source] || LOCKED_FROM.plan;
   return `
-LOCKED WALLS FROM THE ${locked.source === 'outline' ? "HOUSE'S BUILDING OUTLINE (county or OpenStreetMap building footprint; it has no doors or windows, so place those from the photos)" : 'FLOOR PLAN'}. These walls ops were laid out from the ${locked.source === 'outline' ? 'outline' : 'floor plan'} at ${locked.scale.ftPerStud} ft per stud, with the street along z=${(locked.size || 32) - 1}. Start the design from them. Keep every op's "block" and "segments", and each listed opening's "cells", exactly as given: every compile checks them and reports changes as errors. Everything else is yours to set from the photos: courses and base (heights, raised floors, foundations), colors, trim, each opening's courses and fill, windows and other openings, and more walls ops for the same block (a foundation course or a parapet) with the same block and segments.
+LOCKED WALLS FROM THE ${title}. These walls ops were laid out from the ${what} at ${locked.scale.ftPerStud} ft per stud, with the street along z=${(locked.size || 32) - 1}. Start the design from them. Keep every op's "block" and "segments", and each listed opening's "cells", exactly as given: every compile checks them and reports changes as errors. Everything else is yours to set from the photos: courses and base (heights, raised floors, foundations), colors, trim, each opening's courses and fill, windows and other openings, and more walls ops for the same block (a foundation course or a parapet) with the same block and segments.
 ${JSON.stringify(ops)}
 Block rectangles for roofs ("rects"; blocks with the same wall-top height share one roof): ${JSON.stringify(locked.blocks.filter((b) => b.cells.length).map((b) => ({ block: b.name, rects: b.cellRects })))}
 ${locked.sideStreet ? `Corner lot: a second street runs along x = ${locked.sideStreet.side === 'left' ? 0 : (locked.size || 32) - 1} (columns ${locked.sideStreet.columns.join(' to ')} are kept free for its street and sidewalk; build them in part 3).` : ''}
@@ -155,9 +167,9 @@ ${JSON.stringify(seed)}
 `;
 }
 
-function partsTask({ photoCount, notes, target, hasPlan = false, locked = null, lockedOps = null, seed = null, fromPart = 1, choices = null, plate = 32 }) {
+function partsTask({ photoCount, notes, target, hasPlan = false, locked = null, lockedOps = null, seed = null, fromPart = 1, choices = null, plate = 32, ftPerStud = null, siteNote = '' }) {
   return `TASK
-Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes: "${notes}"${NOTES_ARE_FACTS}` : ''}. The finished design should have about ${target} pieces (parts plus window glass plus the baseplate) and no more than 10 percent over. Fewer is fine when the house is simple.${plateNote(plate)}${planNote(hasPlan)}${choicesNote(choices)}
+Design the house in the ${photoCount} attached photo${photoCount === 1 ? '' : 's'}${notes ? ` using these notes: "${notes}"${NOTES_ARE_FACTS}` : ''}. The finished design should have about ${target} pieces (parts plus window glass plus the baseplate) and no more than 10 percent over. Fewer is fine when the house is simple.${plateNote(plate, ftPerStud)}${planNote(hasPlan)}${choicesNote(choices)}
 
 WORK IN PARTS. You build the design in ${PARTS.length} parts, one part per turn; each turn tells you which part to do. In every part:
 - Add that part's ops to the design so far and call compile_design on the complete design right away. The compiler is fast and exact. Send a rough draft early and let it find collisions and support problems; don't work out coordinates in your head.
@@ -168,7 +180,7 @@ WORK IN PARTS. You build the design in ${PARTS.length} parts, one part per turn;
 EXAMPLE of a valid finished design (a two-story house built from three listing photos, 778 pieces, 0 errors):
 ${JSON.stringify(JSON.parse(example()))}
 
-${lockedNote(locked, lockedOps)}${seed ? seedNote(seed, fromPart) : ''}
+${lockedNote(locked, lockedOps)}${siteNote ? `\n${siteNote}\n` : ''}${seed ? seedNote(seed, fromPart) : ''}
 ${seed ? PARTS[fromPart - 1].task : locked ? PARTS[0].locked : PARTS[0].task}`;
 }
 
@@ -334,5 +346,96 @@ The first ${photoCount} image${photoCount === 1 ? ' is a photo' : 's are photos'
 Say what each photo shows with submit_photo_check.`;
 }
 
+// Finding the house: Claude picks the customer's house among the numbered buildings near the address on an
+// aerial photo, from their photos (site.js draws the map and the close-ups; the data is open and nationwide).
+const PICK_SPEC = `You find a customer's house on an aerial photo, so that its brick model is built from the right building.
+
+You get the customer's photos of their house (with the view each shows, when they said), its street address, and an aerial photo (USDA NAIP: north up, about 2 ft per pixel, taken within the last few years) with numbered outlines of the buildings near the address. The outlines are open building footprints (FEMA USA Structures, OpenStreetMap), traced from imagery that can be years old: an outline can sit a little off its roof or miss a newer addition. A red dot marks where an address lookup placed the address.
+
+The red dot is not evidence. Lookups usually place an address by spreading the block's house numbers evenly along the street, so the dot often lands two to five lots from the real house (lots differ in width), and sometimes on the wrong side of the street. Use it only to know which street and block to search; never prefer a building for being near the dot or for the dot being on its lot.
+
+The aerial is usually a few years older than the photos, so anything that changes easily may be newer than it: solar panels, a new roof or its color, paint, a patio cover, a pool, a young tree, even an addition. Never pick a building for having solar panels (or another such feature) the photos show, and never rule one out for lacking them; they're common on a block and often newer than the aerial. Rely on what rarely changes: the footprint's size and shape, the two-story part, which side the driveway is on, the lot's width and depth, big old trees.
+
+Pick the numbered building that is the customer's house: the main house on their lot, not a garage, a shed or a neighbour. Judge each candidate by what the photos show, most telling first:
+- size and shape: how wide the house is across the front (count its windows and doors, the garage door's width: a two-car door is about 16 ft) and how deep it runs back (a long rear addition, a detached garage); the candidate list gives each outline's width across the front and depth;
+- the street side: one or two stories (a taller part casts a longer shadow and often has its own roof), where the garage and driveway are (left or right as seen from the street, attached or behind), the porch and entry;
+- roof shape (hip or gable, where the ridges run), and what is on it only as a hint (see above);
+- the lot: pools, big trees and palms, paving, sheds, the neighbours on each side;
+- the address: US house numbers run in order along a street, odd on one side and even on the other. Numbers the map data knows are listed with the candidates.
+Rule candidates out by what they lack (a one-story outline for a house with a two-story wing, a narrow house for a wide one, a driveway on the wrong side). Use view_candidates to look up close, turned so their street is at the bottom like a front photo: look at every candidate on the address's street, within about five lots of the dot on either side of the street, whose size could fit the photos, four at a time, before you decide. Then submit_pick with the building's number, your confidence (high: its footprint, stories and driveway side match and no other candidate's do; medium: it fits best but another is possible; low: you can't tell), the cues that decided it (what in the photos matches what you see from above, one short sentence each) and the runner-up.`;
+
+const PICK_TOOLS = [
+  { name: 'view_candidates', description: 'Close-up aerial views of up to four numbered candidates, each turned so its street is at the bottom, with its outline and facts.',
+    input_schema: { type: 'object', properties: { numbers: { type: 'array', items: { type: 'integer' }, minItems: 1, maxItems: 4 } }, required: ['numbers'] } },
+  { name: 'submit_pick', description: "Reports which numbered building is the customer's house.",
+    input_schema: { type: 'object', properties: {
+      number: { type: 'integer' }, confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+      cues: { type: 'array', items: { type: 'string' }, description: 'What in the photos matches what the aerial shows, one short sentence each.' },
+      runnerUp: { type: 'integer', description: 'The next most likely building, or 0 for none.' },
+      summary: { type: 'string', description: 'One or two sentences on how you found it.' },
+    }, required: ['number', 'confidence', 'cues', 'summary'] } },
+];
+
+function pickTask({ address, number, street, photoList, candidates, aerial = '' }) {
+  return `TASK
+The customer's address: ${address}${number ? ` (number ${number}${street ? ` on ${street}` : ''})` : ''}.
+The first images are the customer's photos: ${photoList}. The last image is the aerial${aerial ? ` (${aerial})` : ''} with the numbered buildings near the address.
+Candidates (from the footprint data: the side of the street, width across the front and depth, outline area, height and use; then distance and direction from the red dot):
+${candidates}
+Find the customer's house and submit it with submit_pick.`;
+}
+
+// Mapping the house: with the building found, Claude maps it from above (its outline on the aerial, turned so the
+// street is at the bottom, with a grid in feet) and the photos. Code locks the model's walls to this map.
+const SITE_SPEC = `You map a house from above for a brick model of it. The model's walls are locked to your map, so the map decides the model's footprint: how long, wide and deep each part of the house is, and where it sits on its lot.
+
+Coordinates are feet on the grid printed on the aerial images: u to the right as seen from the street facing the house, v away from the street. (0, 0) is the front left corner of the building's outline (orange); negative v is in front of the house, toward the street. The aerial images are turned so the street is at the bottom.
+
+Report with submit_site_plan:
+- blocks: the house split into parts that differ in height or roof, such as a two-story wing, the one-story main house, an attached garage, a rear addition. Each block is one or more rectangles [u0, v0, u1, v1] (u0 < u1, v0 < v1) along its outside walls. The orange outline is traced from the roof, so it takes in the eaves (1 to 2 ft) and is simplified: the walls sit a little inside it. Together the blocks should cover the outline. Add parts the outline misses when the photos or the aerial show them (a newer addition), and leave out what isn't enclosed (a patio cover, a carport, a pergola go in site.structures). stories: counted from the photos. roof: hip, gable, flat or shed, and the ridge's direction (side to side runs parallel to the street). List the tallest blocks first.
+- openings: every garage door and the front door, and the back doors the photos show (sliding and French doors): the point on its wall line [u, v], its block, kind and width in feet.
+- site, in the same feet: driveways, walks, patios and paved yards, pools, lawn and planting beds (rectangles); trees (a point and the canopy's diameter); fences and walls (lines [u0, v0, u1, v1] with their kind from the photos: wood fence, block wall, iron fence, picket fence, gate); other structures (patio covers, sheds, carports); the lot (the white lot line when there is one, else your estimate from fences, driveways and the neighbours); and streetEdge, the v of the back of the sidewalk in front of the lot.
+- summary: a few sentences on how you read the house: its parts, stories and additions, and what in the aerial and the photos showed each.
+- uncertain: what you had to guess.
+- matchesPhotos: whether this building is the house in the photos (yes, no or unsure), with the reason. It was picked from the aerial by an earlier step that can be wrong; if it doesn't match (a one-story outline for a house with a two-story wing, a narrow house for a wide one, the garage on the wrong side), say no and why, and map it anyway.
+Each submission comes back with your blocks drawn on the aerial and how well they cover the outline. Fix what is off and submit again (at most 3 submissions). When it matches, reply with one sentence.`;
+
+const SITE_TOOL = (() => {
+  const rect = { type: 'array', items: { type: 'number' }, minItems: 4, maxItems: 4 }, pt = { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 };
+  const rects = { type: 'array', items: rect };
+  return {
+    name: 'submit_site_plan',
+    description: 'Lays the mapped blocks over the aerial and the building outline, and returns how well they cover it with an overlay image. Coordinates are feet on the grid.',
+    input_schema: { type: 'object', properties: {
+      summary: { type: 'string' },
+      blocks: { type: 'array', items: { type: 'object', properties: {
+        name: { type: 'string' }, stories: { type: 'integer' }, rects,
+        roof: { type: 'string', enum: ['hip', 'gable', 'flat', 'shed'] }, ridge: { type: 'string', enum: ['side to side', 'front to back', 'none'] }, note: { type: 'string' },
+      }, required: ['name', 'stories', 'rects', 'roof'] } },
+      openings: { type: 'array', items: { type: 'object', properties: {
+        block: { type: 'string' }, kind: { type: 'string', enum: ['door', 'double door', 'sliding door', 'garage door'] }, at: pt, widthFt: { type: 'number' }, note: { type: 'string' },
+      }, required: ['block', 'kind', 'at', 'widthFt'] } },
+      site: { type: 'object', properties: {
+        lot: rect, streetEdge: { type: 'number' }, driveways: rects, walks: rects, patios: rects, pools: rects, lawn: rects, beds: rects,
+        trees: { type: 'array', items: { type: 'object', properties: { at: pt, kind: { type: 'string' }, diameterFt: { type: 'number' } }, required: ['at', 'kind'] } },
+        fences: { type: 'array', items: { type: 'object', properties: { line: rect, kind: { type: 'string' } }, required: ['line', 'kind'] } },
+        structures: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, rect, note: { type: 'string' } }, required: ['name', 'rect'] } },
+      } },
+      uncertain: { type: 'array', items: { type: 'string' } },
+      matchesPhotos: { type: 'object', properties: { answer: { type: 'string', enum: ['yes', 'no', 'unsure'] }, reason: { type: 'string' } }, required: ['answer', 'reason'] },
+    }, required: ['summary', 'blocks', 'openings', 'site', 'matchesPhotos'] },
+  };
+})();
+
+function siteTask({ address, photoList, facts, outline, lot, plateName, aerial = '', outlineDate = '' }) {
+  return `TASK
+The house at ${address}, found on the aerial. The first images are the owner's photos: ${photoList}. Then two aerial images of the house${aerial ? ` (${aerial})` : ''}, turned so the street is at the bottom, with a grid in feet: the first plain, the second with the building's outline (orange)${lot ? ' and its lot line (white, dashed)' : ''}.
+What the records say: ${facts}
+The building outline, in feet on the grid${outlineDate ? ` (traced from imagery of ${outlineDate}; the aerial and the photos are newer, so they win where they show more)` : ''}: ${outline}${lot ? `\nThe lot line, in feet on the grid: ${lot}` : ''}
+The model is the ${plateName} size; the whole house has to fit it, so get the total length and width right.
+Map the house and submit it with submit_site_plan.`;
+}
+
 module.exports = { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask,
+  PICK_SPEC, PICK_TOOLS, pickTask, SITE_SPEC, SITE_TOOL, siteTask,
   SURVEY_SPEC, SURVEY_TOOL, surveyTask, PHOTO_CHECK_SPEC, PHOTO_CHECK_TOOL, photoCheckTask, LANDSCAPE_STYLES, choicesNote, example };

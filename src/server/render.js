@@ -108,7 +108,40 @@ async function makeRenderer({ width = 800, height = 600 } = {}) {
     }, { src, loadImg, locked, size, px });
   }
 
-  return { render, gridPlan, footprintOverlay, close: () => browser.close() };
+  // A drawing: a background image placed by an affine transform (image pixels to canvas pixels), then shapes
+  // in canvas pixels, in order: {poly: [[x, y]...], stroke, width, dash, fill}, {line: [x0, y0, x1, y1], stroke,
+  // width, dash}, {circle: [x, y, r], fill, stroke, width}, {text, x, y, size, color, bg, bold, align}.
+  // Returns a JPEG (base64): aerial photos stay small in the request.
+  async function drawLayers({ width, height, background = '#ffffff', image = null, shapes = [], quality = 88 }) {
+    const page = await browser.newPage({ viewport: { width, height } });
+    try {
+      await page.setContent(`<body style="margin:0"><canvas id="c" width="${width}" height="${height}"></canvas></body>`);
+      await page.evaluate(async (a) => {
+        const c = document.getElementById('c'), x = c.getContext('2d');
+        x.fillStyle = a.background; x.fillRect(0, 0, c.width, c.height);
+        if (a.image) {
+          const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = a.image.src; });
+          x.save(); x.setTransform(...a.image.transform); x.imageSmoothingQuality = 'high'; x.drawImage(img, 0, 0); x.restore();
+        }
+        for (const s of a.shapes) {
+          x.save(); x.setLineDash(s.dash || []); x.lineWidth = s.width || 2; x.strokeStyle = s.stroke || '#000'; x.fillStyle = s.fill || 'transparent';
+          if (s.poly) { x.beginPath(); s.poly.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py))); x.closePath(); if (s.fill) x.fill(); if (s.stroke) x.stroke(); }
+          else if (s.line) { x.beginPath(); x.moveTo(s.line[0], s.line[1]); x.lineTo(s.line[2], s.line[3]); x.stroke(); }
+          else if (s.circle) { x.beginPath(); x.arc(s.circle[0], s.circle[1], s.circle[2], 0, Math.PI * 2); if (s.fill) x.fill(); if (s.stroke) x.stroke(); }
+          else if (s.text != null) {
+            x.font = `${s.bold ? 'bold ' : ''}${s.size || 13}px sans-serif`; x.textBaseline = 'middle'; x.textAlign = s.align || 'left';
+            if (s.bg) { const w = x.measureText(s.text).width, h = (s.size || 13) + 6, lx = s.align === 'center' ? s.x - w / 2 : s.align === 'right' ? s.x - w : s.x;
+              x.fillStyle = s.bg; x.fillRect(lx - 3, s.y - h / 2, w + 6, h); }
+            x.fillStyle = s.color || '#000'; x.fillText(s.text, s.x, s.y);
+          }
+          x.restore();
+        }
+      }, { background, image, shapes });
+      return (await page.locator('#c').screenshot({ type: 'jpeg', quality })).toString('base64');
+    } finally { await page.close(); }
+  }
+
+  return { render, gridPlan, footprintOverlay, drawLayers, close: () => browser.close() };
 }
 
 module.exports = { makeRenderer, VIEWS };

@@ -590,8 +590,9 @@ function showDesign(d){
   $('factsTitle').textContent='What we saw in the photos';
   $('facts').innerHTML=(d.facts||[]).map(f=>`<li>${esc(f)}</li>`).join('');
   $('assumed').textContent=d.assumed||'';
-  const cr=d.photoCredits||[]; $('credits').hidden=!cr.length;
-  $('credits').innerHTML=cr.map(c=>`<li>Photo: ${/^https:\/\//.test(c.page||'')?`<a href="${esc(c.page)}" target="_blank" rel="noopener">${esc(c.credit)}</a>`:esc(c.credit)}${c.license?', '+esc(c.license):''}</li>`).join('');
+  const cr=d.photoCredits||[], mc=d.mapCredits||[]; $('credits').hidden=!cr.length&&!mc.length;
+  $('credits').innerHTML=cr.map(c=>`<li>Photo: ${/^https:\/\//.test(c.page||'')?`<a href="${esc(c.page)}" target="_blank" rel="noopener">${esc(c.credit)}</a>`:esc(c.credit)}${c.license?', '+esc(c.license):''}</li>`).join('')
+    +mc.map(c=>`<li>Map: ${esc(c)}</li>`).join('');
   return R;
 }
 // A design before its kit is ordered comes from the server as a preview (src/server/preview.js): parts to draw
@@ -846,10 +847,13 @@ async function pollJob(){
   if(j.status==='done'||j.status==='error'){ setBusy(false); return; }
   setTimeout(pollJob,2000);
 }
+// what comes after each step of finding and mapping the house (site events arrive as each step finishes)
+const SITE_NEXT={candidates:'Finding your house on the map…',pick:'Checking the lot…',records:'Mapping your house from above…',map:'Fitting your house to the baseplate…',fit:'Designing your house…'};
 function handleEvent(ev,t0){
   const secs=()=>Math.round((Date.now()-t0)/1000);
   if(!DEV){ // the customer's view: what we're working on, not how
-    if(ev.type==='part'){ status(`Designing your house: ${esc(String(ev.name).toLowerCase())} (${ev.n} of ${ev.of})…`); $('subBar').style.width=`${Math.round((ev.n-0.5)/ev.of*100)}%`; }
+    if(ev.type==='site') status(SITE_NEXT[ev.id]||'Mapping your house from above…');
+    else if(ev.type==='part'){ status(`Designing your house: ${esc(String(ev.name).toLowerCase())} (${ev.n} of ${ev.of})…`); $('subBar').style.width=`${Math.round((ev.n-0.5)/ev.of*100)}%`; }
     else if(ev.type==='draft') status('Checking every brick and refining the details…');
     else if(ev.type==='done'&&ev.design){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; showOwn(); draftOnly=false; run(t); DESIGN_TEXT=t;
       status((ev.errors||ev.warnings)?'Almost there: a few details still need finishing. <button class="btn sm primary" id="fixBtn">Finish the design</button>'

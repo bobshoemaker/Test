@@ -16,6 +16,10 @@ services:
         sync: false
       - key: BRICKHOUSE_EFFORT
         value: high
+      - key: BRICKHOUSE_SITE_MODEL               # optional: a stronger model for mapping the house from above; unset uses the design model
+        sync: false
+      - key: BRICKHOUSE_DESIGN_BUDGET_USD        # a design stops at this many dollars of API time (site step included), keeping its last draft
+        value: "15"
       - key: STRIPE_SECRET_KEY                   # design fee through Stripe Checkout; without it designs are free
         sync: false
       - key: BRICKHOUSE_DESIGN_FEE_CENTS         # the fee in cents
