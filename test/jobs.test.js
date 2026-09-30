@@ -206,3 +206,15 @@ test("a design's line in Your designs: the address until a draft names it, and w
   assert.deepEqual([jobs.summary(id).name, jobs.summary(id).status], ['Brisbane St', 'ready']);
   assert.equal(jobs.summary('00000000-0000-0000-0000-000000000000'), null);
 });
+
+test('a design in progress shows its owner only that it is in progress; the draft comes once it is finished', async () => {
+  let finish; const run = (p, emit) => new Promise((r) => { emit({ type: 'draft', design: { name: 'half done' } }); finish = () => { emit({ type: 'done', design: { name: 'done' } }); r(); }; });
+  const jobs = createJobs({ dir: tmp(), run, preview: (d) => ({ preview: true, name: d.name }) });
+  const { id } = await jobs.create({ notes: 'x', photos: [] }, 'https://site.test');
+  await until(() => jobs.get(id, { full: true }).draft);
+  assert.equal(jobs.get(id).status, 'running');
+  assert.equal(jobs.get(id).draft, undefined, 'no draft for the owner while it runs');
+  assert.equal(jobs.get(id, { full: true }).draft.name, 'half done', 'the admin watches it take shape');
+  finish(); await until(() => jobs.get(id).status === 'done');
+  assert.equal(jobs.get(id).result.design.name, 'done');
+});

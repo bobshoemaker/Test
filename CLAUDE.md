@@ -171,7 +171,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   sides get guessed, so the model won't be as accurate (not a block). The size is a choice of three cards,
   Mini, Classic and Grand, with the landing page's sizes and piece counts (`#sizeMini`, `#sizeClassic`, `#bigPlate`). After Design, the upload page gives way to a
   page of its own (`#sent`): thanks, the steps (photos received, designing with the live progress, ready), the private link
-  with Copy, and what happens next; the job's link lands there too until the first draft, when the house takes over.
+  with Copy, and what happens next; the job's link lands there too while the design is in progress. The owner never
+  sees a design in progress: `GET /api/jobs/<id>` sends drafts only once it's finished (or to the server's own machine
+  and the admin), so the house takes over from that page when it's done.
   Designs made in a browser are remembered there (localStorage `brickhouse-designs`: job id, name, address, date,
   status) and listed in a "Your designs" card under the form, by name or, until a draft names it, its address; each
   page load brings the list up to date (`POST /api/jobs/summary {ids}`, only for ids the device holds); "Made one on another device?" emails a sign-in link (`POST /api/mine

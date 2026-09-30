@@ -207,7 +207,9 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
         kit: j.kit ? { at: j.kit.at, test: !!j.kit.test } : null, kitCents: kitCents(plateOf(j)), kitCurrency: currency,
         photos: j.params && Array.isArray(j.params.photos) ? j.params.photos.length : 0,
         events: j.events.slice(after), next: j.events.length,
-        ...(j.draftN > have ? { draft: shown(j.draft, open), draftN: j.draftN } : {}),
+        // a design in progress isn't shown to its owner, only that it's in progress: drafts go out once it's finished
+        // (or to the server's own machine and the admin, who watch it take shape)
+        ...(j.draftN > have && (full || j.status === 'done' || j.result) ? { draft: shown(j.draft, open), draftN: j.draftN } : {}),
         ...(j.status === 'done' && j.result ? { result: { ...j.result, design: shown(j.result.design, open) } } : {}) };
     },
 
