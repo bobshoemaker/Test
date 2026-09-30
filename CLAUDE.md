@@ -198,7 +198,14 @@ closing gift that realtors give clients: a brick model of the house they just bo
   packed, shipped or cancelled with the Brickwith order number and tracking; shipped with tracking emails the customer
   once; a GoBricks stock check of the kit's parts, run when the kit is ordered and again on Check stock, naming lots short
   of stock and any the catalog snapshot says GoBricks no longer makes, kept on the job), designs that failed or have problems (Run again, from the part they reached), and all designs; the admin sees
-  every design in full. Customer designs are held to GoBricks (`BRICKHOUSE_SUPPLIER`, default gobricks; not the scripted
+  every design in full. Every design is checked by the admin before its owner sees it (`hold`, `BRICKHOUSE_HOLD_FOR_REVIEW=0`
+  turns it off): a finished design waits under "Waiting for your check" while its owner's page says it's being checked
+  (status "review", no design, no "ready" email, no kit or fix round). Opening it (Check it) shows a review card on the
+  Model tab: tap bricks to select them (blue; each listed by the design op that made it, with Select all), say in words
+  what to change, and `POST /admin/api/jobs/<id>/revise {note, parts}` has Claude revise the design from the one it has
+  (fix mode with `reviseTask`: the note, the selected pieces by op, renders; $5 cap), until it compiles clean. Every
+  version is kept (`undo`), and `approve` releases it to its owner and sends the email. Designs finished before the hold
+  (no `j.review`) stay as their owners saw them. Customer designs are held to GoBricks (`BRICKHOUSE_SUPPLIER`, default gobricks; not the scripted
   demo): designHouse's `supplier` stamps every draft and tells Claude. `POST /api/quote {lots}` returns GoBricks' price and stock
   for a parts list today (cached a day per list; `BRICKHOUSE_GOBRICKS_QUOTES=0` turns it off, `BRICKHOUSE_CNY_PER_USD`
   sets the viewer's dollar rate). `POST /api/lookup {address}` returns the place and ranked candidate

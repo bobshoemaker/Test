@@ -225,3 +225,65 @@ test('a design in progress shows its owner only that it is in progress; the draf
   finish(); await until(() => jobs.get(id).status === 'done');
   assert.equal(jobs.get(id).result.design.name, 'done');
 });
+
+test('held for the admin: the owner sees it in progress until it is approved; changes can be asked for and undone', async () => {
+  const told = [];
+  const run = async (p, emit) => { emit({ type: 'draft', design: { name: 'first' } }); emit({ type: 'done', design: { name: 'first' }, stats: { pieces: 10 } }); };
+  let asked = null;
+  const reviseRun = async (p, emit) => { asked = p; emit({ type: 'cost', usd: 0.8 }); emit({ type: 'done', design: { name: `${p.design.name}+${p.note}` }, stats: { pieces: 12 } }); };
+  const J = createJobs({ dir: tmp(), run, reviseRun, fixRun: run, hold: true, notify: async (j, kind) => told.push(kind), kitCents: () => 5000 });
+  const { id } = await J.create({ photos: [], notes: 'n', email: 'a@b.test' }, 'https://x');
+  await until(() => J.get(id, { full: true }).status === 'done');
+  // the owner: still in progress, no design, no email, no kit, no fix round
+  const owner = J.get(id);
+  assert.equal(owner.status, 'review'); assert.equal(owner.result, undefined); assert.equal(owner.draft, undefined);
+  assert.ok(owner.events.every((e) => ['status', 'part', 'site'].includes(e.type)));
+  assert.deepEqual(told, []);
+  assert.equal(J.summary(id).status, 'designing');
+  assert.equal((await J.kit(id, { origin: 'https://x' })).code, 409);
+  assert.equal(J.fix(id).code, 409);
+  // the admin: the design, and what the check needs
+  const admin = J.get(id, { full: true });
+  assert.equal(admin.result.design.name, 'first'); assert.equal(admin.review.approved, null); assert.equal(admin.review.canUndo, false);
+  assert.equal(J.list()[0].review.approved, null);
+  // a change in words about selected pieces
+  assert.equal(J.revise(id, { note: '' }).code, 400);
+  const sel = [{ op: 3, kind: 'roof', phase: 'Roof', count: 2, of: 40, parts: [] }];
+  assert.equal(J.revise(id, { note: 'lower roof', selection: sel, parts: 2 }).code, 200);
+  await until(() => J.get(id, { full: true }).status === 'done');
+  assert.deepEqual(asked.selection, sel); assert.equal(asked.note, 'lower roof');
+  let a = J.get(id, { full: true });
+  assert.equal(a.result.design.name, 'first+lower roof'); assert.equal(a.draft.name, 'first+lower roof');
+  assert.deepEqual(a.review.revisions.map((r) => [r.note, r.parts, r.costUsd, r.undone]), [['lower roof', 2, 0.8, false]]);
+  assert.equal(J.get(id).status, 'review'); assert.deepEqual(told, []);
+  // undo puts the first design back
+  assert.equal(J.undo(id).code, 200);
+  a = J.get(id, { full: true });
+  assert.equal(a.result.design.name, 'first'); assert.equal(a.review.revisions[0].undone, true); assert.equal(a.review.canUndo, false);
+  assert.equal(J.undo(id).code, 409);
+  // approve: the owner sees it and is told once
+  assert.equal(J.approve(id).code, 200); J.approve(id);
+  await until(() => told.length);
+  assert.deepEqual(told, ['ready']);
+  assert.equal(J.get(id).status, 'done'); assert.equal(J.get(id).result.design.name, 'first');
+  assert.equal(J.summary(id).status, 'ready');
+});
+
+test('without the hold, a finished design goes to its owner as before', async () => {
+  const told = [];
+  const J = createJobs({ dir: tmp(), run: async (p, emit) => emit({ type: 'done', design: { name: 'd' } }), notify: async (j, kind) => told.push(kind) });
+  const { id } = await J.create({ photos: [], notes: 'n', email: 'a@b.test' }, 'https://x');
+  await until(() => told.length);
+  assert.equal(J.get(id).status, 'done'); assert.deepEqual(told, ['ready']); assert.equal(J.get(id, { full: true }).review, undefined);
+});
+
+test('turning the hold on leaves designs finished before it as their owners have seen them', async () => {
+  const dir = tmp();
+  const before = createJobs({ dir, run: async (p, emit) => emit({ type: 'done', design: { name: 'old' } }) });
+  const { id } = await before.create({ photos: [], notes: 'n' }, 'https://x');
+  await until(() => before.get(id).status === 'done');
+  const after = createJobs({ dir, run: async () => {}, hold: true });
+  assert.equal(after.get(id).status, 'done'); assert.equal(after.get(id).result.design.name, 'old');
+  assert.equal(after.summary(id).status, 'ready');
+  assert.equal(after.get(id, { full: true }).review, undefined); assert.equal(after.list()[0].review, null);
+});

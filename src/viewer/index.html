@@ -93,6 +93,16 @@ ul.facts li{margin:2px 0}
 .nav{display:flex;gap:8px;align-items:center;margin-top:14px}
 .nav input[type=range]{flex:1;accent-color:var(--accent)}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.review{border:2px solid var(--accent);border-radius:14px;padding:14px;margin-bottom:16px;background:var(--panel)}
+.review h2{margin-top:0}
+.revstate{margin:0 0 6px;font-weight:600}
+.revsel{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.revsel .chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:4px 6px 4px 10px;font-size:13px}
+.revsel .chip b{font-weight:600}
+.revnote{width:100%;margin-top:6px;border:1.5px solid var(--line);border-radius:10px;padding:10px;background:var(--code);font-size:16px;line-height:1.4;resize:vertical;box-sizing:border-box}
+.revlog{margin:8px 0 0;padding-left:20px;font-size:14px}
+.revlog li{margin:3px 0}
+.revlog .undone{text-decoration:line-through;color:var(--muted)}
 table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
 th{text-align:left;font-weight:600;color:var(--muted);padding:6px;border-bottom:1px solid var(--line);font-size:13px;position:sticky;top:0;background:var(--panel)}
 td{padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
@@ -300,6 +310,19 @@ if((location.hash==='#design'||/[?&]mine=/.test(location.search))&&!/[?&](job|he
         <button role="tab" aria-selected="false" data-tab="design">Make yours</button>
       </div>
       <section class="pane" id="pane-model">
+        <!-- the admin's check before a design goes to its owner (only the admin's view of a held design shows it) -->
+        <div class="review" id="review" hidden>
+          <h2>Check before it goes out</h2>
+          <p class="revstate" id="revState"></p>
+          <p class="note">Tap bricks in the model to select them (tap again to drop one), then say what to change. The customer sees nothing until you approve.</p>
+          <div class="revsel" id="revSel"></div>
+          <label class="addrlabel" for="revNote">What to change</label>
+          <textarea class="revnote" id="revNote" maxlength="1000" rows="3" placeholder="e.g. Make this roof lower and dark brown, with deeper eaves"></textarea>
+          <div class="row"><button class="btn primary" id="revSend" type="button">Make this change</button><button class="btn" id="revUndo" type="button">Undo last change</button></div>
+          <p class="note" id="revBusy" aria-live="polite"></p>
+          <ol class="revlog" id="revLog"></ol>
+          <div class="row"><button class="btn primary" id="revApprove" type="button">Approve and send to the customer</button></div>
+        </div>
         <div class="big">
           <div><b id="sPieces">0</b><span>pieces</span></div>
           <div><b id="sSteps">0</b><span>steps</span></div>

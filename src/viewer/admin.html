@@ -57,6 +57,9 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute
 
   <main id="main" hidden>
     <div class="flags" id="flags"></div>
+    <h2>Waiting for your check <span class="pill" id="nCheck">0</span></h2>
+    <p class="note" style="margin-top:-4px">Finished designs the customer can't see yet. Open one to look it over, tap bricks and ask for changes in words, then approve it: the customer sees it and gets the email only then.</p>
+    <div id="checks"></div>
     <h2>Kit orders to fulfill <span class="pill" id="nOpen">0</span></h2>
     <div id="orders"></div>
     <h2>Needs attention <span class="pill" id="nAttn">0</span></h2>
@@ -99,18 +102,23 @@ function render(){
   const open=jobs.filter(j=>j.kit&&!['shipped','cancelled'].includes(j.fulfillment&&j.fulfillment.status)).sort((a,b)=>a.kit.at-b.kit.at);
   $('nOpen').textContent=open.length;
   $('orders').innerHTML=open.length?open.map(orderCard).join(''):'<p class="muted">No kit orders waiting.</p>';
+  const checks=jobs.filter(j=>j.review&&!j.review.approved&&(j.status==='done'||j.review.revising)).sort((a,b)=>(a.review.since||a.createdAt)-(b.review.since||b.createdAt));
+  $('nCheck').textContent=checks.length;
+  $('checks').innerHTML=checks.length?`<div class="tablewrap"><table><tbody>${checks.map(rowHtml).join('')}</tbody></table></div>`:'<p class="muted">Nothing waiting.</p>';
   const attn=jobs.filter(j=>['error','interrupted'].includes(j.status)||(j.status==='done'&&j.problems>0)||(j.site&&j.site.needsCheck));
   $('nAttn').textContent=attn.length;
   $('attention').innerHTML=attn.length?`<div class="tablewrap"><table><tbody>${attn.map(rowHtml).join('')}</tbody></table></div>`:'<p class="muted">Nothing needs attention.</p>';
   $('nAll').textContent=jobs.length; $('all').innerHTML=jobs.map(rowHtml).join('');
 }
-function statusHtml(j){ const s=`<span class="st ${esc(j.status)}">${esc(j.status)}</span>`;
+function statusHtml(j){ const rv=j.review, s=`<span class="st ${esc(j.status)}">${esc(j.status)}</span>`
+    +(rv&&j.status==='done'&&!rv.approved?' <span class="small err">waiting for your check</span>':'')+(rv&&rv.revising?' <span class="muted small">making a change</span>':'')
+    +(rv&&rv.approved?` <span class="muted small">approved${rv.revisions?`, ${rv.revisions} change${rv.revisions>1?'s':''}`:''}</span>`:'');
   return s+(j.site&&j.site.needsCheck?'<div class="small err">Check it\'s the right house (Site map)</div>':'')+(j.status==='running'&&j.part?` <span class="muted small">part ${esc(j.part)}</span>`:'')+(j.error?`<div class="small err">${esc(j.error)}</div>`:'')+(j.status==='done'&&j.problems?`<div class="small err">${j.problems} problem${j.problems>1?'s':''} left</div>`:''); }
 function rowHtml(j){ const f=j.fulfillment;
   return `<tr><td class="small">${when(j.createdAt)}</td><td><b>${esc(j.name||'(untitled)')}</b><div class="small muted">${esc(j.address)} · ${SIZE(j.plate)} · ${j.photos} photo${j.photos===1?'':'s'}</div></td>
     <td>${statusHtml(j)}</td><td>${j.pieces?j.pieces.toLocaleString():''}</td><td class="small">${esc(j.email||'')}</td>
     <td class="small">${j.kit?`${money(j.kit.amount,j.kit.currency)}<br>${esc(f?f.status:'new')}`:''}</td>
-    <td><div class="row" style="margin:0"><a class="btn" href="/app?job=${j.id}" target="_blank" rel="noopener">Open</a>${j.site&&j.site.report?`<a class="btn" href="/admin/api/jobs/${j.id}/site" target="_blank" rel="noopener" title="How the house was found and mapped from above, at ${j.site.ftPerStud} ft per stud">Site map</a>`:''}${['error','interrupted'].includes(j.status)?`<button class="btn" data-retry="${j.id}">Run again</button>`:''}</div></td></tr>`; }
+    <td><div class="row" style="margin:0"><a class="btn${j.review&&!j.review.approved&&j.status==='done'?' primary':''}" href="/app?job=${j.id}" target="_blank" rel="noopener">${j.review&&!j.review.approved&&j.status==='done'?'Check it':'Open'}</a>${j.site&&j.site.report?`<a class="btn" href="/admin/api/jobs/${j.id}/site" target="_blank" rel="noopener" title="How the house was found and mapped from above, at ${j.site.ftPerStud} ft per stud">Site map</a>`:''}${['error','interrupted'].includes(j.status)?`<button class="btn" data-retry="${j.id}">Run again</button>`:''}</div></td></tr>`; }
 function orderCard(j){ const k=j.kit, f=j.fulfillment||{status:'new'};
   return `<div class="card order" data-id="${j.id}"><div>
     <h3>${esc(j.name||'(untitled)')} <span class="pill">${SIZE(j.plate)}</span></h3>

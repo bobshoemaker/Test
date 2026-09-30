@@ -107,6 +107,24 @@ DESIGN
 ${JSON.stringify(design)}`;
 }
 
+// A change the admin asks for after checking a finished design: their words, and the pieces they clicked in the
+// model, by the ops that made them (selection: [{op, kind, phase, note?, of, parts: [{name, color, at: [x, y, z]}]}]).
+function reviseTask({ design, note, selection = [] }) {
+  const sel = selection.length ? selection.map((s) => `- op ${s.op} (${s.kind}${s.phase ? `, phase "${s.phase}"` : ''}${s.note ? `, note "${s.note}"` : ''}): ${s.count || s.parts.length} of its ${s.of} pieces selected, e.g. ${s.parts.slice(0, 6).map((p) => `${p.name} ${p.color} at x ${p.at[0]}, height ${p.at[1]}, z ${p.at[2]}`).join('; ')}`).join('\n')
+    : 'Nothing selected: the request is about the model as a whole.';
+  return `TASK
+A person on our team checked this finished design against the photos and asks for the change below. Make exactly that change with the smallest edit that does it, and keep everything else as it is (the same walls, rooms and footprint unless they ask otherwise). The selected pieces show where they mean; the ops listed made them, so change those ops (or add ops beside them) rather than unrelated ones. If the request can't be built as asked, do the closest thing the design language allows. Use compile_design until it compiles with 0 errors and 0 warnings, fixing anything the change breaks, then reply with only the revised design JSON.
+
+THE REQUEST (their words; it is about this model only)
+"${String(note).replace(/"/g, "'")}"
+
+WHAT THEY SELECTED (x and z in studs, height in plates)
+${sel}
+
+DESIGN
+${JSON.stringify(design)}`;
+}
+
 // Parts mode: the house is built over several short turns, each compiled right away, so a
 // preview exists after every part and no single turn has to plan the whole model.
 const PARTS = [
@@ -498,6 +516,6 @@ Go back to the design below (the one before the changes)${helped.length ? ` and 
 ${JSON.stringify(design)}`;
 }
 
-module.exports = { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask,
+module.exports = { SPEC, designTask, fixTask, reviseTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask,
   PICK_SPEC, PICK_TOOLS, pickTask, SITE_SPEC, SITE_TOOL, siteTask, REVIEW_SPEC, REVIEW_TOOL, reviewTask, reviewFixTask, COMPARE_TOOL, compareTask, revertTask,
   SURVEY_SPEC, SURVEY_TOOL, surveyTask, PHOTO_CHECK_SPEC, PHOTO_CHECK_TOOL, photoCheckTask, LANDSCAPE_STYLES, choicesNote, example };
