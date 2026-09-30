@@ -583,7 +583,7 @@ $('stress').onchange=e=>{ stress=e.target.checked; applyState(); };
 let curDesign=null;
 function esc(t){ return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function showDesign(d){
-  curDesign=d; R=d.preview?previewR(d):compile(d); lifted=0; $('lift').hidden=!(R.stats.liftoff&&R.stats.liftoff.length); $('lift').textContent=liftLabel(); $('lift').setAttribute('aria-pressed','false'); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,R.stats.baseThick?PH/0.14:1,PLATE/32); base.position.y=R.stats.baseThick?-PH/2:-0.07; base.material.color.copy(lin(COLORS[R.stats.baseColor||'Green'].hex)); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
+  const first=!curDesign; curDesign=d; base.visible=true; R=d.preview?previewR(d):compile(d); lifted=0; $('lift').hidden=!(R.stats.liftoff&&R.stats.liftoff.length); $('lift').textContent=liftLabel(); $('lift').setAttribute('aria-pressed','false'); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,R.stats.baseThick?PH/0.14:1,PLATE/32); base.position.y=R.stats.baseThick?-PH/2:-0.07; base.material.color.copy(lin(COLORS[R.stats.baseColor||'Green'].hex)); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
   buildScene(); renderReport(); renderParts(); renderStep(); frame();
   $('title').textContent=d.name||'Brick house'; document.title=(d.name||'Brick house')+', brick model';
   $('subline').textContent=(d.place?d.place+'. ':'')+(d.unit?`Unit ${d.unit}, cut from its building. `:'')+'A brick model with a step-by-step building guide.';
@@ -593,6 +593,7 @@ function showDesign(d){
   const cr=d.photoCredits||[], mc=d.mapCredits||[]; $('credits').hidden=!cr.length&&!mc.length;
   $('credits').innerHTML=cr.map(c=>`<li>Photo: ${/^https:\/\//.test(c.page||'')?`<a href="${esc(c.page)}" target="_blank" rel="noopener">${esc(c.credit)}</a>`:esc(c.credit)}${c.license?', '+esc(c.license):''}</li>`).join('')
     +mc.map(c=>`<li>Map: ${esc(c)}</li>`).join('');
+  if(first){ resize(); goal.radius=fitRadius(); radius=goal.radius*1.25; } // the first house on the stage swings in
   return R;
 }
 // A design before its kit is ordered comes from the server as a preview (src/server/preview.js): parts to draw
@@ -841,7 +842,7 @@ function watchJob(id,keep){
 async function pollJob(){
   let j;
   try{ const r=await fetch(`/api/jobs/${jobId}?after=${jobAfter}&have=${jobHave}`); j=await r.json(); if(!r.ok) throw new Error(j.error||`Server error ${r.status}`); }
-  catch(e){ status(DEV?esc(e.message):'Reconnecting… your design keeps going on our side.',DEV); setTimeout(pollJob,5000); return; } // a restart or a dropped connection
+  catch(e){ if(!curDesign) loadSample(); status(DEV?esc(e.message):'Reconnecting… your design keeps going on our side.',DEV); setTimeout(pollJob,5000); return; } // a restart or a dropped connection
   kitInfo={kit:j.kit,kitCents:j.kitCents,kitCurrency:j.kitCurrency}; if(R) refreshOrderUI();
   // no draft of theirs yet: the page after Design (opened from its link too)
   if(!j.draft&&!ownShown&&!['done','awaiting_payment'].includes(j.status)&&$('sent').hidden) showSent(j.photos);
@@ -852,6 +853,7 @@ async function pollJob(){
   if(j.draft){ jobHave=j.draftN; showOwn(); draftOnly=j.status!=='done'; showDesign(j.draft); $('designSrc').value=JSON.stringify(j.draft,null,2); }
   for(const ev of j.events) handleEvent(ev.type==='done'&&j.result?j.result:ev,jobT0);
   jobAfter=j.next;
+  if(!curDesign) loadSample(); // nothing of theirs to show yet: the sample for the Model tab
   if(j.status==='awaiting_payment'){ status(`This design is waiting for its design fee.`); setBusy(false); return; }
   // cut off by a restart: the server picks it up again at the part it was on (jobs.resumeInterrupted)
   if(j.status==='interrupted'){ status('Picking your design up where it left off…'); setTimeout(pollJob,4000); return; }
@@ -958,15 +960,25 @@ if(location.hash==='#design') showTab('design');
 function applyTheme(){ const c=getComputedStyle(document.documentElement).getPropertyValue('--stage').trim()||'#D9E2EB'; stageLin=lin(c); scene.background=HERO?null:new THREE.Color(c); if(R) applyState(); dirty=true; }
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme);
 
-async function boot(){
-  applyTheme();
+// The sample house (or ?design=…), for the Model tab when no house of theirs is on it.
+async function loadSample(){
+  if(curDesign) return;
   const embedded=document.getElementById('designJson');
   const name=new URLSearchParams(location.search).get('design')||'634-unit-a';
-  try{
-    DESIGN_TEXT=embedded?embedded.textContent.trim():await (await fetch('/designs/'+name.split('/').map(encodeURIComponent).join('/')+'.json')).text();
-  }catch(e){ DESIGN_TEXT='{"name":"No design loaded","phases":[],"ops":[]}'; }
-  $('designSrc').value=DESIGN_TEXT; run(DESIGN_TEXT); $('compileOut').innerHTML='';
-  resize(); goal.radius=fitRadius(); radius=goal.radius*1.25; loop();
+  let text;
+  try{ text=embedded?embedded.textContent.trim():await (await fetch('/designs/'+name.split('/').map(encodeURIComponent).join('/')+'.json')).text(); }
+  catch(e){ text='{"name":"No design loaded","phases":[],"ops":[]}'; }
+  if(curDesign) return; // theirs arrived while the sample was loading
+  DESIGN_TEXT=text; $('designSrc').value=text; run(text); $('compileOut').innerHTML='';
+}
+async function boot(){
+  applyTheme();
+  const q0=new URLSearchParams(location.search), embedded=document.getElementById('designJson');
+  // a design's own link: the stage waits for their house instead of showing the sample first
+  const ownLink=!!(q0.get('job')&&!q0.get('canceled')&&!embedded&&!HERO);
+  if(ownLink){ base.visible=false; $('title').textContent='Your house'; $('subline').textContent='Loading your house…'; }
+  else await loadSample();
+  loop();
   if(HERO){ // the same view as the landing page's still picture; tell the page it can show us
     goal.theta=theta=HERO_VIEW.t; goal.phi=phi=HERO_VIEW.p; radius=goal.radius; liftParts=topStory(); dirty=true;
     requestAnimationFrame(()=>requestAnimationFrame(()=>{ try{ parent.postMessage({brickhouse:'hero-ready'},location.origin); }catch(e){} }));
