@@ -271,7 +271,8 @@ function compile(design){
   function easySizes(kind,color,sizes){ const k=kind+'|'+color+'|'+sizes.length; if(sizeMemo.has(k)) return sizeMemo.get(k);
     const ok=sizes.filter(([a,b])=>canBuy(SIZE_PARTS[kind][Math.min(a,b)+'x'+Math.max(a,b)],color)); const r=ok.length?ok:[[1,1]]; sizeMemo.set(k,r); return r; }
   const easyLen=(kind,len,color)=>canBuy(SIZE_PARTS[kind]['1x'+len],color);
-  function pack(level,kind,y,meta,sizesFor){
+  // anchors: the cells that hold on to the layer above or below (a low-pitch roof's course names its own)
+  function pack(level,kind,y,meta,sizesFor,anchors){
     const h=H[kind], cells=[], lenOk=LEN_OK[kind];
     // a lift-off roof is built on its own, so its pieces needn't sit on studs below (it rests on tiles)
     const floating=!!(meta&&(meta.slab||(design.ops&&design.ops[meta.op]&&(design.ops[meta.op].liftoff||design.ops[meta.op].assembly))));
@@ -292,8 +293,8 @@ function compile(design){
     // (only for plates and tiles in a ring around a hole, like a hip roof's courses: a full layer ties
     // itself by running bond, and walls by their courses)
     const within=floating&&kind!=='brick'?enclosed(new Set(avail.keys())):null;
-    if(within&&within.size>avail.size){
-      for(const c of cells) if(N8.every(([dx,dz])=>within.has((c.x+dx)+','+(c.z+dz)))) anchor.add(c.k);
+    if(anchors||(within&&within.size>avail.size)){
+      for(const c of cells) if(anchors?anchors.has(c.k):N8.every(([dx,dz])=>within.has((c.x+dx)+','+(c.z+dz)))) anchor.add(c.k);
       const dist=new Map([...anchor].map(k=>[k,0])), q=[...anchor];
       for(let h=0;h<q.length;h++){ const [x,z]=q[h].split(',').map(Number); for(const [dx,dz] of N4){ const k=(x+dx)+','+(z+dz); if(avail.has(k)&&!dist.has(k)){ dist.set(k,dist.get(q[h])+1); q.push(k); } } }
       for(const c of cells) c.far=anchor.size?(dist.has(c.k)?dist.get(c.k):99):0; }
@@ -431,6 +432,11 @@ function compile(design){
   // and wings meet without gaps. "against" lists rectangles of a taller building the roof leans on:
   // there the roof keeps rising into its wall (no eave), and everywhere else it has an eave.
   // Same fascia, mix and cheese slopes as a one-rectangle roof.
+  // A low-pitch roof's first course rests on tiles, gripping only the seat's locating studs: each of its pieces
+  // must reach the next course, which holds it (the courses above sit wholly on the one below)
+  function lowHold(level,inNext){ const out=new Set();
+    for(const k of level.keys()){ const [x,z]=k.split(',').map(Number); if(inNext(x,z)) out.add(k); }
+    return out; }
   function roofUnion(op,meta,i){
     const cellsOf=rs=>{ const out=new Set(); for(const r of rs||[]){ const [a,b,c,d]=r; for(let x=Math.min(a,c);x<=Math.max(a,c);x++) for(let z=Math.min(b,d);z<=Math.max(b,d);z++) out.add(x+','+z); } return out; };
     const inside=cellsOf(op.rects), against=cellsOf(op.against);
@@ -445,12 +451,15 @@ function compile(design){
     for(let h=0;h<q.length;h++){ const [x,z]=q[h], d=depth.get(x+','+z);
       for(let dx=-1;dx<=1;dx++) for(let dz=-1;dz<=1;dz++){ const k=(x+dx)+','+(z+dz); if(eave.has(k)&&!depth.has(k)){ depth.set(k,d+1); q.push([x+dx,z+dz]); } } }
     if(!depth.size) return;
-    const maxD=Math.max(...depth.values()), ids=[];
-    for(let r=0;r+1<=maxD;r++){
-      const last=r+3>maxD, level=new Map();
-      for(const [k,d] of depth) if(d>=r+1&&(last||d<=r+2)) level.set(k,(r===0&&op.fascia)?op.fascia:op.color);
+    // pitch: studs of run for each plate of rise (1, the usual; 2 or 3 for a low roof)
+    // at a low pitch the eave steps in one stud like the usual pitch, then each course rises every P studs; each
+    // course is a full layer (rings wider than two studs don't tie at the hips), crossing the seams of the one below
+    const P=op.pitch||1, maxD=Math.max(...depth.values()), ids=[], st=r=>r===0?1:2+(r-1)*P;
+    for(let r=0;st(r)<=maxD;r++){
+      const last=P>1?st(r+1)>maxD:r+3>maxD, level=new Map();
+      for(const [k,d] of depth) if(d>=st(r)&&(last||P>1||d<=r+2)) level.set(k,(r===0&&op.fascia)?op.fascia:op.color);
       if(!level.size) break;
-      ids.push(...pack(level,'plate',op.base+r,meta));
+      ids.push(...pack(level,'plate',op.base+r,meta,null,P>1&&r===0&&!last?lowHold(level,(x,z)=>(depth.get(x+','+z)||0)>=st(1)):null));
       if(last) break;
     }
     // where it leans on the other building, that building has to rise above the roof
@@ -599,21 +608,34 @@ function compile(design){
           pack(level,'tile',top,meta); }
         break; }
       case 'roof': {
+        if(op.pitch!=null&&!(Number.isInteger(op.pitch)&&op.pitch>=1&&op.pitch<=3)){ errors.push({msg:'A roof\'s "pitch" is 1 (the usual), 2 or 3 studs of run for each plate of rise', op:i}); break; }
+        if(op.shed!=null&&(op.rects||!['N','S','E','W'].includes(op.shed)||(op.abut||[]).includes(op.shed)||(op.gable||[]).includes(op.shed))){ errors.push({msg:'A roof\'s "shed" is the one side (N, S, E or W) its single slope rises to, on a one-rectangle roof, and not also an abut or gable side', op:i}); break; }
         if(op.rects){ roofUnion(op,meta,i); break; }
-        const [x0,z0,x1,z1]=op.rect, gb=new Set(op.gable||[]), ab=new Set([...(op.abut||[]),...gb]);
-        const m={W:ab.has('W')?0:1,E:ab.has('E')?0:1,N:ab.has('N')?0:1,S:ab.has('S')?0:1};
-        const reg=r=>({x0:x0+r*m.W,x1:x1-r*m.E,z0:z0+r*m.N,z1:z1-r*m.S});
+        const [x0,z0,x1,z1]=op.rect, gb=new Set(op.gable||[]), ab=new Set([...(op.abut||[]),...gb]), sh=op.shed;
+        // shed: the one side a single-slope roof rises to; it doesn't step in from there, and ends in an eave a
+        // stud past the wall at every course (the roof's thick high edge), so it needs no taller wall behind it
+        const m={W:ab.has('W')||sh==='W'?0:1,E:ab.has('E')||sh==='E'?0:1,N:ab.has('N')||sh==='N'?0:1,S:ab.has('S')||sh==='S'?0:1};
+        const o={W:sh==='W'?1:0,E:sh==='E'?1:0,N:sh==='N'?1:0,S:sh==='S'?1:0};
+        const reg=r=>({x0:x0+r*m.W-o.W,x1:x1-r*m.E+o.E,z0:z0+r*m.N-o.N,z1:z1-r*m.S+o.S});
         const valid=r=>r.x0<=r.x1&&r.z0<=r.z1, inR=(r,x,z)=>x>=r.x0&&x<=r.x1&&z>=r.z0&&z<=r.z1;
-        const ids=[];
+        // pitch: studs of run for each plate of rise; each course overlaps the one below by a stud
+        const P=op.pitch||1, ids=[];
+        // at a low pitch: the eave steps in a stud, then each course rises every P studs as a full layer (see roofUnion)
+        const st=r=>r===0?-1:(r-1)*P;
         for(let r=0;r<64;r++){
-          const outer=reg(r-1), hole=reg(r+1), last=!valid(hole);
+          const outer=P>1?reg(st(r)):reg(r-1), hole=P>1?reg(st(r+1)):reg(r+1), last=!valid(hole);
           if(!valid(outer)) break;
           const level=new Map();
-          for(let x=outer.x0;x<=outer.x1;x++) for(let z=outer.z0;z<=outer.z1;z++) if(last||!inR(hole,x,z)) level.set(x+','+z,op.color);
+          for(let x=outer.x0;x<=outer.x1;x++) for(let z=outer.z0;z<=outer.z1;z++) if(last||P>1||!inR(hole,x,z)) level.set(x+','+z,op.color);
           if(r===0&&op.fascia) for(const k of level.keys()) level.set(k,op.fascia);
+          // a shed's overhanging high edge ties in through the wall line beside it (a full layer ties itself)
+          const onShed=(hx,hz)=>(sh==='E'&&hx===x1)||(sh==='W'&&hx===x0)||(sh==='S'&&hz===z1)||(sh==='N'&&hz===z0);
+          const dIn=(x,z)=>Math.min(m.W?x-x0:1e9,m.E?x1-x:1e9,m.N?z-z0:1e9,m.S?z1-z:1e9);
+          const hold=last?null:P>1?(r===0?lowHold(level,(hx,hz)=>inR(reg(st(1)),hx,hz)):null)
+            :sh?new Set([...level.keys()].filter(k=>{ const [hx,hz]=k.split(',').map(Number); return dIn(hx,hz)>=r||onShed(hx,hz); })):null;
           if(gb.size) for(const k of level.keys()){ const [gx,gz]=k.split(',').map(Number);
             if((gb.has('S')&&gz===z1)||(gb.has('N')&&gz===z0)||(gb.has('W')&&gx===x0)||(gb.has('E')&&gx===x1)) level.set(k,op.gableColor||op.color); }
-          ids.push(...pack(level,'plate',op.base+r,meta));
+          ids.push(...pack(level,'plate',op.base+r,meta,null,hold));
           if(last) break;
         }
         // An abutted side has no eave: its stepped edge must run against something at least as tall.

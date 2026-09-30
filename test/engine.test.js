@@ -586,3 +586,34 @@ test('a design held to GoBricks uses exactly the parts and colors GoBricks makes
     assert.equal(ground(n), 48 * 48); assert.deepEqual(n.warnings, []);
   } finally { G.baseplates = own; }
 });
+
+test('a low pitch rises a plate every 2 or 3 studs and still holds together, over one rectangle and a union', () => {
+  const walls = { op: 'walls', phase: 'walls', color: 'Tan', courses: [0, 3], base: 0, seat: true, segments: [[4, 4, 20, 4], [4, 16, 20, 16], [4, 4, 4, 16], [20, 4, 20, 16]] };
+  const height = (r) => Math.max(...r.parts.filter((p) => p.op === 1).map((p) => p.y + p.h));
+  const tops = {};
+  for (const pitch of [undefined, 2, 3]) for (const supplier of [undefined, 'gobricks']) {
+    for (const shape of [{ rect: [4, 4, 20, 16] }, { rects: [[4, 4, 20, 10], [4, 10, 12, 16]] }]) {
+      const r = compile({ name: 'P', supplier, phases: ['walls', 'roof'], ops: [walls, { op: 'roof', phase: 'roof', ...shape, base: 13, color: 'Dark Tan', fascia: 'Dark Brown', liftoff: 'Roof', pitch }] });
+      assert.deepEqual(r.errors, [], `pitch ${pitch} ${supplier || 'LEGO'} ${Object.keys(shape)[0]}`);
+      if (shape.rect && !supplier) tops[pitch || 1] = height(r);
+    }
+  }
+  // 13 studs across: 7 courses at the usual pitch, about half and a third of that lower
+  assert.ok(tops[2] < tops[1] && tops[3] < tops[2], JSON.stringify(tops));
+  assert.match(compile({ name: 'P', phases: ['walls', 'roof'], ops: [walls, { op: 'roof', phase: 'roof', rect: [4, 4, 20, 16], base: 13, color: 'Dark Tan', pitch: 5 }] }).errors[0].msg, /pitch/);
+});
+
+test('a shed roof rises to one side and ends in an overhang there, with no taller wall behind it', () => {
+  const walls = { op: 'walls', phase: 'walls', color: 'Tan', courses: [0, 3], base: 0, seat: true, segments: [[4, 4, 12, 4], [4, 20, 12, 20], [4, 4, 4, 20], [12, 4, 12, 20]] };
+  for (const supplier of [undefined, 'gobricks']) for (const pitch of [1, 3]) {
+    const r = compile({ name: 'S', supplier, phases: ['walls', 'roof'], ops: [walls,
+      { op: 'roof', phase: 'roof', rect: [4, 4, 12, 20], base: 13, color: 'Dark Tan', fascia: 'Dark Brown', gable: ['N', 'S'], shed: 'E', pitch, liftoff: 'Roof' }] });
+    assert.deepEqual(r.errors, [], `pitch ${pitch} ${supplier || 'LEGO'}`);
+    assert.deepEqual(r.warnings.filter((w) => /abuts|stepped edge/.test(w.msg)), []);
+    const roof = r.parts.filter((p) => p.op === 1), hi = Math.max(...roof.map((p) => p.y + p.h));
+    // the high side overhangs the east wall by a stud, at the roof's full height
+    assert.ok(roof.some((p) => p.x + p.w - 1 === 13 && p.y + p.h >= hi - 1), `pitch ${pitch}: no overhang on the high side`);
+    assert.ok(!roof.some((p) => p.x + p.w - 1 > 13));
+  }
+  assert.match(compile({ name: 'S', phases: ['walls', 'roof'], ops: [walls, { op: 'roof', phase: 'roof', rect: [4, 4, 12, 20], base: 13, color: 'Dark Tan', shed: 'E', abut: ['E'] }] }).errors[0].msg, /shed/);
+});

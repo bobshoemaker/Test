@@ -17,7 +17,10 @@ closing gift that realtors give clients: a brick model of the house they just bo
   garage doors with no drive to the edge of the plate, a roof, wall or raised ground standing in front of a
   window (roof slopes within two studs of a window become flat tiles on their own, a ledge no higher than
   the sill; reaching one plate above the sill, the frame's foot, is allowed), baseplate showing inside a building,
-  lift-off roofs that wouldn't come off in one piece or grip more than a few locating studs;
+  lift-off roofs that wouldn't come off in one piece or grip more than a few locating studs; roofs rise a plate a
+  stud by default, or every 2 or 3 studs with `"pitch"` (the eave steps in a stud, then each course is a full layer, so
+  a low hip still ties at its corners), and a one-sided roof is `"shed": side`, rising to that side and ending in an
+  overhang there instead of against a wall raised to meet it (the wedge 157 Brisbane's first runs built);
   a lift-off roof is built on its own like a sub-build and rests on tiled wall tops; an "assembly"
   such as a floor slab over a wide room is built the same way but stays put; a walls op with `"slab"`
   gets its story's floor laid under it that way (covering the story below too, so a set-back story
