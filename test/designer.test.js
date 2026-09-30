@@ -262,3 +262,27 @@ test('after the five parts a photo review compares renders with the photos, and 
   assert.equal(out.review.fixes.length, 1);
   assert.ok(out.review.usd > 0 && out.costUsd >= out.review.usd);
 });
+
+test('after the fixes a second look keeps whichever version reads better, with only the fixes that helped', async () => {
+  const client = makeFakeClient({ delayMs: 0 });
+  const create = client.messages.create.bind(client.messages), sent = [];
+  client.messages.create = async (params) => {
+    sent.push(JSON.parse(JSON.stringify(params)));
+    const t = params.tools[0].name, u = { input_tokens: 100, output_tokens: 100 };
+    if (t === 'submit_review') return { role: 'assistant', stop_reason: 'tool_use', usage: u, content: [{ type: 'tool_use', id: 'r1', name: t, input: { matches: [],
+      fixes: [{ feature: 'roof', problem: 'The roof is too steep.', fix: 'Flatten it.' }, { feature: 'front', problem: 'The door is gray.', fix: 'Make it red.' }] } }] };
+    if (t === 'submit_comparison') return { role: 'assistant', stop_reason: 'tool_use', usage: u, content: [{ type: 'tool_use', id: 'c1', name: t, input: { better: 'before', helped: [2], hurt: [1], reason: 'The flat roof reads as a slab.' } }] };
+    return create(params);
+  };
+  const render = async () => ['front', 'three-quarter', 'back-left', 'back-right'].map((label) => ({ label, data: 'PNG' }));
+  const seen = [];
+  const out = await designHouse({ client, model: 'fake', mode: 'parts', photos: [{ mediaType: 'image/jpeg', data: 'AAAA' }], render, review: { model: 'fake' }, onEvent: (ev) => seen.push(ev) });
+  const cmp = sent.find((p) => p.tools[0].name === 'submit_comparison');
+  assert.equal(cmp.messages[0].content.filter((b) => b.type === 'image').length, 9); // the photo, four before and four after
+  assert.deepEqual(out.review.comparison.better, 'before');
+  const next = sent[sent.indexOf(cmp) + 1];
+  const text = JSON.stringify(next.messages.at(-1).content);
+  assert.match(text, /COMPARISON\. .*The flat roof reads as a slab\..*apply only this fix: 2\. Make it red\./);
+  assert.doesNotMatch(text, /Flatten it/);
+  assert.ok(seen.some((e) => e.type === 'comparison' && e.better === 'before'));
+});
