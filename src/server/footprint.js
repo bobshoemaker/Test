@@ -99,7 +99,9 @@ const DEFAULT_FILL = {
  * @returns {object} {scale, blocks:[{name,levels,cellRects,cells,openings}], stairs, map, problems}
  *   map: stud = [a*px + c*py + e, b*px + d*py + f], cell centers at integer + 0.5 (for overlays)
  */
-function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap = 2, frontYard = 0 } = {}) {
+// centerPx (street S only): the x range in plan pixels to center on the baseplate, such as the house with its
+// driveway or the whole lot, instead of the blocks alone.
+function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap = 2, frontYard = 0, centerPx = null } = {}) {
   const problems = [];
   // Scale from labeled rooms; failing that, from standard lengths the reader named (an estimate)
   const cal = calibrate(fp.rooms) || calibrateLengths(fp.lengths);
@@ -185,7 +187,14 @@ function layoutFootprint(fp, { ftPerStud = 2, size = 32, streetRows = 2, minGap 
     problems.push(`There is no room for the side street's ${streetRows} rows beside the house at ${ftPerStud} ft per stud; the house is centered and the side street is left out.`);
     side = null;
   }
-  const offX = (side === 'left' ? streetRows : side === 'right' ? size - streetRows - width : Math.floor((size - width) / 2)) - bx0, offZ = avail - 1 - yard - bz1;
+  let mid = null;
+  if (Array.isArray(centerPx) && centerPx.length === 2 && street === 'S' && !side) {
+    const a = (Math.min(...centerPx) - minX) / pps, b = (Math.max(...centerPx) - minX) / pps;
+    if (b - a <= size) mid = (a + b) / 2;
+  }
+  let offX = (side === 'left' ? streetRows : side === 'right' ? size - streetRows - width : Math.floor((size - width) / 2)) - bx0;
+  if (mid !== null) offX = Math.min(Math.max(Math.round(size / 2 - mid), -bx0), size - 1 - bx1);
+  const offZ = avail - 1 - yard - bz1;
   for (const b of blocks) b.cellRects = b.cellRects.map((r) => [r[0] + offX, r[1] + offZ, r[2] + offX, r[3] + offZ]);
 
   // Each wall cell belongs to one block: the first listed (tallest) wins, and a later block's
@@ -309,7 +318,7 @@ function skeletonOps(locked) {
     courses: [((b.floor || 1) - 1) * sc, ((b.floor || 1) - 1) * sc + sc * b.levels - 1], base: ((b.floor || 1) - 1) * (sc * 3 + 2),
     ...(b.floor > 1 ? { slab: true } : {}),
     segments: segmentsFromCells(b.cells),
-    openings: b.openings.map((o) => ({ cells: o.cells, ...(DEFAULT_FILL[o.kind] || DEFAULT_FILL.door), kind: o.kind === 'garage door' ? 'garage door' : 'door', note: `${o.kind} from the floor plan${o.note ? ': ' + o.note : ''}` })),
+    openings: b.openings.map((o) => ({ cells: o.cells, ...(DEFAULT_FILL[o.kind] || DEFAULT_FILL.door), kind: o.kind === 'garage door' ? 'garage door' : 'door', note: `${o.kind} from the ${locked.source === 'site' ? 'map' : 'floor plan'}${o.note ? ': ' + o.note : ''}` })),
   }));
 }
 
@@ -320,24 +329,25 @@ const listCells = (keys) => [...keys].slice(0, 6).map((k) => `(${k})`).join(' ')
 // cover exactly that block's cells, and each locked opening must keep its cells (any courses or fill).
 function checkFootprint(design, locked) {
   if (!locked) return [];
+  const what = { site: 'Locked walls', outline: 'Outline' }[locked.source] || 'Floor plan';
   const probs = [], ops = (design.ops || []).map((o, i) => ({ o, i })).filter(({ o }) => o.op === 'walls');
   for (const b of locked.blocks) {
     if (!b.cells.length) continue;
     const mine = ops.filter(({ o }) => o.block === b.name);
-    if (!mine.length) { probs.push(`Floor plan: no walls op has "block": "${b.name}". Keep the locked walls for it.`); continue; }
+    if (!mine.length) { probs.push(`${what}: no walls op has "block": "${b.name}". Keep the locked walls for it.`); continue; }
     const want = new Set(b.cells.map(([x, z]) => key(x, z)));
     for (const { o, i } of mine) {
       let have;
       try { have = cellKeys(o.segments); } catch { have = new Set(); }
       const missing = [...want].filter((k) => !have.has(k)), extra = [...have].filter((k) => !want.has(k));
       if (missing.length || extra.length) {
-        probs.push(`Floor plan (op ${i}): the ${b.name} walls must keep the locked segments; ${[missing.length ? `missing ${listCells(missing)}` : '', extra.length ? `off the plan at ${listCells(extra)}` : ''].filter(Boolean).join(', ')}.`);
+        probs.push(`${what} (op ${i}): the ${b.name} walls must keep the locked segments; ${[missing.length ? `missing ${listCells(missing)}` : '', extra.length ? `off the locked walls at ${listCells(extra)}` : ''].filter(Boolean).join(', ')}.`);
       }
     }
     for (const lo of b.openings) {
       const want2 = [...cellKeys([lo.cells])].sort().join(' ');
       const ok = mine.some(({ o }) => (o.openings || []).some((p) => { try { return [...cellKeys([p.cells])].sort().join(' ') === want2; } catch { return false; } }));
-      if (!ok) probs.push(`Floor plan: the ${lo.kind} on the ${b.name} ${lo.side} wall must stay at cells [${lo.cells.join(', ')}] (set its courses and fill as you like).`);
+      if (!ok) probs.push(`${what}: the ${lo.kind} on the ${b.name} ${lo.side} wall must stay at cells [${lo.cells.join(', ')}] (set its courses and fill as you like).`);
     }
   }
   return probs;

@@ -93,6 +93,30 @@ closing gift that realtors give clients: a brick model of the house they just bo
   plan, `footprintFromOutline` locks the walls to the house's building outline from the terrain
   lookup instead (squared to the grid, outbuildings as their own blocks, no doors). For 3221
   Griffith Park Blvd the county outline matched the plan's walls to about a stud. Pure and tested.
+- `src/server/site.js`: finding the house and mapping it from above, for any US address, before the design (no
+  plan needed). Candidates: house-sized buildings near the geocoded point from FEMA USA Structures (CC BY 4.0, about
+  135 million US outlines) merged with OpenStreetMap, numbered on a USDA NAIP aerial (public domain, via USGS; 60 cm
+  a pixel in California, resampled smoothly, its date looked up and told to Claude; USGS's basemap when the image
+  server is busy), each described from its street (Census TIGER roads, public domain; OpenStreetMap as backup): which
+  side, width across the front, depth. The pick: Claude compares the owner's photos with the numbered buildings
+  (`view_candidates` close-ups turned street-side down, `submit_pick` with confidence and cues), told that the
+  geocoder's pin is no evidence, since it often lands a few lots away (157 Brisbane St's pin was 140 ft off).
+  Records: where a county publishes them (`COUNTIES`, LA County today, by the outline's FIPS code) its parcel checks
+  the pick's address and overrides a wrong pick, and its sharper outline and lot line replace the national ones.
+  The map: Claude (`BRICKHOUSE_SITE_MODEL`, a stronger model if wanted; falls back to the design model when the
+  account can't use it) splits the house into blocks by height and roof, places garage and outside doors, and maps
+  the lot (driveways, walks, patios, pools, lawn, beds, trees, fences, sheds and covers) in feet on the aerial turned
+  street-side down, each submission drawn back over the aerial with its overlap with the outline (at most 3). The
+  fit (`fitPlan`): the size's usual scale when the house, its drive and a little yard fit, else stretched within
+  the size's range (`maxFtPerStud` in scale.js: Mini 4 to 5, Classic 2 to 3, Grand 1.5 to 2 ft per stud); past that
+  the yards give way, never the house (it is shown whole even past the range, with a problem noted), and a bigger
+  size is suggested only when this one can't show the house with its yard. `lockPlan` locks the walls to the map
+  (footprint.js, source `site`); `siteInStuds` and `siteNoteText` give the design the lot in stud rectangles, and two
+  map images (the blocks over the aerial, the plate in studs over it) go with the photos. The mapper also says
+  whether the building matches the photos; with that and the records, `found.needsCheck` flags a doubtful house.
+  Every stage is recorded with its pictures, reasoning and cost (`report.stages`); a job keeps it, and the admin
+  page's Site map button shows it (`sitereport.js`). Corner lots aren't laid out with their second street here. The
+  pure parts are tested; the rest was run against 157 Brisbane St.
 - Attached homes and condos: a design sets `"property": "townhouse" | "condo"` and `"unit"`, and
   models that unit in full, cut from its building: adjoining units are muted `"context": true` stubs
   (exempt from the room and door checks), an upper-floor condo stands on a context plinth. The
@@ -102,8 +126,12 @@ closing gift that realtors give clients: a brick model of the house they just bo
 - `src/server/pipeline.js`: `prepareDesign`, the steps before Claude designs, shared by the server
   and `scripts/design.js` so the website and the CLI build every house the same way: an address
   adds the terrain facts to the notes; a floor plan locks the walls (read in the design loop);
-  without a plan, the building outline found by address locks them; with neither, the walls come
-  from the photos. Keep house-specific facts out of code: they come from photos, plan, address
+  without a plan, the house is found and mapped from above (site.js) and the walls lock to the map at the
+  fitted scale; if that fails, the building outline found by address locks them; with neither, the walls come
+  from the photos. A job keeps its mapped site (`siteDone`), so a resumed design keeps the same walls. The design
+  loop gets the fitted scale (drafts carry it as `"stud"`), the map images and the site note, and stops at a cost
+  limit (`BRICKHOUSE_DESIGN_BUDGET_USD`, default $15 with the site step, keeping its last draft; `cost.js` prices
+  usage). Keep house-specific facts out of code: they come from photos, plan, address
   lookups, the owner's survey answers and notes.
 - `src/server/render.js`: optional (needs Playwright). Renders draft views with the viewer in
   headless Chromium, the gridded plan, and the footprint overlaid on the plan.
@@ -214,6 +242,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
     node scripts/design.js a.jpg b.jpg --target 1200 --out designs/new.json
     node scripts/design.js a.jpg b.jpg --plan plan.png --parts --effort high --out designs/generated/x.json
                                               # plan first, then four parts; drafts, renders and overlays saved next to --out
+    node scripts/design.js front.jpg right.jpg back.jpg --views front,right,back --address "157 Brisbane St, Monrovia, CA 91016" \
+      --parts --effort high --site-model <stronger model> --budget 14 --out x.json
+                                              # house found and mapped from above; <out>.site.json, .site-*.jpg, .run.json (stages, costs)
     node scripts/survey.js a.jpg b.jpg --out survey.json          # questions for the owner; then design.js --choices survey.json
     node scripts/terrain.js "3221 Griffith Park Blvd, Los Angeles, CA"   # street and slope; --address on survey.js/design.js adds it
     node scripts/bundle.js designs/634-unit-a.json
@@ -234,7 +265,9 @@ before changing API parameters.
   windows are transparent bricks, and the task's plate note says what to leave out). `src/server/scale.js` holds
   the numbers (`sizeName`: Mini, Classic, Grand) and `--plate` / `plate` on /api/jobs select it; the engine's
   `BASEPLATES` carry each size's feet per stud, and a story's courses (enclosing a floor) follow it.
-  `designs/634-unit-a-mini.json` is the Mini sample. The rest of this section is 32.
+  `designs/634-unit-a-mini.json` is the Mini sample. A design may also set `"stud"` (feet per stud, 1 to 6)
+  when the site step fitted the scale to a long house; the compiler's story and bare-ground checks follow it.
+  The rest of this section is 32.
 - 32 x 32 stud baseplate. x = 0..31 left to right seen from the street; z = 0..31 back to
   front; the street runs along z = 31.
 - Heights are in plates: brick = 3, plate/tile = 1. Wall course c starts at
@@ -273,6 +306,12 @@ before changing API parameters.
 - Plain bricks, plates and tiles are drawn as boxes with studs (no underside or logo). Sideways building is limited to side-stud bricks
   in wall openings with a few details hung on them (lantern, house number, plaque, vent); mounted
   parts are drawn as small blocks.
+- Finding the house from photos and a 60 cm aerial alone isn't reliable yet: for 157 Brisbane St Claude picked a
+  neighbour twice (145, then 133 Brisbane), and LA County's parcel records corrected it both times. Where no county
+  records are connected the pick stands unconfirmed (`found.needsCheck` flags it on the admin page). Next: more
+  county parcel services, a nationwide parcel source (Regrid is paid), or the owner confirming the house on the map.
+  The public services it leans on (Overpass, the USGS image server) fail now and then; it retries, falls back to
+  USGS's basemap, and carries on without terrain.
 - The manual exists in the viewer only; there's no PDF export yet.
 - The photo-to-design loop has only run against the scripted client in tests. The first
   real runs need prompt tuning; compare results with `designs/634-unit-a.json` using the

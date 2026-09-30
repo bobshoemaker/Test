@@ -99,18 +99,18 @@ function render(){
   const open=jobs.filter(j=>j.kit&&!['shipped','cancelled'].includes(j.fulfillment&&j.fulfillment.status)).sort((a,b)=>a.kit.at-b.kit.at);
   $('nOpen').textContent=open.length;
   $('orders').innerHTML=open.length?open.map(orderCard).join(''):'<p class="muted">No kit orders waiting.</p>';
-  const attn=jobs.filter(j=>['error','interrupted'].includes(j.status)||(j.status==='done'&&j.problems>0));
+  const attn=jobs.filter(j=>['error','interrupted'].includes(j.status)||(j.status==='done'&&j.problems>0)||(j.site&&j.site.needsCheck));
   $('nAttn').textContent=attn.length;
   $('attention').innerHTML=attn.length?`<div class="tablewrap"><table><tbody>${attn.map(rowHtml).join('')}</tbody></table></div>`:'<p class="muted">Nothing needs attention.</p>';
   $('nAll').textContent=jobs.length; $('all').innerHTML=jobs.map(rowHtml).join('');
 }
 function statusHtml(j){ const s=`<span class="st ${esc(j.status)}">${esc(j.status)}</span>`;
-  return s+(j.status==='running'&&j.part?` <span class="muted small">part ${esc(j.part)}</span>`:'')+(j.error?`<div class="small err">${esc(j.error)}</div>`:'')+(j.status==='done'&&j.problems?`<div class="small err">${j.problems} problem${j.problems>1?'s':''} left</div>`:''); }
+  return s+(j.site&&j.site.needsCheck?'<div class="small err">Check it\'s the right house (Site map)</div>':'')+(j.status==='running'&&j.part?` <span class="muted small">part ${esc(j.part)}</span>`:'')+(j.error?`<div class="small err">${esc(j.error)}</div>`:'')+(j.status==='done'&&j.problems?`<div class="small err">${j.problems} problem${j.problems>1?'s':''} left</div>`:''); }
 function rowHtml(j){ const f=j.fulfillment;
   return `<tr><td class="small">${when(j.createdAt)}</td><td><b>${esc(j.name||'(untitled)')}</b><div class="small muted">${esc(j.address)} · ${SIZE(j.plate)} · ${j.photos} photo${j.photos===1?'':'s'}</div></td>
     <td>${statusHtml(j)}</td><td>${j.pieces?j.pieces.toLocaleString():''}</td><td class="small">${esc(j.email||'')}</td>
     <td class="small">${j.kit?`${money(j.kit.amount,j.kit.currency)}<br>${esc(f?f.status:'new')}`:''}</td>
-    <td><div class="row" style="margin:0"><a class="btn" href="/app?job=${j.id}" target="_blank" rel="noopener">Open</a>${['error','interrupted'].includes(j.status)?`<button class="btn" data-retry="${j.id}">Run again</button>`:''}</div></td></tr>`; }
+    <td><div class="row" style="margin:0"><a class="btn" href="/app?job=${j.id}" target="_blank" rel="noopener">Open</a>${j.site&&j.site.report?`<a class="btn" href="/admin/api/jobs/${j.id}/site" target="_blank" rel="noopener" title="How the house was found and mapped from above, at ${j.site.ftPerStud} ft per stud">Site map</a>`:''}${['error','interrupted'].includes(j.status)?`<button class="btn" data-retry="${j.id}">Run again</button>`:''}</div></td></tr>`; }
 function orderCard(j){ const k=j.kit, f=j.fulfillment||{status:'new'};
   return `<div class="card order" data-id="${j.id}"><div>
     <h3>${esc(j.name||'(untitled)')} <span class="pill">${SIZE(j.plate)}</span></h3>

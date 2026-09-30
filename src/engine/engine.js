@@ -229,7 +229,9 @@ function compile(design){
   const BASE=design&&design.plate!=null?Number(design.plate):32, BASEPLATE=BASEPLATES[BASE]||BASEPLATES[32];
   // courses in a story at this scale (about 9 ft): 4 on the Classic and Grand, 2 on the Mini; walls at least this
   // tall enclose a building (its floor, and the baseplate that mustn't show inside it)
-  const STORY=Math.min(4,Math.max(2,Math.round(9/(1.2*BASEPLATE.ft))));
+  // "stud": the design's own feet per stud, when the site step fitted the scale to the house (default the size's)
+  const FT=Number(design&&design.stud)>=1&&Number(design&&design.stud)<=6?Number(design.stud):BASEPLATE.ft;
+  const STORY=Math.min(4,Math.max(2,Math.round(9/(1.2*FT))));
   const clock=(typeof performance!=='undefined')?performance:Date;
   const t0=clock.now();
   const errors=[], warnings=[], parts=[], occ=new Map(), subs=[], lawned=new Set();
@@ -868,7 +870,7 @@ function compile(design){
   }
   // bare ground: a big open stretch of baseplate with nothing on it reads as unfinished
   // (not for a model of the building alone, without its lot: "lot": false)
-  if(design.lot!==false){ const inside=insideCells(), bare=(x,z)=>!occ.has(K3(x,z,0))&&!inside.has(x+','+z)&&!lawned.has(x+','+z), side=Math.max(4,Math.round(12/BASEPLATE.ft));
+  if(design.lot!==false){ const inside=insideCells(), bare=(x,z)=>!occ.has(K3(x,z,0))&&!inside.has(x+','+z)&&!lawned.has(x+','+z), side=Math.max(4,Math.round(12/FT));
     const dp=new Map(); let best=0, at=null;
     for(let x=0;x<BASE;x++) for(let z=0;z<BASE;z++){ if(!bare(x,z)) continue;
       const v=1+Math.min(dp.get((x-1)+','+z)||0,dp.get(x+','+(z-1))||0,dp.get((x-1)+','+(z-1))||0); dp.set(x+','+z,v); if(v>best){ best=v; at=[x-v+1,z-v+1]; } }
@@ -965,6 +967,6 @@ function compile(design){
   const pages=1+Math.ceil(inventory.length/24)+steps.length;
   const ms=clock.now()-t0;
   return {parts,steps,subs,errors,warnings,hints,joints,jn,inventory,occ,
-    stats:{plantLots:plantLots.size,liftoff:(()=>{ const lo=new Map(); for(const p of parts) if(p.liftoff) lo.set(p.liftoff,Math.min(lo.has(p.liftoff)?lo.get(p.liftoff):1e9,p.y)); return [...lo].sort((a,b)=>b[1]-a[1]).map(e=>e[0]); })(),pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32,baseColor,baseThick:OWN_BASE||BASEPLATE.thick?1:0}};
+    stats:{plantLots:plantLots.size,liftoff:(()=>{ const lo=new Map(); for(const p of parts) if(p.liftoff) lo.set(p.liftoff,Math.min(lo.has(p.liftoff)?lo.get(p.liftoff):1e9,p.y)); return [...lo].sort((a,b)=>b[1]-a[1]).map(e=>e[0]); })(),pieces,steps:steps.length,subBuilds:subs.length,pages,lots:inventory.length,cost,joints:joints.length,baseJoints,ms,plate:BASEPLATES[BASE]?BASE:32,ftPerStud:FT,baseColor,baseThick:OWN_BASE||BASEPLATE.thick?1:0}};
 }
 if(typeof module!=='undefined') module.exports={BASEPLATES,SUPPLY,supplies,supplierNo,easyToGet,availOf,easyColors,AVAIL_SETS,AVAIL_YEAR,compile,COLORS,SPECIAL,SIZE_PARTS,PLANTS,PLANT_LOTS,FIXTURES};

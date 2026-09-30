@@ -22,6 +22,11 @@ test('the admin API needs the sign-in cookie, and the cookie is HttpOnly and Sam
     const stockPath = '/admin/api/jobs/00000000-0000-0000-0000-000000000000/stock';
     assert.equal((await fetch(base + stockPath, { method: 'POST' })).status, 401, 'the stock check needs the cookie too');
     assert.equal((await fetch(base + stockPath, { method: 'POST', headers: { cookie: cookie.split(';')[0] } })).status, 404, 'and a finished design');
+    const sitePath = '/admin/api/jobs/00000000-0000-0000-0000-000000000000/site';
+    assert.equal((await fetch(base + sitePath)).status, 401, 'how a house was found and mapped is for the admin only');
+    const noSite = await fetch(base + sitePath, { headers: { cookie: cookie.split(';')[0] } });
+    assert.equal(noSite.status, 404);
+    assert.match((await noSite.json()).error, /not mapped from above/);
     assert.equal((await fetch(base + '/admin')).status, 200, 'the page itself loads and asks to sign in');
     const out = await fetch(base + '/admin/logout', { method: 'POST' });
     assert.match(out.headers.get('set-cookie'), /Max-Age=0/);

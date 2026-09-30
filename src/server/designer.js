@@ -7,6 +7,7 @@ const { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_T
   SURVEY_SPEC, SURVEY_TOOL, surveyTask, PHOTO_CHECK_SPEC, PHOTO_CHECK_TOOL, photoCheckTask, LANDSCAPE_STYLES } = require('./prompt');
 const { layoutFootprint, skeletonOps, checkFootprint, describeLayout } = require('./footprint');
 const { scaleFor } = require('./scale');
+const { costOf } = require('./cost');
 
 const COMPILE_TOOL = {
   name: 'compile_design',
@@ -270,13 +271,21 @@ async function callClaude(client, params, onEvent = () => {}) {
  * @param {number} [o.fromPart] parts mode: the part to start at, 1-based (needs seed when above 1)
  * @param {Array<{question,answer,detail}>} [o.choices] the owner's answers to the survey (resolveChoices), binding for the design
  * @param {16|32|48} [o.plate]  baseplate size: 16 the Mini at 4 ft per stud, 48 the Grand at 1.5 (scale.js)
+ * @param {number} [o.ftPerStud] the scale the site step fitted for this house (site.js); drafts get it as "stud"
+ * @param {Array<{mediaType,data,caption}>} [o.siteImages] the site step's map images, sent after the photos
+ * @param {string} [o.siteNote] the site step's lot in studs and how the house was read (site.js)
+ * @param {number} [o.budgetUsd] stop when the API cost passes this (with spentUsd already spent before the
+ *                   design loop, by the site step); the last compiled draft is kept
  */
 async function designHouse({
   client, model, photos = [], plan = null, notes = '', target = 1200, mode = 'design', design = null,
   effort = null, maxRounds = 7, maxTokens = 64000, onEvent = () => {}, render = null, partsLimit = PARTS.length,
   lockFootprint = true, locked = null, planTools = null, seed = null, fromPart = 1, choices = null, plate = 32, supplier = null,
+  ftPerStud = null, siteImages = [], siteNote = '', budgetUsd = null, spentUsd = 0,
 }) {
   plate = scaleFor(plate).plate;
+  // a scale fitted to this house: every draft carries it (the walls are locked at it); the size's own needs nothing
+  const stud = Number(ftPerStud) > 0 && Number(ftPerStud) !== scaleFor(plate).ftPerStud ? Number(ftPerStud) : null;
   if (mode === 'parts' && fromPart > 1 && !isDesign(seed)) throw new Error('Starting at a later part needs the design from the earlier parts (seed).');
   const usage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
   if (mode === 'parts' && plan && lockFootprint && !locked) {
@@ -285,16 +294,19 @@ async function designHouse({
   if (mode !== 'parts') locked = null;
   const lockedOps = locked ? skeletonOps(locked) : null;
   const content = [...photos, ...(plan ? [plan] : [])].map(imageBlock);
+  (siteImages || []).forEach((im, i) => content.push({ type: 'text', text: `Map image ${i + 1}: ${im.caption || 'the house from above'}.` }, imageBlock(im)));
   if (mode === 'fix') {
     if (!isDesign(design)) throw new Error('Fix mode needs a design with phases and ops.');
     content.push({ type: 'text', text: fixTask({ design, problems: problemList(compile(design)) }) });
   } else {
     if (!photos.length && !notes) throw new Error('Add at least one photo or a description.');
-    content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target, hasPlan: !!plan, locked, lockedOps, seed: fromPart > 1 ? seed : null, fromPart, choices, plate })
+    content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target, hasPlan: !!plan, locked, lockedOps, seed: fromPart > 1 ? seed : null, fromPart, choices, plate,
+      ftPerStud: stud, siteNote: mode === 'parts' ? siteNote : '' })
       + (supplier ? `\n\nSUPPLIER. The kit is made from ${supplier === 'gobricks' ? 'GoBricks' : supplier} bricks: every draft is compiled with "supplier": "${supplier}" (see Compatible bricks), so use only parts and colors the compiler says it makes.` : '') });
   }
   const messages = [{ role: 'user', content }];
-  const st = { lastDraft: mode === 'parts' && fromPart > 1 ? seed : null, compiles: 0, rounds: 0 };
+  const st = { lastDraft: mode === 'parts' && fromPart > 1 ? seed : null, compiles: 0, rounds: 0, stopped: null };
+  const spent = () => spentUsd + costOf(usage, model);
   // max_tokens includes thinking, which runs long at xhigh and max. Automatic caching moves the
   // breakpoint to the end of each request, so every round reads the photos and earlier drafts from cache.
   // Summarized thinking lets the progress events show what Claude is working on.
@@ -313,6 +325,12 @@ async function designHouse({
       addUsage(usage, msg);
       // Keep the whole assistant turn, thinking blocks included; the API requires them in tool loops.
       messages.push({ role: 'assistant', content: msg.content });
+      // over the cost limit: keep the last compiled draft rather than spend more (the next turn would)
+      if (budgetUsd && st.lastDraft && spent() > budgetUsd) {
+        st.stopped = `Stopped at the cost limit ($${spent().toFixed(2)} of $${budgetUsd}); this is the last compiled draft.`;
+        onEvent({ type: 'status', message: st.stopped });
+        return null;
+      }
 
       const uses = msg.content.filter((b) => b.type === 'tool_use');
       if (!uses.length) {
@@ -339,6 +357,7 @@ async function designHouse({
         }
         st.compiles++;
         if (plate !== 32 && d.plate == null) d.plate = plate; // the plate size is the task's choice, not a guess
+        if (stud) d.stud = stud; // and so is a scale fitted to the house
         if (d.variation == null) d.variation = 'subtle'; // a few pieces of each material in a close color
         const res = compile(d), planProblems = checkFootprint(d, locked);
         d.source = 'photos';
@@ -371,7 +390,9 @@ async function designHouse({
     if (!isDesign(final)) throw new Error('Claude did not return a design.');
     final.source = 'photos';
     if (supplier) final.supplier = supplier;
-    return { design: final, result: compile(final), planProblems: checkFootprint(final, locked), locked, compiles: st.compiles, rounds: st.rounds, usage, ...(note ? { note } : {}) };
+    if (stud) final.stud = stud;
+    return { design: final, result: compile(final), planProblems: checkFootprint(final, locked), locked, compiles: st.compiles, rounds: st.rounds, usage, costUsd: costOf(usage, model),
+      ...(st.stopped || note ? { note: st.stopped || note } : {}) };
   }
 
   if (mode !== 'parts') {
@@ -389,6 +410,7 @@ async function designHouse({
     if (i > fromPart - 1) messages.push({ role: 'user', content: [{ type: 'text', text: part.task }] });
     onEvent({ type: 'part', n: i + 1, of: PARTS.length, name: part.name });
     msg = await turns(i === PARTS.length - 1 ? 5 : 4, part.name);
+    if (st.stopped) break;
     const said = msg ? msg.content.filter((b) => b.type === 'text').map((b) => b.text).join(' ').trim() : '';
     onEvent({ type: 'partDone', n: i + 1, of: PARTS.length, name: part.name,
       summary: i === PARTS.length - 1 || said.startsWith('{') ? '' : said.slice(0, 300),
@@ -398,8 +420,8 @@ async function designHouse({
   // converges to 0 errors and 0 warnings instead of stopping short.
   // the design finish() would return: one in the reply's text, or else the last compiled draft
   const current = () => { const d = msg ? extractJson(msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n')) : null; const c = isDesign(d) ? d : st.lastDraft; if (c && supplier) c.supplier = supplier; return c; };
-  if (count === PARTS.length && current()) {
-    for (let k = 0; k < REPAIR_TURNS; k++) {
+  if (count === PARTS.length && current() && !st.stopped) {
+    for (let k = 0; k < REPAIR_TURNS && !st.stopped; k++) {
       const d = current(), res = compile(d), plan = checkFootprint(d, locked);
       if (!res.errors.length && !res.warnings.length && !plan.length) break;
       const sum = summarize(res, plan);
@@ -415,4 +437,4 @@ async function designHouse({
 
 const REPAIR_TURNS = 3;
 
-module.exports = { designHouse, surveyHouse, checkPhotos, photoVerdict, resolveChoices, planFootprint, extractJson, summarize, problemList, COMPILE_TOOL };
+module.exports = { designHouse, surveyHouse, checkPhotos, photoVerdict, resolveChoices, planFootprint, extractJson, summarize, problemList, callClaude, COMPILE_TOOL };
