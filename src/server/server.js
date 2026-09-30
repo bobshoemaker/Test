@@ -5,6 +5,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { designHouse, surveyHouse, checkPhotos } = require('./designer');
+const { reviseTask } = require('./prompt');
 const { makePreview } = require('./preview');
 const { makeMailer, cleanEmail, readyEmail, kitEmail, shippedEmail, mineEmail } = require('./mail');
 const { scaleFor, sizeName } = require('./scale');
@@ -35,6 +36,9 @@ const SITE_MODEL = process.env.BRICKHOUSE_SITE_MODEL || MODEL;
 // After the five parts, a model (the site model unless BRICKHOUSE_REVIEW_MODEL says) compares renders of the design with
 // the photos and lists fixes the design then makes; BRICKHOUSE_REVIEW=0 turns it off.
 const REVIEW = process.env.BRICKHOUSE_REVIEW === '0' ? null : { model: process.env.BRICKHOUSE_REVIEW_MODEL || SITE_MODEL, effort: 'high' };
+// every finished design waits for the admin's approval before its owner sees it (BRICKHOUSE_HOLD_FOR_REVIEW=0 turns it off)
+const HOLD = process.env.BRICKHOUSE_HOLD_FOR_REVIEW !== '0';
+const REVISE_BUDGET_USD = 5; // one requested change
 const BUDGET_USD = process.env.BRICKHOUSE_DESIGN_BUDGET_USD !== undefined ? Number(process.env.BRICKHOUSE_DESIGN_BUDGET_USD) || null : 15;
 const FAKE = process.env.BRICKHOUSE_FAKE === '1';
 const MAX_BODY = 40 * 1024 * 1024;
@@ -216,6 +220,29 @@ async function runFix(p, emit) {
   finishDesign(out, p, emit, t0);
 }
 
+// The pieces the admin clicked, by the ops that made them, for the change they ask for (prompt.js reviseTask).
+// Part ids are the engine's, from compiling the same design the admin's viewer compiled.
+function selectionOf(design, ids) {
+  const { compile } = require('../engine/engine.js');
+  const want = new Set((Array.isArray(ids) ? ids : []).slice(0, 3000).map(Number).filter(Number.isInteger)), r = compile(design), byOp = new Map();
+  for (const p of r.parts) if (want.has(p.id) && Number.isInteger(p.op)) { if (!byOp.has(p.op)) byOp.set(p.op, []); byOp.get(p.op).push(p); }
+  return [...byOp].map(([op, ps]) => { const o = design.ops[op] || {};
+    return { op, kind: o.op || 'op', phase: o.phase || '', note: o.note || '', count: ps.length, of: r.parts.filter((q) => q.op === op).length,
+      parts: ps.slice(0, 12).map((p) => ({ name: p.name, color: p.color, at: [p.x, p.y, p.z] })) }; });
+}
+
+// A change the admin asked for on a finished design (jobs.js revise): Claude edits it from the one it has.
+async function runRevise(p, emit) {
+  const client = makeClient(), t0 = Date.now();
+  if (!client) throw new Error(NO_KEY);
+  const renderer = await getRenderer();
+  const out = await designHouse({ client, model: MODEL, effort: EFFORT, photos: p.photos, notes: p.notes, target: p.target, plate: p.plate, mode: 'fix', design: p.design,
+    task: reviseTask({ design: p.design, note: p.note, selection: p.selection || [] }), render: renderer && renderer.render, supplier: SUPPLIER,
+    ftPerStud: p.design && p.design.stud, budgetUsd: REVISE_BUDGET_USD, onEvent: emit });
+  emit({ type: 'cost', usd: out.costUsd });
+  finishDesign(out, p, emit, t0);
+}
+
 // Design jobs, paid for through Stripe Checkout when STRIPE_SECRET_KEY is set (see jobs.js).
 // Kits are made from GoBricks bricks (bought at Brickwith), so every customer design is held to what GoBricks makes;
 // BRICKHOUSE_SUPPLIER sets another ("" for LEGO availability). The scripted demo client's design isn't.
@@ -226,7 +253,7 @@ const JOBS = createJobs({
   dir: path.join(ROOT, 'designs/generated/jobs'),
   stripe: makeStripe({ secretKey: process.env.STRIPE_SECRET_KEY, ...(process.env.BRICKHOUSE_STRIPE_API ? { apiBase: process.env.BRICKHOUSE_STRIPE_API } : {}) }), // the override is for local tests
   feeCents: Number(process.env.BRICKHOUSE_DESIGN_FEE_CENTS || 1500), currency: process.env.BRICKHOUSE_CURRENCY || 'usd',
-  run: runDesign, fixRun: runFix,
+  run: runDesign, fixRun: runFix, reviseRun: runRevise, hold: HOLD,
   // the kit's price by baseplate: Mini (16), Classic (32) and Grand (48); unset means that size isn't on sale yet
   kitCents: (plate) => Number(process.env[`BRICKHOUSE_KIT_${sizeName(plate).toUpperCase()}_CENTS`]) || null,
   preview: makePreview,
@@ -446,7 +473,7 @@ async function handleAdmin(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/admin/logout') { res.setHeader('set-cookie', adminCookie(req, '', 0)); return send(res, 200, { ok: true }); }
   if (!isAdmin(req)) return send(res, 401, { error: 'Sign in first.' });
   if (req.method === 'GET' && url.pathname === '/admin/api/jobs') return send(res, 200, { jobs: JOBS.list(), supplier: SUPPLIER, mail: !!MAILER, payments: !!JOBS.fee, stock: !!QUOTER });
-  const m = /^\/admin\/api\/jobs\/([a-f0-9-]{36})\/(parts\.xml|fulfillment|retry|stock|site)$/.exec(url.pathname);
+  const m = /^\/admin\/api\/jobs\/([a-f0-9-]{36})\/(parts\.xml|fulfillment|retry|stock|site|revise|undo|approve)$/.exec(url.pathname);
   if (!m) return send(res, 404, { error: 'Not found' });
   const [, id, what] = m;
   if (req.method === 'GET' && what === 'parts.xml') {
@@ -466,6 +493,16 @@ async function handleAdmin(req, res, url) {
     const r = JOBS.setFulfillment(id, body); return send(res, r.code, r);
   }
   if (req.method === 'POST' && what === 'retry') { const r = JOBS.retry(id); return send(res, r.code, r); }
+  // the check before a design goes to its owner: ask for a change about the selected pieces, undo it, approve
+  if (req.method === 'POST' && what === 'revise') {
+    let body = {}; try { body = JSON.parse(await readBody(req)); } catch (e) { return send(res, 400, { error: e.message }); }
+    const j = JOBS.get(id, { full: true }), d = j && j.result && j.result.design;
+    if (!d) return send(res, 404, { error: 'No finished design.' });
+    const selection = selectionOf(d, body.parts);
+    const r = JOBS.revise(id, { note: body.note, selection, parts: selection.reduce((n, s) => n + s.count, 0) }); return send(res, r.code, r);
+  }
+  if (req.method === 'POST' && what === 'undo') { const r = JOBS.undo(id); return send(res, r.code, r); }
+  if (req.method === 'POST' && what === 'approve') { const r = JOBS.approve(id); return send(res, r.code, r); }
   if (req.method === 'POST' && what === 'stock') {
     if (!QUOTER) return send(res, 503, { error: 'GoBricks quotes are off on this server (BRICKHOUSE_GOBRICKS_QUOTES=0).' });
     const stock = await stockCheck(id);

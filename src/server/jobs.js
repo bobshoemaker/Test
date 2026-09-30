@@ -16,7 +16,9 @@ const MAX_RESUMES = 2; // times a job cut off by a restart is picked up again (a
 // preview(design): what a customer sees before ordering the kit (preview.js); the full design after.
 // notify(job, 'ready' | 'kit'): email the owner (mail.js), when the job has an email; never fails a job.
 // onKit(job): a kit order came in (the server checks the supplier's stock for it); never fails the order.
-function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, fixRun = null, now = () => Date.now(),
+// hold: every finished design waits for the admin's approval before its owner sees it (or gets its email);
+// meanwhile the admin can ask for changes in words (reviseRun), undo them, and approve.
+function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, fixRun = null, reviseRun = null, hold = false, now = () => Date.now(),
   kitCents = () => null, preview = null, notify = null, onKit = null }) {
   fs.mkdirSync(dir, { recursive: true });
   const jobs = new Map();
@@ -37,6 +39,9 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
   const shown = (design, full) => { if (!design || full || !preview) return design;
     if (!previews.has(design)) { try { previews.set(design, preview(design)); } catch (e) { previews.set(design, { preview: true, name: design.name, parts: [], steps: [], subs: [], stats: {}, errors: [], warnings: [] }); } }
     return previews.get(design); };
+  // held: finished under the hold (j.review) and not yet approved, so its owner sees it as still in progress. Designs
+  // finished before the hold was turned on (no j.review) stay as their owners have seen them.
+  const held = (j) => hold && !!j.review && !j.approved;
   const plateOf = (j) => (j.result && j.result.design && j.result.design.plate) || (j.params && j.params.plate) || 32;
 
   function emit(j, ev) {
@@ -57,9 +62,15 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     j.status = 'running'; save(j);
     fn(j.params, (ev) => emit(j, ev))
       .then(() => { j.status = 'done';
-        if (j.result && !j.readySent) { j.readySent = now(); tell(j, 'ready'); } // once: not again after a fix round
+        // after a revision the viewer shows what it ended on
+        if (j.revising && j.result) { j.draft = j.result.design; j.draftN = (j.draftN || 0) + 1; }
+        j.revising = null;
+        if (j.result && hold && !j.review && !j.approved && !j.readySent) j.review = { since: now() }; // waiting for the admin
+        if (j.result && !j.readySent && !held(j)) { j.readySent = now(); tell(j, 'ready'); } // once: not again after a fix round
         save(j); })
-      .catch((e) => { emit(j, { type: 'error', message: e && e.message ? e.message : String(e) }); j.status = 'error'; save(j); });
+      .catch((e) => { emit(j, { type: 'error', message: e && e.message ? e.message : String(e) }); j.revising = null;
+        // a revision that fails leaves the design as it was
+        j.status = j.result ? 'done' : 'error'; save(j); });
   }
 
   return {
@@ -131,7 +142,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       if (!j) return null;
       const d = (j.result && j.result.design) || j.draft || {};
       return { id: j.id, name: d.name || '', address: (j.params && j.params.address) || '', at: j.createdAt,
-        status: j.status === 'done' ? 'ready' : j.status === 'error' ? 'problem' : j.status === 'awaiting_payment' ? 'unpaid' : 'designing' };
+        status: j.status === 'done' && !held(j) ? 'ready' : j.status === 'error' ? 'problem' : j.status === 'awaiting_payment' ? 'unpaid' : 'designing' };
     },
 
     // For the admin page: every job, newest first, with what the owner needs to run the business.
@@ -146,6 +157,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
           part: parts.length ? `${parts[parts.length - 1].n} of ${parts[parts.length - 1].of}` : null, error: err ? err.message : null,
           pieces: j.result && j.result.stats ? j.result.stats.pieces : null, problems: j.result ? (j.result.errors || 0) + (j.result.warnings || 0) : null,
           paid: !!j.paid, kit: j.kit ? { at: j.kit.at, amount: j.kit.amount, currency: j.kit.currency, name: j.kit.name, email: j.kit.email, shipping: j.kit.shipping, test: !!j.kit.test } : null,
+          review: j.review || j.approved ? { approved: j.approved ? j.approved.at : null, since: j.review ? j.review.since : null, revisions: (j.revisions || []).length, revising: !!j.revising } : null,
           fulfillment: j.fulfillment || null, stock: j.stock || null, site: j.site ? { ftPerStud: j.site.ftPerStud, costUsd: j.site.costUsd, report: !!j.siteReport, needsCheck: !!(j.site.found && j.site.found.needsCheck) } : null });
       }
       return out.sort((a, b) => b.createdAt - a.createdAt);
@@ -212,7 +224,15 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       const j = load(id);
       if (!j) return null;
       const open = full || !!j.kit;
+      // held for the admin's check: its owner sees it still in progress ("review"), with no drafts or result
+      if (held(j) && !full && j.result) {
+        return { id: j.id, status: 'review', paid: !!j.paid || !feeOn, fixesLeft: MAX_FIXES - j.fixes, kit: null, kitCents: null, kitCurrency: currency,
+          photos: j.params && Array.isArray(j.params.photos) ? j.params.photos.length : 0,
+          events: j.events.slice(after).filter((e) => e.type === 'status' || e.type === 'part' || e.type === 'site'), next: j.events.length };
+      }
       return { id: j.id, status: j.status, paid: !!j.paid || !feeOn, fixesLeft: MAX_FIXES - j.fixes,
+        ...(full && (j.review || j.approved) ? { review: { approved: j.approved ? j.approved.at : null, revisions: (j.revisions || []).map(({ at, note, parts, costUsd, undone }) => ({ at, note, parts, costUsd, undone: !!undone })),
+          revising: j.revising || null, canUndo: (j.versions || []).length > 0 } } : {}),
         kit: j.kit ? { at: j.kit.at, test: !!j.kit.test } : null, kitCents: kitCents(plateOf(j)), kitCurrency: currency,
         photos: j.params && Array.isArray(j.params.photos) ? j.params.photos.length : 0,
         events: j.events.slice(after), next: j.events.length,
@@ -228,7 +248,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     async kit(id, { origin, session } = {}) {
       const j = load(id);
       if (!j) return { code: 404, error: 'No such job' };
-      if (j.status !== 'done' || !j.result) return { code: 409, error: 'The design is not finished yet.' };
+      if (j.status !== 'done' || !j.result || held(j)) return { code: 409, error: 'The design is not finished yet.' };
       if (j.kit) return { code: 200, ordered: true };
       if (!stripe) { j.kit = { at: now(), test: true }; save(j); ordered(j); return { code: 200, ordered: true, test: true }; }
       if (session) {
@@ -251,11 +271,53 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       return { code: 200, checkout: s.url };
     },
 
+    // The admin asks for a change in words, about the pieces they selected (selection: [{op, phase, kind, parts: [...]}]):
+    // the design is revised from the one it has, and the one it had is kept so the change can be undone.
+    revise(id, { note, selection = [], parts = 0 } = {}) {
+      const j = load(id);
+      if (!j || !reviseRun) return { code: 404, error: 'No such job' };
+      if (j.status !== 'done' || !j.result) return { code: 409, error: j.status === 'running' ? 'A change is already being made.' : 'The design is not finished yet.' };
+      note = String(note || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 1000);
+      if (!note) return { code: 400, error: 'Say what to change.' };
+      j.versions = j.versions || []; j.revisions = j.revisions || [];
+      j.versions.push({ at: now(), result: j.result });
+      const rev = { at: now(), note, parts: Number(parts) || 0 };
+      j.revisions.push(rev); j.revising = { at: rev.at, note };
+      emit(j, { type: 'status', message: `Making the change: ${note}` });
+      const design = j.result.design;
+      launch(j, (params, e) => reviseRun({ ...params, design, note, selection }, (ev) => { if (ev.type === 'cost') rev.costUsd = ev.usd; e(ev); }));
+      return { code: 200, status: j.status };
+    },
+
+    // Put back the design as it was before the last change.
+    undo(id) {
+      const j = load(id);
+      if (!j) return { code: 404, error: 'No such job' };
+      if (j.status !== 'done' || !(j.versions || []).length) return { code: 409, error: 'There is no change to undo.' };
+      j.result = j.versions.pop().result;
+      const last = [...(j.revisions || [])].reverse().find((r) => !r.undone); if (last) last.undone = now();
+      j.draft = j.result.design; j.draftN = (j.draftN || 0) + 1;
+      emit(j, { type: 'status', message: 'Undid the last change.' });
+      save(j);
+      return { code: 200, status: j.status };
+    },
+
+    // The admin approves the design: its owner sees it (and gets the "ready" email) from now on.
+    approve(id) {
+      const j = load(id);
+      if (!j) return { code: 404, error: 'No such job' };
+      if (j.status !== 'done' || !j.result) return { code: 409, error: 'The design is not finished yet.' };
+      if (!j.approved) j.approved = { at: now() };
+      if (!j.readySent) { j.readySent = now(); tell(j, 'ready'); }
+      save(j);
+      return { code: 200, approved: j.approved.at };
+    },
+
     // One more round on a finished paid job's design ("fix these"), limited per job.
     fix(id) {
       const j = load(id);
       if (!j || !fixRun) return { code: 404, error: 'No such job' };
-      if (j.status !== 'done' || !j.result) return { code: 409, error: 'The design is not finished yet.' };
+      if (j.status !== 'done' || !j.result || held(j)) return { code: 409, error: 'The design is not finished yet.' };
       if (j.fixes >= MAX_FIXES) return { code: 429, error: 'The fix rounds included with this design are used up.' };
       j.fixes++;
       const design = j.result.design;

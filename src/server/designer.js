@@ -279,6 +279,7 @@ async function callClaude(client, params, onEvent = () => {}) {
  * @param {object} [o.review] parts mode: {model, effort} of a photo review after the five parts: that model compares
  *                   renders of the model with the photos feature by feature, and the design applies its fixes (needs render)
  * @param {Array<string|null>} [o.views] which view each photo shows (views.js), for the review
+ * @param {string} [o.task]   mode 'fix': instructions in place of fixing the compile problems (reviseTask)
  * @param {number} [o.budgetUsd] stop when the API cost passes this (with spentUsd already spent before the
  *                   design loop, by the site step); the last compiled draft is kept
  */
@@ -286,7 +287,7 @@ async function designHouse({
   client, model, photos = [], plan = null, notes = '', target = 1200, mode = 'design', design = null,
   effort = null, maxRounds = 7, maxTokens = 64000, onEvent = () => {}, render = null, partsLimit = PARTS.length,
   lockFootprint = true, locked = null, planTools = null, seed = null, fromPart = 1, choices = null, plate = 32, supplier = null,
-  ftPerStud = null, siteImages = [], siteNote = '', budgetUsd = null, spentUsd = 0, review = null, views = [],
+  ftPerStud = null, siteImages = [], siteNote = '', budgetUsd = null, spentUsd = 0, review = null, views = [], task = null,
 }) {
   plate = scaleFor(plate).plate;
   // a scale fitted to this house: every draft carries it (the walls are locked at it); the size's own needs nothing
@@ -302,7 +303,8 @@ async function designHouse({
   (siteImages || []).forEach((im, i) => content.push({ type: 'text', text: `Map image ${i + 1}: ${im.caption || 'the house from above'}.` }, imageBlock(im)));
   if (mode === 'fix') {
     if (!isDesign(design)) throw new Error('Fix mode needs a design with phases and ops.');
-    content.push({ type: 'text', text: fixTask({ design, problems: problemList(compile(design)) }) });
+    // task: other instructions for the finished design (an admin's requested change, reviseTask), in place of fixTask
+    content.push({ type: 'text', text: task || fixTask({ design, problems: problemList(compile(design)) }) });
   } else {
     if (!photos.length && !notes) throw new Error('Add at least one photo or a description.');
     content.push({ type: 'text', text: (mode === 'parts' ? partsTask : designTask)({ photoCount: photos.length, notes, target, hasPlan: !!plan, locked, lockedOps, seed: fromPart > 1 ? seed : null, fromPart, choices, plate,
@@ -326,7 +328,7 @@ async function designHouse({
     for (let r = 0; r < limit; r++) {
       st.rounds++;
       onEvent({ type: 'status', message: st.rounds === 1
-        ? (mode === 'fix' ? 'Claude is fixing the design…' : 'Claude is studying the photos…')
+        ? (mode === 'fix' ? (task ? 'Claude is making the change…' : 'Claude is fixing the design…') : 'Claude is studying the photos…')
         : `Claude is ${r === 0 ? 'starting' : 'revising'} ${part ? part.toLowerCase() : 'the design'} (round ${st.rounds})…` });
       const msg = await callClaude(client, { ...params, messages }, onEvent);
       addUsage(usage, msg);

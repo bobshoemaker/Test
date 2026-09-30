@@ -137,6 +137,8 @@ base.position.set(0,-0.07,0); base.receiveShadow=true; scene.add(base);
 let R=null, root=null, inst=[], specials=[], studs=null, studRecs=[], meshes=[], recOf=new Map(), studsOf=new Map();
 const anims=new Map(); // part id -> {t0, dur, from, to, spin, ease, hideBefore, shrink}: bricks in motion
 let stepIdx=0, showAll=true, stress=false, mode='main', lifted=0; // lift-off groups taken off, top first
+// the admin's check of a held design: part ids tapped in the model (reviewing turns the tapping on)
+const picked=new Set(), PICK_HEX='#19A7F0'; let reviewing=null;
 let DESIGN_TEXT='';
 
 function strengthHex(p){ if(!R.jn.has(p.id)) return COLORS[p.color].hex; const area=p.shape==='arch'?4:p.w*p.d; const r=R.jn.get(p.id)/area; return r<0.5?'#D64B34':r<1?'#E8A93A':'#3E9E68'; }
@@ -169,7 +171,7 @@ function buildScene(){
     } else if(p.shape==='leaves'||p.shape==='sprig'||p.shape==='flower'||p.shape==='swordleaf'){
       tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,0,0); tmp.updateMatrix();
       const geo=foliageGeo(p), r={p,m:tmp.matrix.clone()}; if(!fol.has(geo)) fol.set(geo,{O:[],T:[]}); fol.get(geo).O.push(r); inst.push(r); recOf.set(p.id,r);
-    } else { const sp=makeSpecial(p); sp.pos0=sp.obj.position.clone(); sp.rot0=sp.obj.rotation.y; specials.push(sp); recOf.set(p.id,sp); }
+    } else { const sp=makeSpecial(p); sp.pos0=sp.obj.position.clone(); sp.rot0=sp.obj.rotation.y; sp.obj.userData.part=p; specials.push(sp); recOf.set(p.id,sp); }
   }
   makeInstanced(boxGeo,matO,boxO,true); makeInstanced(boxGeo,matT,boxT,false); makeInstanced(cheeseGeo,matW,ch,true); makeInstanced(cylGeo,matO,cyl,true);
   for(const [geo,{O,T}] of fol){ if(O.length) makeInstanced(geo,matW,O,true); if(T.length) makeInstanced(geo,matTW,T,false); }
@@ -225,6 +227,7 @@ function partState(p){
   const v=p.mainStep!==undefined&&p.mainStep<=stepIdx; return [v,v&&p.mainStep===stepIdx];
 }
 function colorFor(p,cur){
+  if(picked.has(p.id)) return col.copy(lin(PICK_HEX)); // selected in the admin's check
   col.copy(lin(stress?strengthHex(p):COLORS[p.color].hex));
   if(!showAll&&!cur&&!HERO) col.lerp(stageLin,0.42); // (the landing page's build keeps its colors)
   return col;
@@ -583,7 +586,7 @@ $('stress').onchange=e=>{ stress=e.target.checked; applyState(); };
 let curDesign=null;
 function esc(t){ return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function showDesign(d){
-  const first=!curDesign; curDesign=d; base.visible=true; R=d.preview?previewR(d):compile(d); lifted=0; $('lift').hidden=!(R.stats.liftoff&&R.stats.liftoff.length); $('lift').textContent=liftLabel(); $('lift').setAttribute('aria-pressed','false'); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,R.stats.baseThick?PH/0.14:1,PLATE/32); base.position.y=R.stats.baseThick?-PH/2:-0.07; base.material.color.copy(lin(COLORS[R.stats.baseColor||'Green'].hex)); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
+  const first=!curDesign; curDesign=d; picked.clear(); if(reviewing) renderPicked(); base.visible=true; R=d.preview?previewR(d):compile(d); lifted=0; $('lift').hidden=!(R.stats.liftoff&&R.stats.liftoff.length); $('lift').textContent=liftLabel(); $('lift').setAttribute('aria-pressed','false'); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,R.stats.baseThick?PH/0.14:1,PLATE/32); base.position.y=R.stats.baseThick?-PH/2:-0.07; base.material.color.copy(lin(COLORS[R.stats.baseColor||'Green'].hex)); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
   buildScene(); renderReport(); renderParts(); renderStep(); frame();
   $('title').textContent=d.name||'Brick house'; document.title=(d.name||'Brick house')+', brick model';
   $('subline').textContent=(d.place?d.place+'. ':'')+(d.unit?`Unit ${d.unit}, cut from its building. `:'')+'A brick model with a step-by-step building guide.';
@@ -839,10 +842,15 @@ function watchJob(id,keep){
   if(!$('sent').hidden) $('subStatus').textContent='Studying your photos…';
   pollJob();
 }
-async function pollJob(){
+// one polling loop at a time: kickPoll starts a new one (after the admin asks for a change) and the old one stops
+let pollGen=0;
+function kickPoll(){ pollGen++; pollJob(pollGen); }
+async function pollJob(gen=pollGen){
+  if(gen!==pollGen) return;
   let j;
   try{ const r=await fetch(`/api/jobs/${jobId}?after=${jobAfter}&have=${jobHave}`); j=await r.json(); if(!r.ok) throw new Error(j.error||`Server error ${r.status}`); }
-  catch(e){ if(!curDesign) loadSample(); status(DEV?esc(e.message):'Reconnecting… your design keeps going on our side.',DEV); setTimeout(pollJob,5000); return; } // a restart or a dropped connection
+  catch(e){ if(!curDesign) loadSample(); status(DEV?esc(e.message):'Reconnecting… your design keeps going on our side.',DEV); setTimeout(()=>pollJob(gen),5000); return; } // a restart or a dropped connection
+  if(gen!==pollGen) return;
   kitInfo={kit:j.kit,kitCents:j.kitCents,kitCurrency:j.kitCurrency}; if(R) refreshOrderUI();
   // no draft of theirs yet: the page after Design (opened from its link too)
   if(!j.draft&&!ownShown&&!['done','awaiting_payment'].includes(j.status)&&$('sent').hidden) showSent(j.photos);
@@ -854,11 +862,14 @@ async function pollJob(){
   for(const ev of j.events) handleEvent(ev.type==='done'&&j.result?j.result:ev,jobT0);
   jobAfter=j.next;
   if(!curDesign) loadSample(); // nothing of theirs to show yet: the sample for the Model tab
+  renderReview(j.review||null,j.status); // the admin's check (only the admin's view carries it)
   if(j.status==='awaiting_payment'){ status(`This design is waiting for its design fee.`); setBusy(false); return; }
+  // finished, and being checked by our team before its owner sees it (jobs.js hold): look again now and then
+  if(j.status==='review'){ status('Your design is done, and our team is checking it against your photos. We\'ll show it to you here as soon as it\'s approved.'); $('subBar').style.width='95%'; setBusy(false); setTimeout(()=>pollJob(gen),20000); return; }
   // cut off by a restart: the server picks it up again at the part it was on (jobs.resumeInterrupted)
-  if(j.status==='interrupted'){ status('Picking your design up where it left off…'); setTimeout(pollJob,4000); return; }
+  if(j.status==='interrupted'){ status('Picking your design up where it left off…'); setTimeout(()=>pollJob(gen),4000); return; }
   if(j.status==='done'||j.status==='error'){ setBusy(false); return; }
-  setTimeout(pollJob,2000);
+  setTimeout(()=>pollJob(gen),2000);
 }
 // what comes after each step of finding and mapping the house (site events arrive as each step finishes)
 const SITE_NEXT={candidates:'Finding your house on the map…',pick:'Checking the lot…',records:'Mapping your house from above…',map:'Fitting your house to the baseplate…',fit:'Designing your house…'};
@@ -884,6 +895,54 @@ function handleEvent(ev,t0){
   else if(ev.type==='error') status(esc(ev.message),true);
 }
 $('designBtn').onclick=()=>askServer('design');
+
+// ---------- the admin's check before a design goes to its owner: tap bricks, ask for a change, undo, approve ----------
+const ray=new THREE.Raycaster(), ndc=new THREE.Vector2(); let tapAt=null;
+canvas.addEventListener('pointerdown',e=>{ tapAt=reviewing?{x:e.clientX,y:e.clientY,t:performance.now()}:null; });
+canvas.addEventListener('pointerup',e=>{ const t=tapAt; tapAt=null; if(!t||!reviewing||!R||R.preview||mode!=='main') return;
+  if(Math.hypot(e.clientX-t.x,e.clientY-t.y)>6||performance.now()-t.t>600) return; // a drag turns the model
+  const b=canvas.getBoundingClientRect(); ndc.set((e.clientX-b.left)/b.width*2-1,-((e.clientY-b.top)/b.height)*2+1);
+  ray.setFromCamera(ndc,camera);
+  for(const h of ray.intersectObjects(root.children,true)){
+    let p=null;
+    if(h.object.userData.recs&&h.instanceId!=null){ const r=h.object.userData.recs[h.instanceId]; p=r&&r.p; }
+    else { let o=h.object; while(o&&!o.userData.part) o=o.parent; p=o&&o.userData.part; }
+    if(!p||!p._v) continue; // studs and hidden pieces: look further along the ray
+    if(picked.has(p.id)) picked.delete(p.id); else picked.add(p.id);
+    applyState(); renderPicked(); return; } });
+// what's selected, by the part of the design that made it
+function renderPicked(){
+  const el=$('revSel'); if(!el||!reviewing) return;
+  if(!R||!picked.size){ el.innerHTML='<span class="note" style="margin:0">Nothing selected: the change is about the whole model.</span>'; return; }
+  const by=new Map(); for(const p of R.parts) if(picked.has(p.id)){ if(!by.has(p.op)) by.set(p.op,[]); by.get(p.op).push(p); }
+  el.innerHTML=[...by].map(([op,ps])=>{ const o=((curDesign&&curDesign.ops)||[])[op]||{}, all=R.parts.filter(q=>q.op===op).length;
+    return `<span class="chip"><b>${esc(o.phase||'Part')}</b> ${esc(o.op||'')}, ${ps.length} of ${all} <button class="btn sm" data-op="${op}" type="button">${ps.length<all?'Select all':'Drop'}</button></span>`; }).join('')
+    +' <button class="btn sm" id="revClear" type="button">Clear</button>';
+  el.querySelectorAll('[data-op]').forEach(b=>b.onclick=()=>{ const op=+b.dataset.op, ps=R.parts.filter(q=>q.op===op), all=ps.every(q=>picked.has(q.id));
+    ps.forEach(q=>all?picked.delete(q.id):picked.add(q.id)); applyState(); renderPicked(); });
+  $('revClear').onclick=()=>{ picked.clear(); applyState(); renderPicked(); };
+}
+function renderReview(rv,st){
+  const was=!!reviewing; reviewing=rv; $('review').hidden=!rv;
+  if(!rv){ if(was){ picked.clear(); applyState(); } return; }
+  const busy=st==='running';
+  $('revState').textContent=rv.approved?`Approved ${new Date(rv.approved).toLocaleString()}: the customer can see it.`:'Waiting for your check: the customer can\'t see it yet.';
+  $('revSend').disabled=busy; $('revUndo').disabled=busy||!rv.canUndo; $('revApprove').hidden=!!rv.approved; $('revApprove').disabled=busy;
+  if(busy&&rv.revising) $('revBusy').textContent=`Making the change: "${rv.revising.note}". This takes a few minutes.`;
+  else if(/^Making the change/.test($('revBusy').textContent)) $('revBusy').textContent='';
+  $('revLog').innerHTML=(rv.revisions||[]).map(r=>`<li class="${r.undone?'undone':''}">${esc(r.note)}${r.parts?` (${r.parts} piece${r.parts===1?'':'s'} selected)`:''}${r.costUsd!=null?`, $${Number(r.costUsd).toFixed(2)}`:''}</li>`).join('');
+  if(!was) renderPicked();
+}
+async function adminPost(what,body){
+  const r=await fetch(`/admin/api/jobs/${jobId}/${what}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body||{})}), j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||`Server error ${r.status}`); return j; }
+$('revSend').onclick=async()=>{ const note=$('revNote').value.trim();
+  if(!note){ $('revBusy').textContent='Say what to change first.'; $('revNote').focus(); return; }
+  $('revSend').disabled=true;
+  try{ await adminPost('revise',{note,parts:[...picked]}); $('revNote').value=''; picked.clear(); applyState(); renderPicked(); kickPoll(); }
+  catch(e){ $('revBusy').textContent=e.message; $('revSend').disabled=false; } };
+$('revUndo').onclick=async()=>{ try{ await adminPost('undo'); kickPoll(); }catch(e){ $('revBusy').textContent=e.message; } };
+$('revApprove').onclick=async()=>{ try{ await adminPost('approve'); $('revBusy').textContent='Approved: the customer can see it now.'; kickPoll(); }catch(e){ $('revBusy').textContent=e.message; } };
 
 // ---------- survey: POST /api/survey, a quick first look that asks about what the photos leave open ----------
 function renderSurvey(sv){
