@@ -185,3 +185,26 @@ test('streets come from Census TIGER: named, nearest first, the pieces of a stre
   assert.ok(sameStreet('East Brisbane Street', 'brisbane street') && sameStreet('E Brisbane St', 'Brisbane St'));
   assert.ok(!sameStreet('E Andre St', 'Brisbane St'));
 });
+
+test('an upper floor that juts out over the garage is its own floor, at least a stud out, and mapped walls bend a stud', () => {
+  const { skeletonOps, checkFootprint } = require('../src/server/footprint');
+  const { plan: p } = cleanPlan({ blocks: [{ name: 'Garage wing', stories: 2, rects: [[36, 0, 54, 46]], upperRects: [[36, -1.5, 54, 46]], roof: 'shed' }, { name: 'House', stories: 1, rects: [[0, 1, 36, 37]] }],
+    openings: [{ block: 'Garage wing', kind: 'garage door', at: [45, 0], widthFt: 16 }], site: {} });
+  const fit = fitPlan(p, { plate: 32, lotRect: LOT }), locked = lockPlan(p, fit);
+  const ground = locked.blocks.find((b) => b.name === 'Garage wing'), upper = locked.blocks.find((b) => b.name === 'Garage wing (upper floor)');
+  assert.deepEqual([ground.levels, upper.floor, upper.levels], [1, 2, 1]);
+  assert.equal(upper.cellRects[0][3], ground.cellRects[0][3] + 1); // 1.5 ft is under a stud here: shown as one
+  assert.deepEqual(ground.openings.map((o) => o.kind), ['garage door']);
+  const ops = skeletonOps(locked), up = ops.find((o) => o.block === upper.name);
+  assert.equal(up.slab, true);
+  assert.deepEqual(checkFootprint({ ops }, locked), []);
+  const shift = (dx) => { const o = JSON.parse(JSON.stringify(ops)); o[0].segments = o[0].segments.map((sg) => sg.map((v, i) => (i % 2 ? v : v + dx))); return o; };
+  assert.deepEqual(checkFootprint({ ops: shift(1) }, locked).filter((x) => /walls must keep/.test(x)), []);
+  assert.match(checkFootprint({ ops: shift(3) }, locked).join(' '), /must keep the locked segments \(within 1 stud\)/);
+  // a door may slide two studs along its wall, not more
+  const door = JSON.parse(JSON.stringify(ops)), g = door.find((o) => o.block === 'Garage wing').openings[0];
+  g.cells = [g.cells[0] - 2, g.cells[1], g.cells[2] - 2, g.cells[3]];
+  assert.deepEqual(checkFootprint({ ops: door }, locked), []);
+  g.cells = [g.cells[0] - 3, g.cells[1], g.cells[2] - 3, g.cells[3]];
+  assert.match(checkFootprint({ ops: door }, locked).join(' '), /or slide it up to 2 studs/);
+});

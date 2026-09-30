@@ -17,6 +17,8 @@
 //            --no-site  skip the aerial mapping; lock the walls to the building outline instead, when there is one
 //            --budget 15  stop at this many dollars of API time (site step included), keeping the last draft
 //            --require-site  stop if the aerial mapping fails, instead of designing from the outline or the photos
+//            --review-model <model>  who checks the finished parts against the photos (default: the site model)
+//            --no-review  skip that photo review
 //            --front-street "Wood Terrace"  on a corner lot, the street that goes at the front (z = 31)
 //            --plate 48  the Grand: 48 x 48 baseplate at 1.5 ft per stud, about 2,400 pieces
 //            --plate 16  the Mini: 16 x 16 plate at 4 ft per stud, about 250 to 450 pieces
@@ -40,8 +42,8 @@ const choicesFile = opt('choices', null), answerArgs = [];
 for (let i; (i = args.indexOf('--answer')) >= 0;) answerArgs.push(args.splice(i, 2)[1]);
 const resumeFile = opt('resume', null), fromPart = Number(opt('from-part', resumeFile ? 2 : 1));
 const views = String(opt('views', '')).split(',').map((v) => v.trim() || null), siteModel = opt('site-model', process.env.BRICKHOUSE_SITE_MODEL || null);
-const budget = Number(opt('budget', 0)) || null;
-const fake = flag('fake'), parts = flag('parts'), noRender = flag('no-render'), noFootprint = flag('no-footprint'), noSite = flag('no-site'), requireSite = flag('require-site');
+const budget = Number(opt('budget', 0)) || null, reviewModel = opt('review-model', null);
+const fake = flag('fake'), parts = flag('parts'), noRender = flag('no-render'), noFootprint = flag('no-footprint'), noSite = flag('no-site'), requireSite = flag('require-site'), noReview = flag('no-review');
 const types = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' };
 const readImage = (f) => {
   const t = types[path.extname(f).toLowerCase()]; if (!t) throw new Error(`Unsupported image type: ${f}`);
@@ -110,7 +112,8 @@ const photos = args.map(readImage), plan = planFile ? readImage(planFile) : null
     render: renderer && renderer.render, planTools: renderer, lockFootprint: !noFootprint, locked,
     seed: resumeFile ? JSON.parse(fs.readFileSync(resumeFile, 'utf8')) : null, fromPart, choices,
     ...(prep.site && !footprintFile ? { ftPerStud: prep.site.ftPerStud, siteImages: prep.site.images, siteNote: prep.site.note } : {}),
-    budgetUsd: budget, spentUsd: prep.site ? prep.site.costUsd : 0,
+    budgetUsd: budget, spentUsd: prep.site ? prep.site.costUsd : 0, views,
+    review: parts && !noReview && !fake ? { model: reviewModel || siteModel || model, effort: 'high' } : null,
     onEvent: (ev) => {
       if (ev.type === 'footprint') {
         console.log(`${clock()}   footprint ${ev.n}: scale ${ev.locked.scale ? ev.locked.scale.pxPerFt + ' px per ft' : 'unknown'}, street on the ${ev.locked.street || '?'} side of the plan`);
@@ -134,6 +137,14 @@ const photos = args.map(readImage), plan = planFile ? readImage(planFile) : null
         const views = ['front', 'three-quarter', 'back-left', 'back-right'];
         (ev.renders || []).forEach((r, i) => fs.writeFileSync(`${base}.draft-${ev.n}-${views[i] || i}.png`, Buffer.from(r.data, 'base64')));
         if ((ev.renders || []).length) console.log(`${clock()}   renders -> ${base}.draft-${ev.n}-{${views.slice(0, ev.renders.length).join(',')}}.png`);
+      }
+      if (ev.type === 'review') {
+        console.log(`${clock()} Photo review ($${ev.usd.toFixed(2)}): ${ev.fixes.length} fixes`);
+        ev.fixes.forEach((f, i) => console.log(`${clock()}   ${i + 1}. [${f.feature}] ${f.problem} -> ${f.fix}`));
+        const views = ['front', 'three-quarter', 'back-left', 'back-right'];
+        (ev.renders || []).forEach((r, i) => fs.writeFileSync(`${base}.review-${views[i] || i}.png`, Buffer.from(r.data, 'base64')));
+        run.review = { matches: ev.matches, fixes: ev.fixes, usd: ev.usd, thoughts: ev.thoughts, draftsBefore: run.drafts.length };
+        saveRun();
       }
       if (ev.type === 'partDone') {
         const usd = require('../src/server/cost').costOf(ev.usage, model);

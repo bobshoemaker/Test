@@ -4,7 +4,9 @@
 // out in studs (footprint.js) and every compile checks the design's walls against it.
 const { compile } = require('../engine/engine.js');
 const { SPEC, designTask, fixTask, partsTask, PARTS, FOOTPRINT_SPEC, FOOTPRINT_TOOL, footprintTask,
-  SURVEY_SPEC, SURVEY_TOOL, surveyTask, PHOTO_CHECK_SPEC, PHOTO_CHECK_TOOL, photoCheckTask, LANDSCAPE_STYLES } = require('./prompt');
+  SURVEY_SPEC, SURVEY_TOOL, surveyTask, PHOTO_CHECK_SPEC, PHOTO_CHECK_TOOL, photoCheckTask, LANDSCAPE_STYLES,
+  REVIEW_SPEC, REVIEW_TOOL, reviewTask, reviewFixTask } = require('./prompt');
+const { photoList } = require('./views');
 const { layoutFootprint, skeletonOps, checkFootprint, describeLayout } = require('./footprint');
 const { scaleFor } = require('./scale');
 const { costOf } = require('./cost');
@@ -274,6 +276,9 @@ async function callClaude(client, params, onEvent = () => {}) {
  * @param {number} [o.ftPerStud] the scale the site step fitted for this house (site.js); drafts get it as "stud"
  * @param {Array<{mediaType,data,caption}>} [o.siteImages] the site step's map images, sent after the photos
  * @param {string} [o.siteNote] the site step's lot in studs and how the house was read (site.js)
+ * @param {object} [o.review] parts mode: {model, effort} of a photo review after the five parts: that model compares
+ *                   renders of the model with the photos feature by feature, and the design applies its fixes (needs render)
+ * @param {Array<string|null>} [o.views] which view each photo shows (views.js), for the review
  * @param {number} [o.budgetUsd] stop when the API cost passes this (with spentUsd already spent before the
  *                   design loop, by the site step); the last compiled draft is kept
  */
@@ -281,7 +286,7 @@ async function designHouse({
   client, model, photos = [], plan = null, notes = '', target = 1200, mode = 'design', design = null,
   effort = null, maxRounds = 7, maxTokens = 64000, onEvent = () => {}, render = null, partsLimit = PARTS.length,
   lockFootprint = true, locked = null, planTools = null, seed = null, fromPart = 1, choices = null, plate = 32, supplier = null,
-  ftPerStud = null, siteImages = [], siteNote = '', budgetUsd = null, spentUsd = 0,
+  ftPerStud = null, siteImages = [], siteNote = '', budgetUsd = null, spentUsd = 0, review = null, views = [],
 }) {
   plate = scaleFor(plate).plate;
   // a scale fitted to this house: every draft carries it (the walls are locked at it); the size's own needs nothing
@@ -306,7 +311,9 @@ async function designHouse({
   }
   const messages = [{ role: 'user', content }];
   const st = { lastDraft: mode === 'parts' && fromPart > 1 ? seed : null, compiles: 0, rounds: 0, stopped: null };
-  const spent = () => spentUsd + costOf(usage, model);
+  const reviewUsage = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
+  let reviewModel = review && review.model;
+  const spent = () => spentUsd + costOf(usage, model) + (reviewModel ? costOf(reviewUsage, reviewModel) : 0);
   // max_tokens includes thinking, which runs long at xhigh and max. Automatic caching moves the
   // breakpoint to the end of each request, so every round reads the photos and earlier drafts from cache.
   // Summarized thinking lets the progress events show what Claude is working on.
@@ -391,7 +398,8 @@ async function designHouse({
     final.source = 'photos';
     if (supplier) final.supplier = supplier;
     if (stud) final.stud = stud;
-    return { design: final, result: compile(final), planProblems: checkFootprint(final, locked), locked, compiles: st.compiles, rounds: st.rounds, usage, costUsd: costOf(usage, model),
+    return { design: final, result: compile(final), planProblems: checkFootprint(final, locked), locked, compiles: st.compiles, rounds: st.rounds, usage,
+      costUsd: costOf(usage, model) + (st.review ? st.review.usd : 0), ...(st.review ? { review: st.review } : {}),
       ...(st.stopped || note ? { note: st.stopped || note } : {}) };
   }
 
@@ -420,6 +428,40 @@ async function designHouse({
   // converges to 0 errors and 0 warnings instead of stopping short.
   // the design finish() would return: one in the reply's text, or else the last compiled draft
   const current = () => { const d = msg ? extractJson(msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n')) : null; const c = isDesign(d) ? d : st.lastDraft; if (c && supplier) c.supplier = supplier; return c; };
+  // The photo review: a (stronger) model looks at renders of the finished parts next to the photos and lists what
+  // differs; the design applies the fixes before the repair rounds make it clean again.
+  if (review && render && count === PARTS.length && current() && !st.stopped) {
+    onEvent({ type: 'part', n: PARTS.length, of: PARTS.length, name: 'Photo review' });
+    let renders = [];
+    try { renders = await render(current()); } catch (e) { onEvent({ type: 'status', message: `Rendering for the review failed: ${e.message}` }); }
+    if (renders.length) {
+      const d = current(), params = () => ({ model: reviewModel, max_tokens: 32000, system: REVIEW_SPEC, tools: [REVIEW_TOOL], thinking: { type: 'adaptive', display: 'summarized' },
+        output_config: { effort: review.effort || 'high' }, messages: [{ role: 'user', content: [...photos.map(imageBlock), ...renders.map((r) => imageBlock({ mediaType: 'image/png', data: r.data })),
+          { type: 'text', text: reviewTask({ photoList: photoList(photos.length, views), ftPerStud: stud || scaleFor(plate).ftPerStud, notes: (d.facts || []).join('; ') }) }] }] });
+      const thoughts = [], ev = (e) => { if (e.type === 'thought') thoughts.push(e.text); onEvent(e); };
+      let rmsg = null;
+      try { rmsg = await callClaude(client, params(), ev); } catch (e) {
+        // the stronger model may not be open to this account: review with the design's model instead
+        if (reviewModel !== model && [400, 403, 404].includes(e.status)) { onEvent({ type: 'status', message: `The review model is not available (${e.status}); reviewing with the design model.` }); reviewModel = model; rmsg = await callClaude(client, params(), ev); } else onEvent({ type: 'status', message: `The photo review failed: ${e.message}` });
+      }
+      if (rmsg) {
+        addUsage(reviewUsage, rmsg);
+        const use = (rmsg.content || []).find((b) => b.type === 'tool_use' && b.name === REVIEW_TOOL.name), inp = (use && use.input) || {};
+        const str = (v, n) => String(v == null ? '' : v).slice(0, n);
+        const fixes = (Array.isArray(inp.fixes) ? inp.fixes : []).slice(0, 8).map((f) => ({ feature: str(f.feature, 20), photo: Math.round(Number(f.photo)) || null, problem: str(f.problem, 400), fix: str(f.fix, 400) })).filter((f) => f.problem && f.fix);
+        st.review = { model: reviewModel, matches: (Array.isArray(inp.matches) ? inp.matches : []).slice(0, 12).map((m) => str(m, 300)), fixes, thoughts, usd: costOf(reviewUsage, reviewModel),
+          renders: renders.map((r) => ({ label: r.label, data: r.data })) };
+        onEvent({ type: 'review', matches: st.review.matches, fixes, usd: st.review.usd, thoughts, renders: st.review.renders });
+        if (fixes.length && !(budgetUsd && spent() > budgetUsd)) {
+          const text = reviewFixTask(fixes), last = messages[messages.length - 1];
+          if (last.role === 'user') last.content.push({ type: 'text', text }); else messages.push({ role: 'user', content: [{ type: 'text', text }] });
+          const m2 = await turns(4, 'the photo review');
+          if (m2 || !st.stopped) msg = m2;
+          st.review.after = st.lastDraft ? compile(st.lastDraft).stats.pieces : null;
+        }
+      }
+    }
+  }
   if (count === PARTS.length && current() && !st.stopped) {
     for (let k = 0; k < REPAIR_TURNS && !st.stopped; k++) {
       const d = current(), res = compile(d), plan = checkFootprint(d, locked);

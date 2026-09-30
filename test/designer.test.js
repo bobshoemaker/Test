@@ -235,3 +235,30 @@ test('a design stops at its cost limit and keeps the last compiled draft', async
   assert.match(out.note, /Stopped at the cost limit \(\$3\.80 of \$2\)/);
   assert.equal(out.compiles, 1);
 });
+
+test('after the five parts a photo review compares renders with the photos, and the design applies its fixes', async () => {
+  const client = makeFakeClient({ delayMs: 0 });
+  const create = client.messages.create.bind(client.messages), sent = [];
+  client.messages.create = async (params) => {
+    if (params.tools[0].name === 'submit_review') {
+      sent.push(params);
+      return { role: 'assistant', stop_reason: 'tool_use', usage: { input_tokens: 1000, output_tokens: 1000 }, content: [{ type: 'tool_use', id: 'r1', name: 'submit_review',
+        input: { matches: ['two stories on the right'], fixes: [{ feature: 'massing', photo: 2, problem: 'The upper floor sits flush over the garage.', fix: 'Make it jut one stud past the garage door on its own slab.' }] } }] };
+    }
+    sent.push(JSON.parse(JSON.stringify(params)));
+    return create(params);
+  };
+  const render = async () => ['front', 'three-quarter', 'back-left', 'back-right'].map((label) => ({ label, data: 'PNG' }));
+  const seen = [];
+  const out = await designHouse({ client, model: 'fake', mode: 'parts', photos: [{ mediaType: 'image/jpeg', data: 'AAAA' }], views: ['front'], render,
+    review: { model: 'claude-fable-5-1' }, onEvent: (ev) => seen.push(ev) });
+  const rv = sent.find((p) => p.tools[0].name === 'submit_review');
+  assert.equal(rv.model, 'claude-fable-5-1');
+  assert.equal(rv.messages[0].content.filter((b) => b.type === 'image').length, 5); // the photo and four renders
+  assert.match(rv.messages[0].content.at(-1).text, /photo 1 \(the front of the house, straight on\)/);
+  assert.ok(seen.some((e) => e.type === 'part' && e.name === 'Photo review'));
+  const after = sent[sent.indexOf(rv) + 1];
+  assert.match(JSON.stringify(after.messages.at(-1).content), /PHOTO REVIEW\. .*Make it jut one stud past the garage door on its own slab/);
+  assert.equal(out.review.fixes.length, 1);
+  assert.ok(out.review.usd > 0 && out.costUsd >= out.review.usd);
+});
