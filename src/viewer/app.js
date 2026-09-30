@@ -625,6 +625,7 @@ function status(html,err,plain){ if(err&&!plain&&!DEV&&TECHNICAL.test(html)) htm
   if(!$('sent').hidden&&html){ $('subStatus').innerHTML=html; $('subStatus').closest('li').classList.toggle('err',!!err); } }
 // A failed response as an Error; the photo check (422) says which photos to change, and marks them
 function failed(res,j){ const e=new Error(j.error||`Server error ${res.status}`);
+  if(j.field==='address'){ e.plain=true; addrStatus(esc(e.message),true); $('addrInput').focus(); return e; }
   if(res.status===422){ e.plain=true; flagPhotos((j.problems||[]).map(p=>p.photo)); } return e; }
 function flagPhotos(nums){ $('thumbs').querySelectorAll('img[data-i]').forEach(im=>im.closest('.shot').classList.toggle('flagged',nums.includes(+im.dataset.i+1))); }
 function setBusy(b){ $('planBtn').disabled=b; $('surveyBtn').disabled=b; $('designBtn').disabled=b; $('thumbs').querySelectorAll('button').forEach(x=>x.disabled=b); $('addrBtn').disabled=b; $('useCands').disabled=b; $('stopBtn').hidden=!b; $('compileBtn').disabled=b; $('revertBtn').disabled=b; }
@@ -721,10 +722,20 @@ $('photoInput').onchange=e=>{ const max=(health&&health.maxPhotos)||12, same=(a,
 // ---------- address lookup: POST /api/lookup, then pick candidate street photos ----------
 let cands=[];
 function addrStatus(html,err){ $('addrStatus').innerHTML=err?`<span class="status-err">${html}</span>`:html; }
+// the address is checked as the owner leaves the field: how we read it, or what's missing (the server checks again)
+let addrChecked='';
+async function checkAddr(){
+  const a=houseAddress()||''; if(a===addrChecked) return; addrChecked=a;
+  if(!a){ addrStatus(''); return; }
+  try{ const r=await fetch('/api/address',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({address:a})}), j=await r.json();
+    if(a!==addrChecked||!r.ok) return;
+    addrStatus(j.ok?(j.label?`Found: ${esc(j.label)}`:''):esc(j.message||'We couldn\'t find that address.'),!j.ok); }
+  catch(err){ /* offline: the server checks it when the design is sent */ } }
+$('addrInput').addEventListener('change',checkAddr);
 // The address goes with the design (the server finds the outline and slope then). The dev view can also
 // look for street photos of it (Mapillary, with MAPILLARY_TOKEN).
 $('addrForm').onsubmit=async e=>{
-  e.preventDefault(); const address=$('addrInput').value.trim(); if(!address||!DEV||$('addrBtn').hidden) return;
+  e.preventDefault(); const address=$('addrInput').value.trim(); if(!address||!DEV||$('addrBtn').hidden){ checkAddr(); return; }
   $('addrBtn').disabled=true; cands=[]; $('cands').innerHTML=''; $('candRow').hidden=true; addrStatus('Looking up the address…');
   try{
     const res=await fetch('/api/lookup',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({address})});

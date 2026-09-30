@@ -139,6 +139,20 @@ async function handleSurvey(req, res) {
   } catch (e) { send(res, 502, { error: e && e.message ? e.message : String(e) }); }
 }
 
+// POST /api/address {address}: whether it's a real street address, and how the lookup reads it ({ok, label?, message?}),
+// checked on the upload page as the owner leaves the field. BRICKHOUSE_ADDRESS_CHECK=0 turns the check off.
+const addressCheck = (a) => (process.env.BRICKHOUSE_ADDRESS_CHECK === '0' ? Promise.resolve({ ok: true, unchecked: true })
+  : require('./lookup').checkAddress(a).catch(() => ({ ok: true, unchecked: true })));
+async function handleAddress(req, res) {
+  let body;
+  try { body = JSON.parse(await readBody(req)); } catch (e) { return send(res, 400, { error: e.message }); }
+  const a = cleanAddress(body.address);
+  if (!a) return send(res, 200, { ok: false, message: 'Please enter the house\'s address.' });
+  if (limited(req, 'address', 60)) return send(res, 429, { error: 'Too many checks from here; try again in an hour.' });
+  const r = await addressCheck(a);
+  send(res, 200, { ok: r.ok, ...(r.label ? { label: r.label } : {}), ...(r.message ? { message: r.message } : {}) });
+}
+
 // A design request's parameters, cleaned: photos, notes, target, choices, credits, plan, address, plate.
 function parseDesignRequest(body) {
   const sc = scaleFor(body.plate);
@@ -261,7 +275,10 @@ async function handleJobs(req, res, url) {
       if (!FAKE && !anthropicKey()) return send(res, 503, { error: NO_KEY });
       if (limited(req, 'job', 20)) return send(res, 429, { error: 'Too many designs started from here; try again in an hour.' });
       const p = parseDesignRequest(JSON.parse(await readBody(req)));
-      if (!p.address) return send(res, 400, { error: 'Please enter the house\'s address.' });
+      if (!p.address) return send(res, 400, { error: 'Please enter the house\'s address.', field: 'address' });
+      // a real street address, before anything is saved or paid for (lookup.js checkAddress)
+      const addr = await addressCheck(p.address);
+      if (!addr.ok) return send(res, 422, { error: addr.message, field: 'address' });
       if (!p.photos.length && !p.notes) return send(res, 400, { error: 'Add at least one photo or a description.' });
       // Before anything is saved or paid for: the photos must show one home (photoVerdict in designer.js)
       const screen = await checkPhotos({ client: makeClient(), model: SURVEY_MODEL, photos: p.photos, plan: p.plan });
@@ -492,6 +509,7 @@ const server = http.createServer(async (req, res) => {
       return handleSurvey(req, res);
     }
     if (req.method === 'POST' && url.pathname === '/api/lookup') return handleLookup(req, res);
+    if (req.method === 'POST' && url.pathname === '/api/address') return handleAddress(req, res);
     if (req.method === 'POST' && url.pathname === '/api/mine') return handleMine(req, res);
     if (req.method === 'GET' && url.pathname === '/api/mine') return handleMineList(res, url.searchParams.get('token'));
     if (req.method === 'POST' && url.pathname === '/api/quote') return handleQuote(req, res);
