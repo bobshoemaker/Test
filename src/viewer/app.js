@@ -832,7 +832,7 @@ async function pollJob(){
   catch(e){ status(DEV?esc(e.message):'Reconnecting… your design keeps going on our side.',DEV); setTimeout(pollJob,5000); return; } // a restart or a dropped connection
   kitInfo={kit:j.kit,kitCents:j.kitCents,kitCurrency:j.kitCurrency}; if(R) refreshOrderUI();
   // no draft of theirs yet: the page after Design (opened from its link too)
-  if(!j.draft&&!ownShown&&!['done','error','awaiting_payment'].includes(j.status)&&$('sent').hidden) showSent(j.photos);
+  if(!j.draft&&!ownShown&&!['done','awaiting_payment'].includes(j.status)&&$('sent').hidden) showSent(j.photos);
   { const d=(j.result&&j.result.design)||j.draft; rememberDesign(jobId,d&&d.name,{status:j.status==='done'?'ready':j.status==='error'?'problem':'designing'}); }
   // the job's own photos beside the model, when this page didn't pick them (opened from the job's link)
   if(j.photos&&!photos.length&&!$('refPhotos').children.length){
