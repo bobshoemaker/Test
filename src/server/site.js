@@ -5,8 +5,10 @@
 //      domain, via USGS).
 //   2. The pick: Claude compares the owner's photos with the numbered buildings (and close-ups it asks for) and
 //      says which is the house, how sure it is, and why. Geocoders often land a few lots away; this doesn't.
-//   3. Records: where the county publishes them (LA County today), its sharper building outline replaces the
-//      national one and its parcel gives the lot line and the house's facts, and checks the pick's address.
+//   3. Records: the county's parcel (or address point) under the pick checks its address and overrides a wrong
+//      pick. Where a county's services are built in (LA County), its sharper outline replaces the national one and
+//      its parcel gives the house's facts too; anywhere else an agent finds the county's public parcel layer on the
+//      web while the pick runs (parcels.js, once per county, cached).
 //   4. The map: Claude (a stronger model when asked) splits the building into blocks by height and roof, places
 //      the garage and doors, and maps the lot (driveway, patios, trees, fences), on the aerial turned so the
 //      street is at the bottom with a grid in feet; each submission comes back drawn over the aerial.
@@ -20,6 +22,7 @@ const { scaleFor, sizeName } = require('./scale');
 const { PICK_SPEC, PICK_TOOLS, pickTask, SITE_SPEC, SITE_TOOL, siteTask } = require('./prompt');
 const { photoList } = require('./views');
 const { costOf, emptyUsage } = require('./cost');
+const { findParcelSource, recordAt } = require('./parcels');
 
 const UA = `Brickhouse/0.4 (site${process.env.BRICKHOUSE_CONTACT ? '; ' + process.env.BRICKHOUSE_CONTACT : ''})`;
 const FT = 0.3048;
@@ -157,6 +160,10 @@ function numberCandidates(all, { maxM = 110, max = 14 } = {}) {
 }
 
 async function parcelAt(ll, county, opts) {
+  if (county && county.found) { // a layer the parcel search found (parcels.js): its address, and its lot line if it has parcels
+    const r = await recordAt(county.found, ll, opts);
+    return r && (r.number || r.address) ? { apn: r.apn, address: r.address, number: r.number, street: r.street, ring: r.ring, source: r.source } : null;
+  }
   if (!county || !county.parcels) return null;
   const fs = await arcQuery(county.parcels.url, nearPoint(ll, 1), opts);
   const { toXY } = frame(ll);
@@ -660,7 +667,7 @@ async function studMap({ tools, locked, studs, toSite, fromSite, fetchImpl }) {
  * tools: the renderer (drawLayers); callClaude: designer.js's streaming call.
  */
 async function mapSite({ address, place, photos, views = [], client, callClaude, model, siteModel = null, pickEffort = 'medium', mapEffort = 'high', plate = 32,
-  tools, onEvent = () => {}, fetchImpl = fetch }) {
+  tools, onEvent = () => {}, fetchImpl = fetch, findParcels = findParcelSource, parcelCacheFile = null }) {
   if (!tools || !tools.drawLayers) throw new Error('Mapping the site needs the renderer (Playwright).');
   const t0 = Date.now(), stages = [], usage = { pick: emptyUsage(), map: {} }, credits = new Set(['Aerial photo: USDA NAIP via USGS (public domain)']);
   const stage = (s) => { s.secs = Math.round((Date.now() - t0) / 1000); stages.push(s); onEvent({ type: 'site', stage: s }); };
@@ -687,6 +694,12 @@ async function mapSite({ address, place, photos, views = [], client, callClaude,
   stage({ id: 'candidates', title: 'Buildings near the address', summary: `The address lookup put ${address} at ${place.lat.toFixed(6)}, ${place.lon.toFixed(6)} (${place.label || 'geocoded'}). ${candidates.length} house-sized buildings lie within 110 m of that point (${structs.length} outlines from FEMA USA Structures, ${osm.length} from OpenStreetMap). They were numbered by distance from the point${street ? `, and ${street.name} runs ${Math.round(street.distanceM)} m from it` : ''}. The aerial is the ${aerialLine(aerial)}.`,
     details: candidates.map(candidateLine), images: [{ name: 'candidates', label: 'The numbered buildings on the aerial photo (north up; red dot: the address lookup)', ...mapImage }] });
 
+  // a county without built-in records: an agent looks for its public parcel layer while the pick runs
+  const known = candidates.some((c) => COUNTIES[c.fips]);
+  const search = known ? Promise.resolve(null) : findParcels({ ll: { lat: place.lat, lon: place.lon }, address, client, callClaude, model, fetchImpl,
+    onEvent: (e) => { if (e.type === 'status') onEvent(e); }, ...(parcelCacheFile ? { cacheFile: parcelCacheFile } : {}) })
+    .catch((e) => ({ source: null, usd: 0, searched: false, report: `The parcel search failed: ${e.message}` }));
+
   // 2. the pick
   onEvent({ type: 'status', message: 'Finding the house on the map…' });
   const pick = await pickHouse({ client, callClaude, model, effort: pickEffort, photos, views, address, pin: place, candidates, streets: ways.streets, street, mapImage, tools, fetchImpl, onEvent, usage: usage.pick, aerial });
@@ -698,7 +711,8 @@ async function mapSite({ address, place, photos, views = [], client, callClaude,
   // 3. records: the county's lot line and outline where it publishes them, and a check of the pick's address
   // confirmed: the county's parcel under the house carries the address; overridden: the records found it elsewhere;
   // unconfirmed: no records to check against (the pick stands on the photos alone)
-  const county = COUNTIES[main.fips] || null, recNotes = [];
+  const found = await search, recNotes = [];
+  const county = COUNTIES[main.fips] || (found && found.source ? { name: found.source.name, found: found.source } : null);
   let confirmed = 'unconfirmed';
   main = { ...main, centerLL: toLL(main.c) };
   let parcel = null;
@@ -725,6 +739,7 @@ async function mapSite({ address, place, photos, views = [], client, callClaude,
       credits.add(`Building outline: ${co.source}`);
     }
   }
+  if (parcel && !parcel.ring) parcel = null; // an address point checks the address but has no lot line
   // other buildings on the lot (a detached garage, a back house): on the parcel, or right beside the house
   const mainXY = main.ring.map(toXY), mainC = centroid(mainXY);
   const outbuildings = all.filter((b) => b.id !== main.id && !pointIn(b.c, mainXY) && (parcel ? pointIn(b.c, parcel.ring.map(toXY)) : b.areaSqFt < 900 && Math.hypot(b.c[0] - mainC[0], b.c[1] - mainC[1]) < 25));
@@ -734,7 +749,11 @@ async function mapSite({ address, place, photos, views = [], client, callClaude,
     parcel ? `the lot (${parcel.source}) is about ${Math.round(polygonArea(parcel.ring.map(toXY)) * 10.764)} sq ft` : '',
     outbuildings.length ? `${outbuildings.length} other building${outbuildings.length > 1 ? 's' : ''} on the lot (${outbuildings.map((o) => `${o.areaSqFt} sq ft`).join(', ')})` : '',
   ].filter(Boolean).join('; ') + '.';
-  stage({ id: 'records', title: 'Records for the house', confirmed, summary: county ? `${county.name} publishes building outlines and parcels, so the house's outline and lot line come from the county. ${recNotes.join(' ')}` : `No county records are connected for this area, so the pick stands on the photos alone (unconfirmed), the national outline is used and the lot is read from the aerial. ${recNotes.join(' ')}`, details: [factsText] });
+  const searchNote = found ? `${found.report}${found.searched ? ` The search cost $${found.usd.toFixed(2)}.` : ''} ` : '';
+  stage({ id: 'records', title: 'Records for the house', confirmed, summary: county && county.found ? `${searchNote}${parcel ? 'The lot line comes from those records; ' : ''}the outline is the national one. ${recNotes.join(' ')}`
+    : county ? `${county.name} publishes building outlines and parcels, so the house's outline and lot line come from the county. ${recNotes.join(' ')}`
+    : `${searchNote}No county records are connected for this area, so the pick stands on the photos alone (unconfirmed), the national outline is used and the lot is read from the aerial. ${recNotes.join(' ')}`,
+  details: [factsText, ...(found && found.tried && found.tried.length ? [`Layers tried: ${found.tried.join(', ')}`] : [])], thoughts: (found && found.thoughts) || [], usd: found && found.searched ? found.usd : undefined });
 
   // the streets, slope and lanes around the house itself (now that it's found); the map doesn't wait on them
   let terrain = null;
@@ -778,10 +797,10 @@ async function mapSite({ address, place, photos, views = [], client, callClaude,
     details: locked ? [...locked.blocks.map((b) => `${b.name}: studs ${JSON.stringify(b.cellRects)}${b.openings.length ? `; ${b.openings.map((o) => `${o.kind} on the ${o.side} wall at [${o.cells.join(', ')}]`).join(', ')}` : ''}`), ...locked.problems.map((p) => `Layout: ${p}`)] : [],
     images: stud ? [{ name: 'studs', label: `The plate in studs with the locked walls and the lot (${fit.ftPerStud} ft per stud)`, ...stud }] : [] });
 
-  const cost = costOf(usage.pick, model) + mapUsd;
+  const cost = costOf(usage.pick, model) + mapUsd + (found ? found.usd || 0 : 0);
   // the house as found: whether records confirmed it, and whether the mapper (a second look, closer) thinks it matches
-  const found = { confirmed, matchesPhotos: mapped.plan.matchesPhotos, needsCheck: confirmed === 'unconfirmed' && (pick.confidence !== 'high' || mapped.plan.matchesPhotos.answer !== 'yes') || mapped.plan.matchesPhotos.answer === 'no' };
-  return { center: main.centerLL, main, terrain, pick, parcel, found, plan: mapped.plan, coverage: mapped.cov, fit, locked, siteNote, studs, facts: factsText, credits: [...credits],
+  const house = { confirmed, matchesPhotos: mapped.plan.matchesPhotos, needsCheck: confirmed === 'unconfirmed' && (pick.confidence !== 'high' || mapped.plan.matchesPhotos.answer !== 'yes') || mapped.plan.matchesPhotos.answer === 'no' };
+  return { center: main.centerLL, main, terrain, pick, parcel, found: house, parcelSearch: found ? { source: found.source, searched: found.searched, usd: found.usd || 0 } : null, plan: mapped.plan, coverage: mapped.cov, fit, locked, siteNote, studs, facts: factsText, credits: [...credits],
     images: locked ? [{ ...mapped.overlay, caption: 'the house from above with the mapped blocks, doors and lot (street at the bottom, grid in feet)' },
       ...(stud ? [{ ...stud, caption: `the plate in studs with the locked walls and the lot over the aerial (${fit.ftPerStud} ft per stud)` }] : [])] : [{ ...mapped.images.annotated, caption: 'the house from above (street at the bottom)' }],
     report: { address, stages, seconds: Math.round((Date.now() - t0) / 1000) }, usage, costUsd: cost };

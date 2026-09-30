@@ -1,0 +1,77 @@
+{
+  "17031": {
+    "url": "https://gis.cookcountyil.gov/traditional/rest/services/cookVwrDynmc/MapServer/44",
+    "kind": "parcels",
+    "name": "Cook County GIS / Assessor parcels (cookVwrDynmc)",
+    "fields": {
+      "number": "HouseNo",
+      "street": "Street",
+      "full": "Address",
+      "apn": "PIN14"
+    },
+    "fips": "17031",
+    "county": "Cook County",
+    "state": "Illinois",
+    "at": 1790788639273
+  },
+  "18105": {
+    "url": "https://gisdata.in.gov/server/rest/services/Hosted/Parcel_Boundaries_of_Indiana_Current/FeatureServer/0",
+    "kind": "parcels",
+    "name": "IndianaMap / Indiana GIO statewide parcels (Monroe County source)",
+    "fields": {
+      "number": null,
+      "street": null,
+      "full": "prop_add",
+      "apn": "parcel_id"
+    },
+    "fips": "18105",
+    "county": "Monroe County",
+    "state": "Indiana",
+    "at": 1790788060097
+  },
+  "48453": {
+    "url": "https://gis.traviscountytx.gov/server1/rest/services/Boundaries_and_Jurisdictions/TCAD_public/MapServer/0",
+    "kind": "parcels",
+    "name": "Travis County TNR GIS – TCAD (Travis Central Appraisal District) parcels",
+    "fields": {
+      "number": "situs_num",
+      "street": "situs_street",
+      "full": "situs_address",
+      "apn": "PROP_ID"
+    },
+    "fips": "48453",
+    "county": "Travis County",
+    "state": "Texas",
+    "at": 1790787955110
+  },
+  "53033": {
+    "url": "https://services.arcgis.com/jsIt88o09Q0r1j8h/arcgis/rest/services/Current_Parcels/FeatureServer/0",
+    "kind": "parcels",
+    "name": "Washington State (WA Geoservices) Current Parcels statewide, King County records",
+    "fields": {
+      "number": null,
+      "street": null,
+      "full": "SITUS_ADDRESS",
+      "apn": "ORIG_PARCEL_ID"
+    },
+    "fips": "53033",
+    "county": "King County",
+    "state": "Washington",
+    "at": 1790788690767
+  },
+  "06059": {
+    "url": "https://www.ocgis.com/arcpub/rest/services/Map_Layers/Parcels/MapServer/0",
+    "kind": "parcels",
+    "name": "Orange County (OC Public Works / OCGIS) parcels",
+    "fields": {
+      "number": null,
+      "street": null,
+      "full": "SITE_ADDRESS",
+      "apn": "ASSESSMENT_NO"
+    },
+    "fips": "06059",
+    "county": "Orange County",
+    "state": "California",
+    "at": 1790787924804
+  }
+}
