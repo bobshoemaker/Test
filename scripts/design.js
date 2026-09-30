@@ -8,6 +8,7 @@
 //            --footprint <out>.footprint.json  reuse a saved footprint instead of reading the plan again
 //            --no-footprint  send the plan as a picture only, without locking the walls to it
 //            --resume <draft>.json --from-part 2  continue from a design whose earlier parts are done
+//            --site <out>.site.json  use a site mapped earlier (its walls and map pictures), with no new mapping
 //            --address "..."  add the street and slope from USGS elevations and OpenStreetMap to the notes; with
 //                             --parts and no --plan, the house is found on an aerial photo and mapped from above,
 //                             and the walls are locked to that map (src/server/site.js; the report, its pictures
@@ -40,7 +41,7 @@ const maxTokens = Number(opt('max-tokens', 64000));
 const partsLimit = Number(opt('parts-limit', 5)), planFile = opt('plan', null), footprintFile = opt('footprint', null);
 const choicesFile = opt('choices', null), answerArgs = [];
 for (let i; (i = args.indexOf('--answer')) >= 0;) answerArgs.push(args.splice(i, 2)[1]);
-const resumeFile = opt('resume', null), fromPart = Number(opt('from-part', resumeFile ? 2 : 1));
+const siteFile = opt('site', null), resumeFile = opt('resume', null), fromPart = Number(opt('from-part', resumeFile ? 2 : 1));
 const views = String(opt('views', '')).split(',').map((v) => v.trim() || null), siteModel = opt('site-model', process.env.BRICKHOUSE_SITE_MODEL || null);
 const budget = Number(opt('budget', 0)) || null, reviewModel = opt('review-model', null);
 const fake = flag('fake'), parts = flag('parts'), noRender = flag('no-render'), noFootprint = flag('no-footprint'), noSite = flag('no-site'), requireSite = flag('require-site'), noReview = flag('no-review');
@@ -79,7 +80,15 @@ const photos = args.map(readImage), plan = planFile ? readImage(planFile) : null
   };
   // The same preparation as the server: address to terrain note; the house found and mapped from above and the
   // walls locked to the map (or to the building outline) when there's no plan (src/server/pipeline.js).
-  const prep = await require('../src/server/pipeline').prepareDesign({ address, notes, plan, plate: plateSize, frontStreet,
+  // a site mapped earlier: its locked walls and fit, with the map pictures saved beside it
+  let keptSite = null;
+  if (siteFile) {
+    keptSite = JSON.parse(fs.readFileSync(siteFile, 'utf8'));
+    const b = siteFile.replace(/\.site\.json$/, '');
+    keptSite.images = (keptSite.imageCaptions || []).map((caption, i) => ({ caption, mediaType: 'image/jpeg', data: fs.readFileSync(`${b}.site-design-${i + 1}.jpg`).toString('base64') }));
+    console.log(`Using the site mapped earlier (${siteFile}), at ${keptSite.ftPerStud} ft per stud.`);
+  }
+  const prep = await require('../src/server/pipeline').prepareDesign({ address, notes, plan, plate: plateSize, frontStreet, site: keptSite,
     lockToOutline: parts && !noFootprint && !footprintFile, photos: parts && !noSite && !fake ? photos : [], views, client, model, siteModel,
     tools: renderer, onEvent: log });
   notes = prep.notes;
@@ -90,7 +99,7 @@ const photos = args.map(readImage), plan = planFile ? readImage(planFile) : null
     const { stages, ...rest } = prep.report;
     run.site = { ...rest, stages: stages.map(({ images = [], ...st }) => ({ ...st, images: images.map((im) => ({ name: im.name, label: im.label, file: `${path.basename(base)}.site-${im.name}.jpg` })) })),
       fit: prep.site.fit, costUsd: prep.site.costUsd, credits: prep.site.credits, note: prep.site.note };
-    fs.writeFileSync(`${base}.site.json`, JSON.stringify({ ...prep.site, images: undefined }, null, 2));
+    fs.writeFileSync(`${base}.site.json`, JSON.stringify({ ...prep.site, images: undefined, imageCaptions: (prep.site.images || []).map((im) => im.caption) }, null, 2));
     (prep.site.images || []).forEach((im, i) => fs.writeFileSync(`${base}.site-design-${i + 1}.jpg`, Buffer.from(im.data, 'base64')));
     console.log(`${clock()} Site mapped at ${prep.site.ftPerStud} ft per stud for $${prep.site.costUsd.toFixed(2)} -> ${base}.site.json`);
     saveRun();

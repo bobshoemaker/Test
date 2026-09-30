@@ -271,6 +271,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
     node scripts/design.js front.jpg right.jpg back.jpg --views front,right,back --address "157 Brisbane St, Monrovia, CA 91016" \
       --parts --effort high --site-model <stronger model> --budget 14 --out x.json
                                               # house found and mapped from above; <out>.site.json, .site-*.jpg, .run.json (stages, costs)
+                                              # --site <out>.site.json --resume <draft>.json --from-part 4: continue a stopped run on the same map
     node scripts/survey.js a.jpg b.jpg --out survey.json          # questions for the owner; then design.js --choices survey.json
     node scripts/terrain.js "3221 Griffith Park Blvd, Los Angeles, CA"   # street and slope; --address on survey.js/design.js adds it
     node scripts/bundle.js designs/634-unit-a.json
