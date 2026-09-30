@@ -19,7 +19,7 @@ function fakeFetch({ features } = {}) {
   const f = async (url) => {
     calls.push(url);
     const u = String(url), json = (j) => ({ ok: true, status: 200, json: async () => j });
-    if (u.includes('State_County/MapServer/1/')) return json({ features: [{ attributes: { NAME: 'Orange County', GEOID: '06059' } }] });
+    if (u.includes('State_County/MapServer/1/')) return json({ features: [{ attributes: { NAME: 'Test County', GEOID: '99059' } }] });
     if (u.includes('State_County/MapServer/0/')) return json({ features: [{ attributes: { NAME: 'California', STUSAB: 'CA' } }] });
     if (u.startsWith(LAYER)) return json({ features: features || [
       { attributes: { SITE_NO: '14', SITE_ST: 'ELM ST', APN: '111' }, geometry: { rings: square(ll.lat + 2 * d, ll.lon, d / 2) } },
@@ -88,7 +88,7 @@ test('findParcelSource checks a submission at the house and caches it', async ()
   ]);
   const r = await findParcelSource({ ll, address: '12 Elm St, Irvine, CA', client: {}, callClaude, model: 'claude-opus-5-5', fetchImpl, cacheFile, now: 1 });
   assert.equal(r.searched, true);
-  assert.equal(r.source.url, LAYER); assert.equal(r.source.fips, '06059'); assert.equal(r.source.fields.number, 'SITE_NO');
+  assert.equal(r.source.url, LAYER); assert.equal(r.source.fips, '99059'); assert.equal(r.source.fields.number, 'SITE_NO');
   assert.deepEqual(r.tried, [LAYER]);
   assert.ok(r.usd >= 0.03, String(r.usd)); // three searches at a cent each, plus tokens
   // the bad URL was refused without a request, and the wrong field was sent back as an error
