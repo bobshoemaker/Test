@@ -103,6 +103,14 @@ closing gift that realtors give clients: a brick model of the house they just bo
   geocoder's pin is no evidence, since it often lands a few lots away (157 Brisbane St's pin was 140 ft off).
   Records: where a county publishes them (`COUNTIES`, LA County today, by the outline's FIPS code) its parcel checks
   the pick's address and overrides a wrong pick, and its sharper outline and lot line replace the national ones.
+  Any other county: a parcel search (`src/server/parcels.js`, the design model with web search and fetch, while the
+  pick runs) finds the county's (or state's) public ArcGIS parcel or address-point layer, tries layers at the house
+  (`query_layer`, public https REST layers only) and submits one with its address fields; code keeps it only if it
+  returns a house number at the house. Found once per county: `parcel-sources.json` (checked in, a seed) and
+  `designs/generated/parcel-sources.json` (runtime); a county with nothing usable is retried after a month. It
+  stops at $1.50 (`budgetUsd`); found layers have cost $0.08 to $0.42 (Orange, Travis, Monroe IN, Cook, King);
+  Glynn County GA, whose parcels carry no addresses, spent the budget and found none. Its layer then checks and
+  overrides the pick as LA's does (an address point checks the address but gives no lot line).
   The map: Claude (`BRICKHOUSE_SITE_MODEL`, a stronger model if wanted; falls back to the design model when the
   account can't use it) splits the house into blocks by height and roof, places garage and outside doors, and maps
   the lot (driveways, walks, patios, pools, lawn, beds, trees, fences, sheds and covers) in feet on the aerial turned
@@ -320,9 +328,10 @@ before changing API parameters.
   in wall openings with a few details hung on them (lantern, house number, plaque, vent); mounted
   parts are drawn as small blocks.
 - Finding the house from photos and a 60 cm aerial alone isn't reliable yet: for 157 Brisbane St Claude picked a
-  neighbour twice (145, then 133 Brisbane), and LA County's parcel records corrected it both times. Where no county
-  records are connected the pick stands unconfirmed (`found.needsCheck` flags it on the admin page). Next: more
-  county parcel services, a nationwide parcel source (Regrid is paid), or the owner confirming the house on the map.
+  neighbour twice (145, then 133 Brisbane), and LA County's parcel records corrected it both times. The parcel
+  search covers most other counties; where it finds nothing the pick stands unconfirmed (`found.needsCheck` flags it
+  on the admin page). A nationwide parcel source (Regrid is paid) would cover the rest. The search has been run
+  against real counties on its own, not yet inside a full design outside LA County.
   The public services it leans on (Overpass, the USGS image server) fail now and then; it retries, falls back to
   USGS's basemap, and carries on without terrain.
 - The manual exists in the viewer only; there's no PDF export yet.
