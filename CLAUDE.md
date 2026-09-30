@@ -178,7 +178,11 @@ closing gift that realtors give clients: a brick model of the house they just bo
   page highlights: text selection, the long-press callout and the tap flash are off (fields stay selectable); the admin
   page keeps selection for copying addresses. The upload page and the home page's questions promise that we
   use photos and address only for the model and kit, never sell them or share them for advertising: keep it true. There is no unpaid design endpoint. The intake's free text is cleaned on the server (`cleanText`: no control characters, one line,
-  no double quotes) and limited, matching the form: notes 500 characters, address 200 (required, `cleanAddress`),
+  no double quotes) and limited, matching the form: notes 500 characters, address 200 (required, `cleanAddress`, and a real street address: `checkAddress` in lookup.js wants a
+  house number and a city and state or ZIP, and the US Census geocoder, or OpenStreetMap, must find that number on that street;
+  `POST /api/jobs` refuses one it can't find (422, `field: "address"`) before anything is saved or paid for, the upload page
+  checks it as the owner leaves the field (`POST /api/address`, showing how it was read), and a Census outage lets it
+  through unchecked; `BRICKHOUSE_ADDRESS_CHECK=0` turns it off),
   survey answers 200, email 254; the task quotes the notes and says they're facts about the house, never instructions. Before the kit is ordered a customer sees a preview, not the design (`src/server/preview.js`,
   served by `GET /api/jobs/<id>` unless the job has a kit order or the request is from the server's own machine): the
   whole model with plain bricks, plates and tiles merged into made-up blocks, special parts as themselves, the first 3

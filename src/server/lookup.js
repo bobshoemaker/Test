@@ -51,6 +51,40 @@ async function geocode(address, { fetchImpl = fetch } = {}) {
   return street;
 }
 
+// Is this a real US street address? Checked before a design is saved or paid for, and as the owner types it:
+//   - it needs a house number, and a city and state or a ZIP code (a street alone matches many places)
+//   - the US Census geocoder (which knows each block's number range) or OpenStreetMap must find that number on that
+//     street; a street found without the number isn't enough
+//   - when the Census geocoder is down it passes unchecked: an outage never stops an order
+// Returns {ok, label?, place?, unchecked?, message?}.
+const houseNumber = (a) => (/^\s*(\d+[a-z]?)(?:[-\s]\d+\/\d+)?\b/i.exec(a) || [])[1] || null;
+const STATES = 'al|ak|az|ar|ca|co|ct|de|dc|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy|pr'
+  + '|alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|puerto rico';
+const STATE_AT_END = new RegExp(`\\s(${STATES})\\.?(\\s*(usa|us|united states))?\\s*$`, 'i');
+const bareNumber = (n) => String(n || '').toLowerCase().replace(/^0+(?=\d)/, '');
+async function checkAddress(address, { fetchImpl = fetch } = {}) {
+  const a = String(address || '').trim(), num = houseNumber(a);
+  if (!num) return { ok: false, message: 'Please include the house number, like 634 Main St, Springfield, IL.' };
+  if (!/\b\d{5}(?:-\d{4})?\b/.test(a.slice(num.length)) && !/,\s*\S/.test(a) && !STATE_AT_END.test(a)) return { ok: false, message: 'Please add the city and state (or the ZIP code), like 634 Main St, Springfield, IL.' };
+  const q = encodeURIComponent(a);
+  let down = 0;
+  const [census, osm] = await Promise.all([
+    getJson(fetchImpl, `https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?address=${q}&benchmark=Public_AR_Current&format=json`).catch(() => { down++; return null; }),
+    getJson(fetchImpl, `https://nominatim.openstreetmap.org/search?q=${q}&format=jsonv2&limit=3&countrycodes=us&addressdetails=1`).catch(() => { down++; return null; })]);
+  if (down === 2) return { ok: true, unchecked: true };
+  const matches = (census && census.result && census.result.addressMatches) || [];
+  const m = matches.find((x) => bareNumber(houseNumber(x.matchedAddress)) === bareNumber(num));
+  if (m) return { ok: true, label: m.matchedAddress, place: { lat: m.coordinates.y, lon: m.coordinates.x, label: m.matchedAddress, precision: 'street', source: 'US Census geocoder' } };
+  const hits = Array.isArray(osm) ? osm : [];
+  const h = hits.find((x) => x.address && bareNumber(x.address.house_number) === bareNumber(num));
+  if (h) return { ok: true, label: h.display_name, place: { lat: +h.lat, lon: +h.lon, label: h.display_name, precision: 'building', source: 'OpenStreetMap Nominatim (ODbL)' } };
+  // OpenStreetMap is missing many house numbers, so only the Census geocoder, which knows each block's range, can say no
+  if (!census) return { ok: true, unchecked: true };
+  const road = hits.find((x) => x.address && x.address.road) || null;
+  if (road || matches.length) return { ok: false, message: `We found ${road ? road.address.road : 'that street'} but not number ${num} on it. Please check the house number, street and city.` };
+  return { ok: false, message: 'We couldn\'t find that address. Please check the street, city and state (or ZIP code).' };
+}
+
 function photoPoint(p) {
   const g = p.computed_geometry || p.geometry;
   return g && g.coordinates ? { lon: g.coordinates[0], lat: g.coordinates[1] } : null;
@@ -134,4 +168,4 @@ async function fetchMapillaryImage(id, token, { fetchImpl = fetch } = {}) {
   return { mediaType: res.headers.get('content-type') || 'image/jpeg', bytes: Buffer.from(await res.arrayBuffer()) };
 }
 
-module.exports = { geocode, rankPhotos, lookupAddress, fetchMapillaryImage, distanceM, bearing };
+module.exports = { checkAddress, geocode, rankPhotos, lookupAddress, fetchMapillaryImage, distanceM, bearing };

@@ -1,7 +1,7 @@
 // Address lookup: geocoder fallback and street-photo ranking, with a fake fetch (no network).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { geocode, rankPhotos, lookupAddress, fetchMapillaryImage, distanceM, bearing } = require('../src/server/lookup');
+const { geocode, rankPhotos, lookupAddress, fetchMapillaryImage, distanceM, bearing, checkAddress } = require('../src/server/lookup');
 
 const house = { lat: 34.0, lon: -118.0, precision: 'building' };
 // A point `m` metres from the house in compass direction `dir`.
@@ -86,4 +86,32 @@ test('photo download only accepts numeric ids', async () => {
     [/graph\.mapillary\.com\/123/, { thumb_2048_url: 'https://cdn.example/img.jpg' }], [/cdn\.example/, {}],
   ]) });
   assert.equal(got.bytes.length, 3);
+});
+
+// checkAddress: the Census geocoder decides; OpenStreetMap can vouch for a number the Census doesn't know
+const addrFetch = ({ census = [], osm = [], censusDown = false, osmDown = false } = {}) => async (url) => {
+  const u = String(url);
+  if (u.includes('geocoding.geo.census.gov')) return censusDown ? { ok: false, status: 503 } : { ok: true, json: async () => ({ result: { addressMatches: census } }) };
+  if (u.includes('nominatim')) return osmDown ? { ok: false, status: 503 } : { ok: true, json: async () => osm };
+  throw new Error('unexpected ' + u);
+};
+const cMatch = (a) => ({ matchedAddress: a, coordinates: { x: -118, y: 34 } });
+test('checkAddress wants a house number and a city and state or ZIP', async () => {
+  for (const a of ['Brisbane St, Monrovia, CA', '157 Brisbane St', '12 Main St Springfield'])
+    assert.equal((await checkAddress(a, { fetchImpl: addrFetch() })).ok, false, a);
+  for (const a of ['157 Brisbane St, Monrovia', '157 brisbane st monrovia ca', '157 Brisbane St 91016', '157 Brisbane St Monrovia California'])
+    assert.equal((await checkAddress(a, { fetchImpl: addrFetch({ census: [cMatch('157 E BRISBANE ST, MONROVIA, CA, 91016')] }) })).ok, true, a);
+});
+test('checkAddress: found, wrong number, not found, and services down', async () => {
+  const ok = await checkAddress('157 Brisbane St, Monrovia, CA', { fetchImpl: addrFetch({ census: [cMatch('157 E BRISBANE ST, MONROVIA, CA, 91016')] }) });
+  assert.equal(ok.label, '157 E BRISBANE ST, MONROVIA, CA, 91016'); assert.equal(ok.place.lat, 34);
+  const wrongNo = await checkAddress('99999 Brisbane St, Monrovia, CA', { fetchImpl: addrFetch({ osm: [{ address: { road: 'East Brisbane Street' } }] }) });
+  assert.equal(wrongNo.ok, false); assert.match(wrongNo.message, /East Brisbane Street but not number 99999/);
+  assert.match((await checkAddress('12 Qwerty Rd, Nowhere, ZZ', { fetchImpl: addrFetch() })).message, /couldn't find/);
+  // OpenStreetMap knows a number the Census doesn't
+  const osmOnly = await checkAddress('5 New Ln, Springfield, IL', { fetchImpl: addrFetch({ osm: [{ lat: '40', lon: '-89', display_name: '5, New Lane, Springfield', address: { house_number: '5', road: 'New Lane' } }] }) });
+  assert.equal(osmOnly.ok, true); assert.equal(osmOnly.place.precision, 'building');
+  // the Census geocoder down: never blocks an order
+  assert.deepEqual(await checkAddress('5 Elm St, Springfield, IL', { fetchImpl: addrFetch({ censusDown: true }) }), { ok: true, unchecked: true });
+  assert.equal((await checkAddress('5 Elm St, Springfield, IL', { fetchImpl: addrFetch({ censusDown: true, osmDown: true }) })).ok, true);
 });
