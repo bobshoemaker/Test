@@ -287,3 +287,21 @@ test('turning the hold on leaves designs finished before it as their owners have
   assert.equal(after.summary(id).status, 'ready');
   assert.equal(after.get(id, { full: true }).review, undefined); assert.equal(after.list()[0].review, null);
 });
+
+test('with intake on, a paid request waits for the admin, who starts it with their photos, pick and instructions', async () => {
+  let ran = null;
+  const J = createJobs({ dir: tmp(), intake: true, run: async (p, emit) => { ran = p; emit({ type: 'done', design: { name: 'd' } }); } });
+  const photo = (x) => ({ mediaType: 'image/jpeg', data: x });
+  const { id } = await J.create({ photos: [photo('a'), photo('b'), photo('c')], views: ['front', null, 'back'], notes: 'n', email: 'o@x.test' }, 'https://x');
+  assert.equal(J.get(id).status, 'intake'); assert.equal(ran, null);
+  assert.equal(J.summary(id).status, 'designing');
+  const i = J.intakeOf(id);
+  assert.deepEqual([i.photos, i.views, i.status, i.email], [3, ['front', null, 'back'], 'intake', 'o@x.test']);
+  const r = J.begin(id, { views: ['front', 'right', 'back'], drop: [2], add: [{ mediaType: 'image/jpeg', data: 'z', view: 'aerial' }], instructions: 'garage is detached', pickAt: { lat: 34.1, lon: -118 } });
+  assert.equal(r.code, 200);
+  await until(() => J.get(id).status === 'done');
+  assert.deepEqual(ran.views, ['front', 'right', 'back']); assert.deepEqual(ran.dropped, [2]); assert.equal(ran.viewsChanged, true);
+  assert.equal(ran.teamPhotos[0].view, 'aerial'); assert.equal(ran.instructions, 'garage is detached'); assert.deepEqual(ran.pickAt, { lat: 34.1, lon: -118 });
+  assert.equal(J.begin(id, {}).code, 409); // once
+  assert.equal(J.photo(id, 2).data, 'c'); // the owner's page still shows every photo they sent
+});

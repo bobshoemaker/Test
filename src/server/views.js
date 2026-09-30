@@ -1,6 +1,7 @@
 // Which view each photo shows, from the upload page's checklist (views[i] for photos[i]; extras have none).
 // Only the known views count, numbered as the photos are once invalid ones are dropped (cleanPhotos).
-const VIEWS = { front: 'the front of the house, straight on', left: 'the front left corner', right: 'the front right corner', back: 'the back' };
+const VIEWS = { front: 'the front of the house, straight on', left: 'the front left corner', right: 'the front right corner', back: 'the back',
+  aerial: 'the house from above' }; // aerial: a view our team adds before the design (the owner's checklist has the first four)
 const okPhoto = (p) => !!p && /^image\/(jpeg|png|webp|gif)$/.test(p.mediaType) && typeof p.data === 'string';
 // The views of the photos that are kept: [key or null], aligned with the cleaned photos.
 function cleanViews(photos, views, max = 12) {

@@ -198,7 +198,14 @@ closing gift that realtors give clients: a brick model of the house they just bo
   packed, shipped or cancelled with the Brickwith order number and tracking; shipped with tracking emails the customer
   once; a GoBricks stock check of the kit's parts, run when the kit is ordered and again on Check stock, naming lots short
   of stock and any the catalog snapshot says GoBricks no longer makes, kept on the job), designs that failed or have problems (Run again, from the part they reached), and all designs; the admin sees
-  every design in full. Every design is checked by the admin before its owner sees it (`hold`, `BRICKHOUSE_HOLD_FOR_REVIEW=0`
+  every design in full. Before its design, every paid request waits for the admin (`intake`, `BRICKHOUSE_HOLD_BEFORE_DESIGN=0` turns it off):
+  status "intake", listed under "Ready to prepare", its owner's page saying our team is looking the photos over. Prepare
+  (`/admin/intake?job=…`, `src/viewer/intake.html`) shows the request and every photo: the admin corrects each photo's view,
+  leaves out misleading ones, adds up to 4 of their own (an aerial: view "aerial"), picks the house among the numbered
+  buildings on our aerial (`POST …/candidates`, site.js `findCandidates`; the design then maps that building, `pickAt`,
+  instead of picking one, and records don't override it), and writes instructions the design follows (`teamNotes`, a section
+  of its own: the owner's notes stay facts, never instructions). `POST …/begin` starts it (`designPhotos` in server.js puts
+  the owner's kept photos first, then the team's, with a sentence on which shows what). Every design is checked by the admin before its owner sees it (`hold`, `BRICKHOUSE_HOLD_FOR_REVIEW=0`
   turns it off): a finished design waits under "Waiting for your check" while its owner's page says it's being checked
   (status "review", no design, no "ready" email, no kit or fix round). Opening it (Check it) shows a review card on the
   Model tab: tap bricks to select them (blue; each listed by the design op that made it, with Select all), say in words

@@ -661,19 +661,10 @@ async function studMap({ tools, locked, studs, toSite, fromSite, fetchImpl }) {
 }
 
 // ---------- the whole step ----------
-/**
- * Finds the house on the aerial and maps it. Returns {center, terrain, pick, parcel, plan, fit, locked, siteNote,
- * facts, images: [{mediaType, data, caption}] for the design, report: {stages}, usage, costUsd, credits}, or throws.
- * tools: the renderer (drawLayers); callClaude: designer.js's streaming call.
- */
-async function mapSite({ address, place, photos, views = [], client, callClaude, model, siteModel = null, pickEffort = 'medium', mapEffort = 'high', plate = 32,
-  tools, onEvent = () => {}, fetchImpl = fetch, findParcels = findParcelSource, parcelCacheFile = null }) {
-  if (!tools || !tools.drawLayers) throw new Error('Mapping the site needs the renderer (Playwright).');
-  const t0 = Date.now(), stages = [], usage = { pick: emptyUsage(), map: {} }, credits = new Set(['Aerial photo: USDA NAIP via USGS (public domain)']);
-  const stage = (s) => { s.secs = Math.round((Date.now() - t0) / 1000); stages.push(s); onEvent({ type: 'site', stage: s }); };
-  const { toXY, toLL } = frame(place), num = numberOf(address), streetName = streetOf(address);
-
-  // 1. the buildings near the address lookup's point
+// The house-sized buildings near the address lookup's point, numbered on the aerial with the streets: the first step
+// of mapSite, and what our team sees to pick the house before a design (the prepare page).
+async function findCandidates({ address, place, tools, fetchImpl = fetch, onEvent = () => {}, credits = new Set() }) {
+  const { toXY } = frame(place), streetName = streetOf(address);
   onEvent({ type: 'status', message: 'Finding the buildings near the address…' });
   // streets from TIGER (fast, nationwide), OpenStreetMap's when TIGER has none
   const streetsNear = async () => { const t = await tigerStreets(place, 170, { fetchImpl }).catch(() => []);
@@ -691,6 +682,23 @@ async function mapSite({ address, place, photos, views = [], client, callClaude,
   if (candidates.some((c) => c.source === 'OpenStreetMap' || c.address)) credits.add('OpenStreetMap contributors (ODbL)');
   const street = ways.streets.find((s) => sameStreet(s.name, streetName)) || ways.streets[0] || null;
   const mapImage = await candidatesMap({ tools, pin: place, candidates, streets: ways.streets, fetchImpl });
+  return { structs, osm, ways, aerial, all, candidates, street, mapImage };
+}
+
+/**
+ * Finds the house on the aerial and maps it. Returns {center, terrain, pick, parcel, plan, fit, locked, siteNote,
+ * facts, images: [{mediaType, data, caption}] for the design, report: {stages}, usage, costUsd, credits}, or throws.
+ * tools: the renderer (drawLayers); callClaude: designer.js's streaming call.
+ */
+async function mapSite({ address, place, photos, views = [], client, callClaude, model, siteModel = null, pickEffort = 'medium', mapEffort = 'high', plate = 32,
+  tools, onEvent = () => {}, fetchImpl = fetch, findParcels = findParcelSource, parcelCacheFile = null, pickAt = null }) {
+  if (!tools || !tools.drawLayers) throw new Error('Mapping the site needs the renderer (Playwright).');
+  const t0 = Date.now(), stages = [], usage = { pick: emptyUsage(), map: {} }, credits = new Set(['Aerial photo: USDA NAIP via USGS (public domain)']);
+  const stage = (s) => { s.secs = Math.round((Date.now() - t0) / 1000); stages.push(s); onEvent({ type: 'site', stage: s }); };
+  const { toXY, toLL } = frame(place), num = numberOf(address), streetName = streetOf(address);
+
+  // 1. the buildings near the address lookup's point
+  const { structs, osm, ways, aerial, all, candidates, street, mapImage } = await findCandidates({ address, place, tools, fetchImpl, onEvent, credits });
   stage({ id: 'candidates', title: 'Buildings near the address', summary: `The address lookup put ${address} at ${place.lat.toFixed(6)}, ${place.lon.toFixed(6)} (${place.label || 'geocoded'}). ${candidates.length} house-sized buildings lie within 110 m of that point (${structs.length} outlines from FEMA USA Structures, ${osm.length} from OpenStreetMap). They were numbered by distance from the point${street ? `, and ${street.name} runs ${Math.round(street.distanceM)} m from it` : ''}. The aerial is the ${aerialLine(aerial)}.`,
     details: candidates.map(candidateLine), images: [{ name: 'candidates', label: 'The numbered buildings on the aerial photo (north up; red dot: the address lookup)', ...mapImage }] });
 
@@ -700,11 +708,18 @@ async function mapSite({ address, place, photos, views = [], client, callClaude,
     onEvent: (e) => { if (e.type === 'status') onEvent(e); }, ...(parcelCacheFile ? { cacheFile: parcelCacheFile } : {}) })
     .catch((e) => ({ source: null, usd: 0, searched: false, report: `The parcel search failed: ${e.message}` }));
 
-  // 2. the pick
-  onEvent({ type: 'status', message: 'Finding the house on the map…' });
-  const pick = await pickHouse({ client, callClaude, model, effort: pickEffort, photos, views, address, pin: place, candidates, streets: ways.streets, street, mapImage, tools, fetchImpl, onEvent, usage: usage.pick, aerial });
+  // 2. the pick: our team's, when they picked the house on the map before the design (pickAt), else Claude's
+  let pick;
+  if (pickAt) {
+    const at = toXY(pickAt), hit = candidates.find((c) => pointIn(at, c.xy)) || [...candidates].sort((a, b) => Math.hypot(a.c[0] - at[0], a.c[1] - at[1]) - Math.hypot(b.c[0] - at[0], b.c[1] - at[1]))[0];
+    pick = { candidate: hit, number: hit.n, confidence: 'team', runnerUp: null, viewed: [], cues: [], thoughts: [], closeups: [], byTeam: true,
+      summary: `Our team picked it on the map before the design, from the owner's photos.` };
+  } else {
+    onEvent({ type: 'status', message: 'Finding the house on the map…' });
+    pick = await pickHouse({ client, callClaude, model, effort: pickEffort, photos, views, address, pin: place, candidates, streets: ways.streets, street, mapImage, tools, fetchImpl, onEvent, usage: usage.pick, aerial });
+  }
   let main = pick.candidate;
-  stage({ id: 'pick', title: 'Which building is the house', summary: `Claude picked building ${pick.number} (${pick.confidence} confidence)${pick.runnerUp ? `, with ${pick.runnerUp} as the runner-up` : ''}, after looking closely at ${pick.viewed.length ? [...new Set(pick.viewed)].join(', ') : 'the map alone'}. ${pick.summary || ''}`,
+  stage({ id: 'pick', title: 'Which building is the house', summary: pick.byTeam ? `Our team picked building ${pick.number} on the map. ${pick.summary}` : `Claude picked building ${pick.number} (${pick.confidence} confidence)${pick.runnerUp ? `, with ${pick.runnerUp} as the runner-up` : ''}, after looking closely at ${pick.viewed.length ? [...new Set(pick.viewed)].join(', ') : 'the map alone'}. ${pick.summary || ''}`,
     details: pick.cues || [], thoughts: pick.thoughts, images: pick.closeups.map((c) => ({ name: `closeup-${c.n}`, label: `Close-up of candidate ${c.n} (street side at the bottom)`, mediaType: c.mediaType, data: c.data })),
     usd: costOf(usage.pick, model) });
 
@@ -724,12 +739,13 @@ async function mapSite({ address, place, photos, views = [], client, callClaude,
       if (same) { confirmed = 'confirmed'; recNotes.push(`The county's parcel under building ${pick.number} is ${parcel.address} (APN ${parcel.apn}): it matches the address, so the pick is confirmed by the records.`); }
       else {
         recNotes.push(`The county's parcel under building ${pick.number} is ${parcel.address || 'unaddressed'} (APN ${parcel.apn}), not ${address}.`);
-        // look for the candidate whose parcel carries the address
-        for (const c of candidates.filter((x) => x !== pick.candidate)) {
+        // look for the candidate whose parcel carries the address (our team's pick stands: they looked at the map)
+        if (pick.byTeam) recNotes.push('Our team picked this building, so it stands; check the address in the records.');
+        else for (const c of candidates.filter((x) => x !== pick.candidate)) {
           const p2 = await parcelAt(toLL(c.c), county, { fetchImpl }).catch(() => null);
           if (p2 && p2.number === num) { confirmed = 'overridden'; recNotes.push(`Building ${c.n} stands on ${p2.address} (APN ${p2.apn}); the records override the pick and the house is building ${c.n}.`); main = { ...c, centerLL: toLL(c.c) }; parcel = p2; break; }
         }
-        if (confirmed !== 'overridden') recNotes.push(`No building nearby stands on a parcel with number ${num}, so the pick stands unconfirmed.`);
+        if (confirmed !== 'overridden' && !pick.byTeam) recNotes.push(`No building nearby stands on a parcel with number ${num}, so the pick stands unconfirmed.`);
       }
     }
     const co = await countyOutline(main, county, { fetchImpl }).catch((e) => { recNotes.push(`County outline lookup failed: ${e.message}`); return null; });
@@ -799,11 +815,12 @@ async function mapSite({ address, place, photos, views = [], client, callClaude,
 
   const cost = costOf(usage.pick, model) + mapUsd + (found ? found.usd || 0 : 0);
   // the house as found: whether records confirmed it, and whether the mapper (a second look, closer) thinks it matches
-  const house = { confirmed, matchesPhotos: mapped.plan.matchesPhotos, needsCheck: confirmed === 'unconfirmed' && (pick.confidence !== 'high' || mapped.plan.matchesPhotos.answer !== 'yes') || mapped.plan.matchesPhotos.answer === 'no' };
+  const house = { confirmed: pick.byTeam && confirmed === 'unconfirmed' ? 'team' : confirmed, matchesPhotos: mapped.plan.matchesPhotos,
+    needsCheck: !pick.byTeam && (confirmed === 'unconfirmed' && (pick.confidence !== 'high' || mapped.plan.matchesPhotos.answer !== 'yes') || mapped.plan.matchesPhotos.answer === 'no') };
   return { center: main.centerLL, main, terrain, pick, parcel, found: house, parcelSearch: found ? { source: found.source, searched: found.searched, usd: found.usd || 0 } : null, plan: mapped.plan, coverage: mapped.cov, fit, locked, siteNote, studs, facts: factsText, credits: [...credits],
     images: locked ? [{ ...mapped.overlay, caption: 'the house from above with the mapped blocks, doors and lot (street at the bottom, grid in feet)' },
       ...(stud ? [{ ...stud, caption: `the plate in studs with the locked walls and the lot over the aerial (${fit.ftPerStud} ft per stud)` }] : [])] : [{ ...mapped.images.annotated, caption: 'the house from above (street at the bottom)' }],
     report: { address, stages, seconds: Math.round((Date.now() - t0) / 1000) }, usage, costUsd: cost };
 }
 
-module.exports = { mapSite, fitPlan, lockPlan, siteInStuds, siteNoteText, cleanPlan, coverage, mergeBuildings, numberCandidates, facingStreets, tigerStreets, sameStreet, siteFrame, centroid, pointIn, wallAxes, candidateLine, COUNTIES };
+module.exports = { mapSite, findCandidates, fitPlan, lockPlan, siteInStuds, siteNoteText, cleanPlan, coverage, mergeBuildings, numberCandidates, facingStreets, tigerStreets, sameStreet, siteFrame, centroid, pointIn, wallAxes, candidateLine, COUNTIES };
