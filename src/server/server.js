@@ -105,7 +105,18 @@ const NOTES_MAX = 500, ADDRESS_MAX = 200, ANSWER_MAX = 200;
 const cleanText = (t, max) => String(t == null ? '' : t).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ').replace(/"/g, "'").replace(/\s+/g, ' ').trim().slice(0, max);
 // an address: some letters and some length, no more than a real one needs
 const cleanAddress = (a) => { const t = cleanText(a, ADDRESS_MAX); return t.length >= 5 && /[a-z]/i.test(t) ? t : null; };
-const cleanPhotos = (list) => (list || []).slice(0, MAX_PHOTOS).filter((p) => p && /^image\/(jpeg|png|webp|gif)$/.test(p.mediaType) && typeof p.data === 'string');
+const okPhoto = (p) => !!p && /^image\/(jpeg|png|webp|gif)$/.test(p.mediaType) && typeof p.data === 'string';
+const cleanPhotos = (list) => (list || []).slice(0, MAX_PHOTOS).filter(okPhoto);
+// Which view each photo is, from the upload page's checklist (views[i] for photos[i]; extras have none), as a
+// sentence for the design. Only the known views go in, numbered as the photos are after cleanPhotos.
+const VIEWS = { front: 'the front of the house, straight on', left: 'the front left corner', right: 'the front right corner', back: 'the back' };
+function viewsNote(photos, views) {
+  if (!Array.isArray(views)) return '';
+  const kept = (photos || []).slice(0, MAX_PHOTOS).map((p, i) => (okPhoto(p) ? VIEWS[views[i]] || null : undefined)).filter((v) => v !== undefined);
+  const said = kept.map((v, i) => (v ? `photo ${i + 1} shows ${v}` : null)).filter(Boolean);
+  return said.length ? `The owner says ${said.join(', ')} (left and right as seen from the street).` : '';
+}
+const withViews = (notes, body) => [notes, viewsNote(body.photos, body.views)].filter(Boolean).join(' ');
 
 // POST /api/survey {photos, notes}: a cheap first look; returns {summary, seen, questions} for the owner to answer.
 async function handleSurvey(req, res) {
@@ -120,7 +131,7 @@ async function handleSurvey(req, res) {
     const screen = await checkPhotos({ client, model: SURVEY_MODEL, photos, plan: cleanPhotos([body.plan])[0] || null });
     if (!screen.ok) return send(res, 422, { error: screen.message, problems: screen.problems });
     // With an address, the survey sees the same building, street and slope facts as the design.
-    const prep = await prepareDesign({ address: cleanAddress(body.address), notes: cleanText(body.notes, NOTES_MAX), plate: scaleFor(body.plate).plate, lockToOutline: false });
+    const prep = await prepareDesign({ address: cleanAddress(body.address), notes: withViews(cleanText(body.notes, NOTES_MAX), body), plate: scaleFor(body.plate).plate, lockToOutline: false });
     const out = await surveyHouse({ client, model: SURVEY_MODEL, effort: SURVEY_EFFORT, photos, plan: cleanPhotos([body.plan])[0] || null, notes: prep.notes });
     send(res, 200, { summary: out.summary, seen: out.seen, questions: out.questions, model: FAKE ? 'fake' : SURVEY_MODEL });
   } catch (e) { send(res, 502, { error: e && e.message ? e.message : String(e) }); }
@@ -132,7 +143,7 @@ function parseDesignRequest(body) {
   return {
     photos: cleanPhotos(body.photos), plate: sc.plate,
     target: Math.max(300, Math.min(3000, Number(body.target) || sc.target)),
-    notes: cleanText(body.notes, NOTES_MAX),
+    notes: withViews(cleanText(body.notes, NOTES_MAX), body), // the checklist's views follow the owner's notes
     // The owner's answers to the survey, as {question, answer, detail}; the design follows them.
     choices: (Array.isArray(body.choices) ? body.choices : []).slice(0, 8)
       .map((c) => c && ({ question: cleanText(c.question, 200), answer: cleanText(c.answer, ANSWER_MAX), detail: cleanText(c.detail, 300) }))
@@ -445,4 +456,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, cleanText, cleanAddress, parseDesignRequest, partsXml };
+module.exports = { server, cleanText, cleanAddress, parseDesignRequest, partsXml, viewsNote };

@@ -105,13 +105,34 @@ textarea.xml{width:100%;height:140px;margin-top:10px;background:var(--code);colo
 .out{font-size:14px;margin-top:10px}
 .card{border:1px solid var(--line);border-radius:20px;padding:18px;background:var(--panel);margin-bottom:6px}
 .photos{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-.photos img.flagged{outline:3px solid var(--accent);outline-offset:2px}
 .photos img{width:76px;height:76px;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
+/* the photo checklist: a tile per view (front, both front corners, back) with a map of where to stand, then extras */
+.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(122px,1fr));gap:10px;margin-top:4px}
+.shot{position:relative;min-width:0}
+.shotpick{width:100%;height:100%;display:flex;flex-direction:column;align-items:stretch;gap:3px;padding:8px 8px 10px;border:1.5px dashed var(--line);border-radius:14px;background:var(--panel);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.shotpick:hover{border-color:var(--muted)}
+.shotpick:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.shot.filled .shotpick{border-style:solid;border-color:var(--accent)}
+.shot.flagged .shotpick{border:2px solid var(--flag);box-shadow:0 0 0 2px var(--flag)}
+.shotpic{position:relative;width:100%;aspect-ratio:1;border-radius:9px;background:var(--stage);display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:4px}
+.shotpic img{width:100%;height:100%;object-fit:cover;display:block}
+.shotpic svg{width:78%;height:78%;display:block}
+.shotname{font-weight:700;font-size:14px;line-height:1.2}
+.shothint{font-size:12px;color:var(--muted);line-height:1.3}
+.shotok{position:absolute;left:6px;bottom:6px;width:22px;height:22px;border-radius:999px;background:var(--accent);color:var(--accent-ink,#fff);display:flex;align-items:center;justify-content:center}
+.shotdel{position:absolute;top:4px;right:4px;width:30px;height:30px;border-radius:999px;border:0;background:rgba(20,16,12,.72);color:#fff;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.shotdel:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+.shottips{margin:10px 0 0;font-size:13px;color:var(--muted);line-height:1.45}
 #refPhotos img{width:112px;height:112px;cursor:zoom-in}
 .lightbox{position:fixed;inset:0;z-index:50;background:rgba(20,16,12,.88);display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
 .lightbox img{max-width:100%;max-height:100%;border-radius:10px;object-fit:contain}
 /* no page zoom on phones: no double-tap zoom, and inputs at 16px so focusing one doesn't zoom in */
 html{touch-action:manipulation}
+/* no text highlighting: selecting text (a drag, a long press) and the tap flash on phones are off, as in an app;
+   fields, the code and parts-list boxes stay selectable */
+html{-webkit-tap-highlight-color:transparent}
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
 @media (max-width:760px){input,textarea,select{font-size:16px!important}}
 .target{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--muted)}
 .target input{width:78px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-variant-numeric:tabular-nums}
@@ -312,12 +333,13 @@ if(location.hash==='#design'&&!/[?&](job|hero)=/.test(location.search)) document
           <div class="mine" id="myDesigns" hidden><h3>Your designs</h3><ul id="myDesignList"></ul></div>
           <p class="note" style="margin-top:0;color:var(--ink)" id="photoIntro">Add photos of the outside of the house: the front first, then the sides, the back and the garage if you have them (up to 12). A floor plan helps us get the walls just right, and anything the photos don't show, you can tell us below.</p>
           <div id="photoControls">
-            <div class="row" id="pickRow"><button class="btn" id="pickBtn">Choose photos</button><input type="file" id="photoInput" multiple hidden>
-              <button class="btn" id="planBtn" type="button">Add floor plan</button><input type="file" id="planInput" accept="image/jpeg,image/png,image/webp" hidden>
+            <div class="shots" id="thumbs" aria-label="Photos of the house"></div>
+            <p class="shottips">Stand back far enough to fit the whole house, in daylight if you can. Photos you take yourself work best, and listing photos are fine too.</p>
+            <div class="row" id="pickRow"><input type="file" id="photoInput" multiple hidden>
+              <button class="btn" id="planBtn" type="button">Add a floor plan (optional)</button><input type="file" id="planInput" accept="image/jpeg,image/png,image/webp" hidden>
               <label class="target dev-only">About <input type="number" id="target" value="1200" min="300" max="2500" step="50" inputmode="numeric"> pieces</label>
 </div>
             <div class="out" id="planStatus"></div>
-            <div class="photos" id="thumbs"></div>
             <label class="addrlabel" for="addrInput">The house's address</label>
             <form class="addr" id="addrForm"><input id="addrInput" type="text" autocomplete="street-address" maxlength="200" required aria-required="true" placeholder="e.g. 634 Main St, Springfield, IL"><button class="btn dev-only" id="addrBtn" type="submit">Find photos</button></form>
             <p class="addrwhy">We use it to find the house's outline on the map and how the ground slopes, so the walls, driveway and yard come out true to life.</p>

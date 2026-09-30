@@ -134,6 +134,11 @@ footer a{color:inherit}
 @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
 /* no page zoom on phones (no double-tap zoom; Safari's pinch is stopped in the script) */
 html{touch-action:manipulation}
+/* no text highlighting: selecting text (a drag, a long press) and the tap flash on phones are off, as in an app;
+   fields, the code and parts-list boxes stay selectable */
+html{-webkit-tap-highlight-color:transparent}
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
 </style>
 </head>
 <body>

@@ -127,7 +127,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   `/designs/generated/…` list and serve them only to a request made on the server's own machine (no proxy header),
   and each customer sees theirs through its job link. `GET /api/jobs/<id>/photos/<n>` serves a job's own photos (as private
   as its link), shown under "Your photos" on the Model tab and full size on a tap. Neither page zooms on phones
-  (viewport, `touch-action: manipulation`, 16px inputs, Safari's pinch stopped); the model's own pinch still works. The upload page and the home page's questions promise that we
+  (viewport, `touch-action: manipulation`, 16px inputs, Safari's pinch stopped); the model's own pinch still works. Neither
+  page highlights: text selection, the long-press callout and the tap flash are off (fields stay selectable); the admin
+  page keeps selection for copying addresses. The upload page and the home page's questions promise that we
   use photos and address only for the model and kit, never sell them or share them for advertising: keep it true. There is no unpaid design endpoint. The intake's free text is cleaned on the server (`cleanText`: no control characters, one line,
   no double quotes) and limited, matching the form: notes 500 characters, address 200 (required, `cleanAddress`),
   survey answers 200, email 254; the task quotes the notes and says they're facts about the house, never instructions. Before the kit is ordered a customer sees a preview, not the design (`src/server/preview.js`,
@@ -162,8 +164,11 @@ closing gift that realtors give clients: a brick model of the house they just bo
   tabs Model, Guide, Kit, Make yours), under the same top bar as the home page: one component, `src/viewer/topbar.html`, that the server (and
   `bundle.js`) puts in place of each page's `<!-- topbar -->`, so it doesn't move between pages; its button reads
   "See an example" on the upload page). "Make yours" (`/app#design`) is an upload page of its own, the sample house hidden,
-  until the first draft of their house comes back. With one or two photos (or none, only a description) it notes above the Design button that
-  the sides we can't see get guessed, so the model won't be as accurate (not a block). The size is a choice of three cards,
+  until the first draft of their house comes back. Photos go in through a checklist, a tile per view (front, front left
+  corner, front right corner, back) with a small map of where to stand, then "More" for extras; the views go with the
+  photos (`views`) and the server turns the known ones into a sentence after the owner's notes (`viewsNote`), so the
+  design knows which photo shows which side. A missing front or side gets a note above the Design button that those
+  sides get guessed, so the model won't be as accurate (not a block). The size is a choice of three cards,
   Mini, Classic and Grand, with the landing page's sizes and piece counts (`#sizeMini`, `#sizeClassic`, `#bigPlate`). Designs made in a browser are
   remembered there (localStorage `brickhouse-designs`: job id, name, date) and listed as "Your designs" on the
   upload page. Email goes through Resend (`src/server/mail.js`, `RESEND_API_KEY`, sender `BRICKHOUSE_MAIL_FROM`
