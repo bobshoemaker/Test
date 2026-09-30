@@ -121,6 +121,16 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       return ph && typeof ph.data === 'string' ? { mediaType: ph.mediaType, data: ph.data } : null;
     },
 
+    // A design's line in "Your designs": its name (once a draft has one), the address it was made for, where it's
+    // got to, and when it was started; null for no such job.
+    summary(id) {
+      const j = load(id);
+      if (!j) return null;
+      const d = (j.result && j.result.design) || j.draft || {};
+      return { id: j.id, name: d.name || '', address: (j.params && j.params.address) || '', at: j.createdAt,
+        status: j.status === 'done' ? 'ready' : j.status === 'error' ? 'problem' : j.status === 'awaiting_payment' ? 'unpaid' : 'designing' };
+    },
+
     // For the admin page: every job, newest first, with what the owner needs to run the business.
     list() {
       const out = [];
@@ -182,8 +192,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       for (const f of fs.readdirSync(dir)) {
         const j = f.endsWith('.json') ? load(f.slice(0, -5)) : null;
         if (!j || j.email !== email || j.status === 'awaiting_payment') continue;
-        const d = (j.result && j.result.design) || j.draft || {};
-        out.push({ id: j.id, name: d.name || '', at: j.createdAt, status: j.status === 'done' ? 'ready' : j.status === 'error' ? 'problem' : 'designing', origin: j.origin });
+        out.push({ ...this.summary(j.id), origin: j.origin });
       }
       return out.sort((a, b) => b.at - a.at);
     },

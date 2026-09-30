@@ -226,6 +226,15 @@ function limited(req, key, perHour) {
 }
 
 async function handleJobs(req, res, url) {
+  // POST /api/jobs/summary {ids}: the lines of "Your designs" on a device, for the ids it already holds (each id
+  // is the design's own private link, so this shows nothing its holder can't already open)
+  if (req.method === 'POST' && url.pathname === '/api/jobs/summary') {
+    let ids;
+    try { ids = JSON.parse(await readBody(req)).ids; } catch (e) { return send(res, 400, { error: e.message }); }
+    if (!Array.isArray(ids)) return send(res, 400, { error: 'Send {ids: [...]}' });
+    const ok = ids.slice(0, 50).filter((x) => typeof x === 'string' && /^[a-f0-9-]{36}$/.test(x));
+    return send(res, 200, { designs: ok.map((x) => JOBS.summary(x)).filter(Boolean) });
+  }
   // GET /api/jobs/<id>/photos/<n>: the job's own photos, as private as the job's link
   const ph = /^\/api\/jobs\/([a-f0-9-]{36})\/photos\/(\d{1,2})$/.exec(url.pathname);
   if (req.method === 'GET' && ph) {
@@ -297,7 +306,7 @@ function mineEmailOf(token, now = Date.now()) {
 function handleMineList(res, token) {
   const email = mineEmailOf(token);
   if (!email) return send(res, 401, { error: 'That link has expired. Enter your email again for a new one.' });
-  send(res, 200, { designs: JOBS.byEmail(email).slice(0, 50).map(({ id, name, at, status }) => ({ id, name, at, status })) });
+  send(res, 200, { designs: JOBS.byEmail(email).slice(0, 50).map(({ id, name, address, at, status }) => ({ id, name, address, at, status })) });
 }
 // POST /api/mine {email}: the answer is the same whether or not there are any designs, so it can't be used to
 // learn whose email has designs.

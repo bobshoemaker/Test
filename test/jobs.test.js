@@ -196,3 +196,13 @@ test('the admin list, fulfillment (shipped with tracking emails once) and runnin
   row = jobs.list()[0];
   assert.deepEqual([row.fulfillment.status, row.fulfillment.supplierOrder, row.fulfillment.tracking, row.kit.test], ['shipped', 'BW-1', '1Z999', true]);
 });
+
+test("a design's line in Your designs: the address until a draft names it, and where it's got to", async () => {
+  let finish; const run = (p, emit) => new Promise((r) => { finish = () => { emit({ type: 'done', design: { name: 'Brisbane St' } }); r(); }; });
+  const jobs = createJobs({ dir: tmp(), run });
+  const { id } = await jobs.create({ notes: 'x', photos: [], address: '157 Brisbane St' }, 'https://site.test');
+  assert.deepEqual([jobs.summary(id).name, jobs.summary(id).address, jobs.summary(id).status], ['', '157 Brisbane St', 'designing']);
+  finish(); await until(() => jobs.get(id).status === 'done');
+  assert.deepEqual([jobs.summary(id).name, jobs.summary(id).status], ['Brisbane St', 'ready']);
+  assert.equal(jobs.summary('00000000-0000-0000-0000-000000000000'), null);
+});
