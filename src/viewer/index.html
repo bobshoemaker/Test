@@ -142,6 +142,8 @@ details.extra,details.other{margin-top:16px;border-top:1px solid var(--line);pad
 details.extra summary,details.other summary{cursor:pointer;font-weight:600;font-size:15px;color:var(--ink)}
 details.other summary{font-weight:500;font-size:14px;color:var(--muted)}
 .row.go{margin-top:18px}
+.planask{display:flex;align-items:center;justify-content:space-between;gap:10px 14px;flex-wrap:wrap;margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--stage)}
+.planask p{margin:0;font-size:14px;flex:1 1 240px;min-width:0}
 .btn.cta{padding:13px 26px;font-size:17px}
 .fine{margin:10px 0 0;font-size:13px;color:var(--muted);line-height:1.45}
 .fine.privacy{margin-top:4px;padding:0;background:none}
@@ -424,6 +426,9 @@ if(/[?&]job=/.test(location.search)&&!/[?&](canceled|hero)=/.test(location.searc
             <h3 class="step"><span class="stepn" aria-hidden="true">1</span>Photos of your house</h3>
             <div class="shots" id="thumbs" aria-label="Photos of the house"></div>
             <p class="shottips">Stand back so the whole house fits. Listing photos work too.</p>
+            <div class="planask"><p>Have a floor plan? From the listing, say. It helps us get the rooms and walls right.</p>
+              <button class="btn" id="planBtn" type="button">Add a floor plan</button><input type="file" id="planInput" accept="image/jpeg,image/png,image/webp" hidden></div>
+            <div class="out" id="planStatus"></div>
             <h3 class="step"><label for="addrInput"><span class="stepn" aria-hidden="true">2</span>Its address</label></h3>
             <form class="addr" id="addrForm"><input id="addrInput" type="text" autocomplete="street-address" maxlength="200" required aria-required="true" placeholder="634 Main St, Springfield, IL"><button class="btn dev-only" id="addrBtn" type="submit">Find photos</button></form>
             <div class="out" id="addrStatus" aria-live="polite"></div>
@@ -447,10 +452,8 @@ if(/[?&]job=/.test(location.search)&&!/[?&](canceled|hero)=/.test(location.searc
               <textarea class="notes" id="notes" rows="2" maxlength="500" placeholder="Like the roof color, or which side the garage is on"></textarea>
               <p class="count" id="notesCount" aria-live="polite">0 / 500</p>
               <div class="row" id="pickRow"><input type="file" id="photoInput" multiple hidden>
-                <button class="btn" id="planBtn" type="button">Add a floor plan</button><input type="file" id="planInput" accept="image/jpeg,image/png,image/webp" hidden>
                 <label class="target dev-only">About <input type="number" id="target" value="1200" min="300" max="2500" step="50" inputmode="numeric"> pieces</label>
               </div>
-              <div class="out" id="planStatus"></div>
             </details>
             <div class="survey" id="survey" hidden></div>
             <label class="addrlabel" for="emailInput" id="emailLabel">Email me when it's ready <span class="opt" id="emailWhy">(optional)</span></label>
