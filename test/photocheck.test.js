@@ -73,3 +73,9 @@ test('a design held to a supplier is compiled and returned with it, and Claude i
   // the compile results come back under GoBricks' catalog
   assert.equal(out.result.inventory.find((l) => l.kind === 'baseplate').gds.startsWith('GDS-2237'), true);
 });
+
+test('yard, patio and garden photos pass alongside the house, but not on their own', () => {
+  assert.equal(photoVerdict(say('home', 'home', 'yard', 'yard'), 4, false).ok, true);
+  const alone = photoVerdict(say('yard', 'yard'), 2, false);
+  assert.equal(alone.ok, false); assert.match(alone.message, /clear photo of the front/);
+});

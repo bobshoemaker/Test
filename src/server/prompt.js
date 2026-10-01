@@ -324,15 +324,18 @@ windows, doors, materials), not by the weather, light, cars or people.
 For each photo, pick one:
 - "home": the outside of the home the request is about, the same one as the other photos
 - "inside": the inside of that home
+- "yard": the home's own grounds, with or without the house in view: its yard, garden, patio or deck, pool, driveway,
+  porch, fence or planting (they show the lot the model is built on, so they help)
 - "different_home": a home, but plainly a different one from the rest (with two or more photos, call out the odd
   ones; if they split evenly, call the ones after the first photo's home different)
 - "not_home": a building that isn't a home (a shop, office, school, church, warehouse, stadium, landmark)
-- "not_building": no building at all (people, pets, food, a screenshot, a drawing, text, a car, a landscape)
+- "not_building": no building and no yard at all (people, pets, food, a screenshot, a drawing, text, a car, a wild landscape)
 - "unclear": too dark, blurry or cropped to tell
 
 A floor plan, when sent, is the last image and is marked as one: say whether it really is a floor plan of a home.
 
-Be fair: when in doubt between "home" and "different_home", choose "home", since the owner knows their house.
+Be fair: when in doubt between "home" and "different_home", choose "home", since the owner knows their house; and a
+backyard, patio or garden photo sent with photos of a home is "yard", not "not_building".
 Give no explanation of your reasoning beyond the one short note per photo. Submit with submit_photo_check.`;
 
 const PHOTO_CHECK_TOOL = {
@@ -350,7 +353,7 @@ const PHOTO_CHECK_TOOL = {
           additionalProperties: false,
           properties: {
             photo: { type: 'integer', description: 'The photo number, 1 for the first image.' },
-            shows: { type: 'string', enum: ['home', 'inside', 'different_home', 'not_home', 'not_building', 'unclear'] },
+            shows: { type: 'string', enum: ['home', 'inside', 'yard', 'different_home', 'not_home', 'not_building', 'unclear'] },
             note: { type: 'string', description: 'A few plain words on what it shows.' },
           },
           required: ['photo', 'shows', 'note'],
