@@ -29,16 +29,21 @@ const CHANGES_INCLUDED = 1; // changes in words an owner can ask for before thei
 function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, fixRun = null, reviseRun = null, hold = false, intake = false, now = () => Date.now(),
   kitCents = () => null, preview = null, notify = null, onKit = null }) {
   fs.mkdirSync(dir, { recursive: true });
-  const jobs = new Map();
+  // A job's file holds its photos, map pictures and every version, megabytes each, so only the jobs in use stay in
+  // memory: the ones running here (one object each, which their run updates) and the few used last. The rest are read
+  // from disk when asked for; the admin's list, the sweep and "Your designs" read small rows kept by file (rowOf).
+  const running = new Map(), recent = new Map(), RECENT = 4;
   const file = (id) => path.join(dir, `${id}.json`);
+  const keep = (j) => { recent.delete(j.id); recent.set(j.id, j); if (recent.size > RECENT) recent.delete(recent.keys().next().value); };
   const save = (j) => fs.writeFileSync(file(j.id), JSON.stringify(j));
   const load = (id) => {
     if (!/^[a-f0-9-]{36}$/.test(id)) return null;
-    if (jobs.has(id)) return jobs.get(id);
+    const live = running.get(id) || recent.get(id);
+    if (live) { keep(live); return live; }
     if (!fs.existsSync(file(id))) return null;
     const j = JSON.parse(fs.readFileSync(file(id), 'utf8'));
     if (j.status === 'running') j.status = 'interrupted'; // the server restarted mid-job; it may run again
-    jobs.set(id, j);
+    keep(j);
     return j;
   };
   const feeOn = !!(stripe && feeCents > 0);
@@ -78,7 +83,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     j.revising = null;
   };
   function launch(j, fn) {
-    j.status = 'running'; save(j);
+    j.status = 'running'; running.set(j.id, j); save(j);
     fn(j.params, (ev) => emit(j, ev))
       .then(() => { j.status = 'done';
         // after a revision the viewer shows what it ended on
@@ -86,17 +91,56 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
         j.revising = null;
         if (j.result && hold && !j.review && !j.approved && !j.readySent) j.review = { since: now() }; // waiting for the admin
         if (j.result && !j.readySent && !held(j)) { j.readySent = now(); tell(j, 'ready'); } // once: not again after a fix round
-        save(j); })
+        save(j); running.delete(j.id); keep(j); })
       .catch((e) => { const message = e && e.message ? e.message : String(e); emit(j, { type: 'error', message });
         if (j.revising) revisionFailed(j, message);
         // a revision that fails leaves the design as it was
-        j.status = j.result ? 'done' : 'error'; save(j); });
+        j.status = j.result ? 'done' : 'error'; save(j); running.delete(j.id); keep(j); });
   }
 
   // Where an order's design stands with its owner: the time to give an OK (null once confirmed or a surprise), whether they
   // can still ask for a change, the change they asked for, and the confirmation.
   const approvalOf = (j) => ({ until: j.awaiting ? j.awaiting.until : null, surprise: !!j.order.surprise, confirmed: j.confirmed || null,
     changesLeft: Math.max(0, CHANGES_INCLUDED - (j.changesAsked || 0)), changeRequest: j.changeRequest ? { at: j.changeRequest.at, note: j.changeRequest.note, done: j.changeRequest.done || null } : null });
+
+  // A design's line in "Your designs": its name (once a draft has one), the address it was made for, where it's got to,
+  // and when it was started.
+  const summaryOf = (j) => { const d = (j.result && j.result.design) || j.draft || {};
+    return { id: j.id, name: d.name || '', address: (j.params && j.params.address) || '', at: j.createdAt,
+      status: j.status === 'done' && !held(j) ? 'ready' : j.status === 'error' ? 'problem' : j.status === 'awaiting_payment' ? 'unpaid' : 'designing' }; }; // intake too
+  // A job's row for the admin's list, with what the sweep (due_) and "Your designs" (email_, summary_) need, kept by the
+  // file's time and size, so a job is read again only when it has changed. A job running here is read from memory.
+  const rowCache = new Map();
+  function rowFor(j) {
+    // an error from before the latest Run again or restart is over: only one since then counts
+    const since = j.events.reduce((k, e, i) => (e.type === 'status' && e.resumed ? i : k), -1);
+    const d = (j.result && j.result.design) || j.draft || {}, parts = j.events.filter((e) => e.type === 'part'), err = j.events.slice(since + 1).filter((e) => e.type === 'error').pop();
+    return { id: j.id, createdAt: j.createdAt, status: j.status, name: d.name || '', address: (j.params && j.params.address) || '',
+      plate: d.plate || (j.params && j.params.plate) || 32, email: j.email || null, photos: j.params && Array.isArray(j.params.photos) ? j.params.photos.length : 0,
+      part: parts.length ? `${parts[parts.length - 1].n} of ${parts[parts.length - 1].of}` : null, error: err ? err.message : null,
+      pieces: j.result && j.result.stats ? j.result.stats.pieces : null, problems: j.result ? (j.result.errors || 0) + (j.result.warnings || 0) : null,
+      paid: !!j.paid, kit: j.kit ? { at: j.kit.at, amount: j.kit.amount, currency: j.kit.currency, name: j.kit.name, email: j.kit.email, shipping: j.kit.shipping, test: !!j.kit.test } : null,
+      review: j.review || j.approved ? { approved: j.approved ? j.approved.at : null, since: j.review ? j.review.since : null, revisions: (j.revisions || []).length, revising: !!j.revising } : null,
+      order: j.order ? { surprise: !!j.order.surprise, confirmed: j.confirmed || null, until: j.awaiting ? j.awaiting.until : null,
+        changeRequest: j.changeRequest || null } : null, toFulfill: toFulfill(j),
+      fulfillment: j.fulfillment || null, stock: j.stock || null, site: j.site ? { ftPerStud: j.site.ftPerStud, costUsd: j.site.costUsd, report: !!j.siteReport, needsCheck: !!(j.site.found && j.site.found.needsCheck) } : null,
+      email_: j.email || null, origin_: j.origin, summary_: summaryOf(j), due_: j.order && !j.confirmed && j.awaiting && !held(j) ? j.awaiting.until : null };
+  }
+  function rows() {
+    const out = [];
+    for (const f of fs.readdirSync(dir)) {
+      if (!f.endsWith('.json')) continue;
+      const id = f.slice(0, -5), live = running.get(id);
+      if (live) { out.push(rowFor(live)); continue; }
+      let st; try { st = fs.statSync(path.join(dir, f)); } catch { continue; }
+      const c = rowCache.get(id), stamp = `${st.mtimeMs}:${st.size}`;
+      if (c && c.stamp === stamp) { out.push(c.row); continue; }
+      const j = recent.get(id) || (() => { try { const x = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); if (x.status === 'running') x.status = 'interrupted'; return x; } catch { return null; } })();
+      if (!j) continue;
+      const row = rowFor(j); rowCache.set(id, { stamp, row }); out.push(row);
+    }
+    return out;
+  }
 
   // A paid kit from its Stripe Checkout Session: what was paid, and where it ships.
   const kitFromSession = (s, session) => { const cd = s.customer_details || {}, ship = (s.collected_information && s.collected_information.shipping_details) || s.shipping_details || null;
@@ -129,7 +173,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       const price = kitCents(rest.plate || 32);
       const j = { id: crypto.randomUUID(), createdAt: now(), status: feeOn || (stripe && price) ? 'awaiting_payment' : 'queued', params: rest, events: [], email, origin,
         ...(price ? { order: { cents: price, surprise: !!surprise } } : {}) };
-      jobs.set(j.id, j);
+      keep(j);
       if (j.status !== 'awaiting_payment') {
         if (j.order) j.kit = { at: now(), test: true }; // no payments on this site: a test order
         if (intake) { j.status = 'intake'; save(j); } else { save(j); launch(j, run); } return { id: j.id };
@@ -198,32 +242,12 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     // got to, and when it was started; null for no such job.
     summary(id) {
       const j = load(id);
-      if (!j) return null;
-      const d = (j.result && j.result.design) || j.draft || {};
-      return { id: j.id, name: d.name || '', address: (j.params && j.params.address) || '', at: j.createdAt,
-        status: j.status === 'done' && !held(j) ? 'ready' : j.status === 'error' ? 'problem' : j.status === 'awaiting_payment' ? 'unpaid' : 'designing' }; // intake too
+      return j ? summaryOf(j) : null;
     },
 
     // For the admin page: every job, newest first, with what the owner needs to run the business.
     list() {
-      const out = [];
-      for (const f of fs.readdirSync(dir)) {
-        const j = f.endsWith('.json') ? load(f.slice(0, -5)) : null;
-        if (!j) continue;
-        // an error from before the latest Run again or restart is over: only one since then counts
-        const since = j.events.reduce((k, e, i) => (e.type === 'status' && e.resumed ? i : k), -1);
-        const d = (j.result && j.result.design) || j.draft || {}, parts = j.events.filter((e) => e.type === 'part'), err = j.events.slice(since + 1).filter((e) => e.type === 'error').pop();
-        out.push({ id: j.id, createdAt: j.createdAt, status: j.status, name: d.name || '', address: (j.params && j.params.address) || '',
-          plate: d.plate || (j.params && j.params.plate) || 32, email: j.email || null, photos: j.params && Array.isArray(j.params.photos) ? j.params.photos.length : 0,
-          part: parts.length ? `${parts[parts.length - 1].n} of ${parts[parts.length - 1].of}` : null, error: err ? err.message : null,
-          pieces: j.result && j.result.stats ? j.result.stats.pieces : null, problems: j.result ? (j.result.errors || 0) + (j.result.warnings || 0) : null,
-          paid: !!j.paid, kit: j.kit ? { at: j.kit.at, amount: j.kit.amount, currency: j.kit.currency, name: j.kit.name, email: j.kit.email, shipping: j.kit.shipping, test: !!j.kit.test } : null,
-          review: j.review || j.approved ? { approved: j.approved ? j.approved.at : null, since: j.review ? j.review.since : null, revisions: (j.revisions || []).length, revising: !!j.revising } : null,
-          order: j.order ? { surprise: !!j.order.surprise, confirmed: j.confirmed || null, until: j.awaiting ? j.awaiting.until : null,
-            changeRequest: j.changeRequest || null } : null, toFulfill: toFulfill(j),
-          fulfillment: j.fulfillment || null, stock: j.stock || null, site: j.site ? { ftPerStud: j.site.ftPerStud, costUsd: j.site.costUsd, report: !!j.siteReport, needsCheck: !!(j.site.found && j.site.found.needsCheck) } : null });
-      }
-      return out.sort((a, b) => b.createdAt - a.createdAt);
+      return rows().map(({ email_, origin_, summary_, due_, ...row }) => row).sort((a, b) => b.createdAt - a.createdAt);
     },
 
     // How the house was found and mapped from above, for the admin: {report, costUsd}, or null.
@@ -273,12 +297,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     // The designs made with an email address, newest first: finished ones and ones still being designed
     // (not ones whose design fee was never paid).
     byEmail(email) {
-      const out = [];
-      for (const f of fs.readdirSync(dir)) {
-        const j = f.endsWith('.json') ? load(f.slice(0, -5)) : null;
-        if (!j || j.email !== email || j.status === 'awaiting_payment') continue;
-        out.push({ ...this.summary(j.id), origin: j.origin });
-      }
+      const out = rows().filter((r) => r.email_ === email && r.status !== 'awaiting_payment').map((r) => ({ ...r.summary_, origin: r.origin_ }));
       return out.sort((a, b) => b.at - a.at);
     },
 
@@ -432,8 +451,9 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     // Orders whose owner said nothing in time go to building. Run now and then (server.js); returns the ids confirmed.
     sweep() {
       const ids = [];
-      for (const f of fs.readdirSync(dir)) {
-        const j = f.endsWith('.json') ? load(f.slice(0, -5)) : null;
+      for (const r of rows()) {
+        if (r.due_ == null || r.due_ > now()) continue;
+        const j = load(r.id);
         if (!j || !j.order || j.confirmed || !j.awaiting || held(j) || j.awaiting.until > now()) continue;
         confirmOrder(j, 'time'); save(j); ids.push(j.id);
       }

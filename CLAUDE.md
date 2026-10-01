@@ -179,7 +179,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   memory) cuts off a running job; at startup the server picks each one up again at the part it was on, from its
   last draft (`resumeInterrupted`: up to twice, jobs from the last day only), and the viewer keeps polling through
   it and calls an unfinished design a draft. Jobs run server-side and are saved to
-  `designs/generated/jobs/`; results to `designs/generated/`, which are private: `/api/designs` and
+  `designs/generated/jobs/` (megabytes each with their photos and maps, so only running and the last few used stay in memory;
+  the admin list, the sweep and Your designs read small rows cached by file; headless Chromium closes after two idle
+  minutes: the Starter plan has 512 MB); results to `designs/generated/`, which are private: `/api/designs` and
   `/designs/generated/…` list and serve them only to a request made on the server's own machine (no proxy header),
   and each customer sees theirs through its job link. `GET /api/jobs/<id>/photos/<n>` serves a job's own photos (as private
   as its link), shown under "Your photos" on the Model tab and full size on a tap. Neither page zooms on phones
