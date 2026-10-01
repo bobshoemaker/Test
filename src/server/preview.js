@@ -47,7 +47,7 @@ function makePreview(design) {
   const colors = new Map(); for (const e of R.inventory) colors.set(e.color, (colors.get(e.color) || 0) + e.q);
   return {
     preview: true,
-    name: design.name, place: design.place, unit: design.unit, facts: design.facts, assumed: design.assumed, photoCredits: design.photoCredits, mapCredits: design.mapCredits,
+    name: design.name, place: design.place, unit: design.unit, facts: design.facts, assumed: design.assumed, guesses: design.guesses, photoCredits: design.photoCredits, mapCredits: design.mapCredits,
     parts: out,
     steps: shown.map((s) => ({ kind: s.kind, title: s.title, n: s.n, of: s.of, sub: s.sub, parts: (s.parts || []).map((id) => newId.get(id)).filter(Boolean) })),
     subs: R.subs.map((s) => ({ name: s.name, copies: s.copies })),

@@ -569,9 +569,10 @@ function renderApproval(j){
   if(!ap||j.review||j.status!=='done'||ap.surprise&&!ap.confirmed){ card.hidden=true; return; }
   card.hidden=false;
   const when=ap.until?new Date(ap.until).toLocaleString(undefined,{weekday:'long',month:'long',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
-  if(ap.confirmed){ $('apTitle').textContent='We\'re building your kit'; $('apButtons').hidden=true; $('apChange').hidden=true;
+  if(ap.confirmed){ $('apTitle').textContent='We\'re building your kit'; $('apButtons').hidden=true; $('apChange').hidden=true; $('apGuesses').hidden=true;
     $('apLead').textContent='Thank you! We\'re ordering every piece and will email you when your kit ships.'; return; }
   $('apTitle').textContent='Is this your house?'; $('apButtons').hidden=false; $('apAsk').hidden=!ap.changesLeft;
+  $('apGuesses').hidden=!ap.changesLeft||!$('apGuessList').children.length;
   $('apLead').textContent=(ap.changeRequest&&ap.changeRequest.done?'We made the change you asked for. Turn it around and check it looks like home. '
     :'Turn it around and check it looks like home. If something should be different, tell us once and we\'ll change it. ')
     +(when?`If we don't hear from you by ${when}, we'll build it as it is.`:'');
@@ -617,6 +618,8 @@ $('stress').onchange=e=>{ stress=e.target.checked; applyState(); };
 // ---------- design & compile ----------
 let curDesign=null;
 function esc(t){ return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+// the owner's short list of what the photos didn't show (the design's "guesses"): plain phrases, at most 4
+const guessesOf=d=>(Array.isArray(d.guesses)?d.guesses:[]).filter(g=>typeof g==='string'&&g.trim()).slice(0,4).map(g=>g.trim().slice(0,80));
 function showDesign(d){
   const first=!curDesign; curDesign=d; picked.clear(); if(reviewing) renderPicked(); base.visible=true; R=d.preview?previewR(d):compile(d); lifted=0; $('lift').hidden=!(R.stats.liftoff&&R.stats.liftoff.length); liftShow(); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,R.stats.baseThick?PH/0.14:1,PLATE/32); base.position.y=R.stats.baseThick?-PH/2:-0.07; base.material.color.copy(lin(COLORS[R.stats.baseColor||'Green'].hex)); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
   buildScene(); renderReport(); renderParts(); renderStep(); frame();
@@ -625,9 +628,12 @@ function showDesign(d){
   $('factsTitle').textContent='What we saw in the photos';
   $('facts').innerHTML=(d.facts||[]).map(f=>`<li>${esc(f)}</li>`).join('');
   $('assumed').textContent=d.assumed||'';
+  const gs=guessesOf(d); $('guessesNote').hidden=!gs.length; $('guessesNote').textContent=gs.length?`The customer is asked about: ${gs.join('; ')}.`:'';
+  $('apGuessList').innerHTML=gs.map(g=>`<li>${esc(g)}</li>`).join('');
+  // the sources' credits, in one small line (some, like the building outlines, require it)
   const cr=d.photoCredits||[], mc=d.mapCredits||[]; $('credits').hidden=!cr.length&&!mc.length;
-  $('credits').innerHTML=cr.map(c=>`<li>Photo: ${/^https:\/\//.test(c.page||'')?`<a href="${esc(c.page)}" target="_blank" rel="noopener">${esc(c.credit)}</a>`:esc(c.credit)}${c.license?', '+esc(c.license):''}</li>`).join('')
-    +mc.map(c=>`<li>Map: ${esc(c)}</li>`).join('');
+  $('credits').innerHTML=[...cr.map(c=>`Photo: ${/^https:\/\//.test(c.page||'')?`<a href="${esc(c.page)}" target="_blank" rel="noopener">${esc(c.credit)}</a>`:esc(c.credit)}${c.license?', '+esc(c.license):''}`),
+    ...(mc.length?[`Map: ${mc.map(esc).join('; ')}`]:[])].join(' · ');
   if(first){ resize(); goal.radius=fitRadius(); radius=goal.radius*1.25; } // the first house on the stage swings in
   return R;
 }
@@ -967,7 +973,7 @@ function renderPicked(){
   $('revClear').onclick=()=>{ picked.clear(); applyState(); renderPicked(); };
 }
 function renderReview(rv,st){
-  const was=!!reviewing; reviewing=rv; $('review').hidden=!rv;
+  const was=!!reviewing; reviewing=rv; $('review').hidden=!rv; $('designNotes').classList.toggle('dev-only',!rv); // our team reads them while checking
   if(!rv){ if(was){ picked.clear(); applyState(); } return; }
   const busy=st==='running';
   const cr=rv.changeRequest&&!rv.changeRequest.done?rv.changeRequest:null;
