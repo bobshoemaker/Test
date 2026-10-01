@@ -825,6 +825,8 @@ const TAGS={ready:'Ready',designing:'Designing',problem:'Needs a look',unpaid:'N
 function renderMine(){ const a=myDesigns();
   // the card: the list, and the email link when the site can send one; not on the page after Design
   $('myDesigns').hidden=!$('sent').hidden||!a.length;
+  // "Made one on another device?" goes with the list when there is one, else at the foot of the form
+  const box=$('findMineBox'), home=a.length?$('myDesigns'):$('makeCard'); if(box.parentNode!==home) home.appendChild(box);
   $('myDesignList').innerHTML=a.map(d=>`<li><a href="/app?job=${encodeURIComponent(d.id)}"><b>${esc(d.name||d.address||'Your house')}${d.status&&TAGS[d.status]?`<span class="tag ${d.status}">${TAGS[d.status]}</span>`:''}</b>`
     +`<small>${new Date(d.at).toLocaleDateString(undefined,{month:'short',day:'numeric',year:new Date(d.at).getFullYear()===new Date().getFullYear()?undefined:'numeric'})}</small></a></li>`).join(''); }
 renderMine();
