@@ -190,6 +190,7 @@ test('the admin list, fulfillment (shipped with tracking emails once) and runnin
   // run again: picks up from part 1 (no seed past part 1) and finishes
   fail = false;
   assert.equal(jobs.retry(id).code, 200);
+  assert.equal(jobs.list()[0].error, null, 'the old error is over once it runs again');
   await until(() => jobs.get(id).status === 'done');
   assert.equal(jobs.retry(id).code, 409, 'only a failed design runs again');
   // fulfillment needs a kit order; shipped with tracking emails once

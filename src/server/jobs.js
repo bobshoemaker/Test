@@ -153,7 +153,9 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       for (const f of fs.readdirSync(dir)) {
         const j = f.endsWith('.json') ? load(f.slice(0, -5)) : null;
         if (!j) continue;
-        const d = (j.result && j.result.design) || j.draft || {}, parts = j.events.filter((e) => e.type === 'part'), err = j.events.filter((e) => e.type === 'error').pop();
+        // an error from before the latest Run again or restart is over: only one since then counts
+        const since = j.events.reduce((k, e, i) => (e.type === 'status' && e.resumed ? i : k), -1);
+        const d = (j.result && j.result.design) || j.draft || {}, parts = j.events.filter((e) => e.type === 'part'), err = j.events.slice(since + 1).filter((e) => e.type === 'error').pop();
         out.push({ id: j.id, createdAt: j.createdAt, status: j.status, name: d.name || '', address: (j.params && j.params.address) || '',
           plate: d.plate || (j.params && j.params.plate) || 32, email: j.email || null, photos: j.params && Array.isArray(j.params.photos) ? j.params.photos.length : 0,
           part: parts.length ? `${parts[parts.length - 1].n} of ${parts[parts.length - 1].of}` : null, error: err ? err.message : null,
@@ -203,7 +205,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       const parts = j.events.filter((e) => e.type === 'part' && Number.isInteger(e.n));
       let fromPart = parts.length ? parts[parts.length - 1].n : 1; const seed = fromPart > 1 ? j.draft : null; if (!seed) fromPart = 1;
       emit(j, { type: 'status', message: `Running the design again from part ${fromPart}.`, resumed: fromPart });
-      launch(j, (params, e) => run({ ...params, resume: { fromPart, seed } }, e));
+      launch(j, (params, e) => run({ ...params, resume: { fromPart, seed, site: j.site || null } }, e));
       return { code: 200, status: j.status, fromPart };
     },
 
