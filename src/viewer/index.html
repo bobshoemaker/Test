@@ -274,6 +274,7 @@ html.upload .stagecol,html.upload header h1,html.upload header .sub,html.upload 
 html.upload .pane:not(#pane-design){display:none!important}
 html.upload #pane-design[hidden]{display:block!important}
 html.upload .grid{display:block;max-width:760px;margin:0 auto}
+html.jobload header,html.jobload .grid{visibility:hidden}
 html.upload .panel{border:0;background:none}
 html.upload #pane-design h2:first-child{font-size:40px}
 .seeex{margin:10px 0 0;font-size:14px}
@@ -284,6 +285,9 @@ html:not(.upload) .seeex{display:none}
 // /app#design opens straight on the upload page: set it before the first paint, not when the app's script
 // (after three.js, the engine and the part shapes) gets to it, so the sample house never flashes up first
 if((location.hash==='#design'||/[?&]mine=/.test(location.search))&&!/[?&](job|hero)=/.test(location.search)) document.documentElement.classList.add('upload');
+// a design's link: nothing shows until the server says where it's got to (in progress, being checked, or done), so the
+// page opens on the right view instead of flashing the model's
+if(/[?&]job=/.test(location.search)&&!/[?&](canceled|hero)=/.test(location.search)) document.documentElement.classList.add('jobload');
 </script>
 </head>
 <body>
