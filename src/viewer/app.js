@@ -588,7 +588,7 @@ function esc(t){ return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 function showDesign(d){
   const first=!curDesign; curDesign=d; picked.clear(); if(reviewing) renderPicked(); base.visible=true; R=d.preview?previewR(d):compile(d); lifted=0; $('lift').hidden=!(R.stats.liftoff&&R.stats.liftoff.length); $('lift').textContent=liftLabel(); $('lift').setAttribute('aria-pressed','false'); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,R.stats.baseThick?PH/0.14:1,PLATE/32); base.position.y=R.stats.baseThick?-PH/2:-0.07; base.material.color.copy(lin(COLORS[R.stats.baseColor||'Green'].hex)); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
   buildScene(); renderReport(); renderParts(); renderStep(); frame();
-  $('title').textContent=d.name||'Brick house'; document.title=(d.name||'Brick house')+', brick model';
+  $('title').textContent=d.name||'Brick house'; pageTitle();
   $('subline').textContent=(d.place?d.place+'. ':'')+(d.unit?`Unit ${d.unit}, cut from its building. `:'')+'A brick model with a step-by-step building guide.';
   $('factsTitle').textContent='What we saw in the photos';
   $('facts').innerHTML=(d.facts||[]).map(f=>`<li>${esc(f)}</li>`).join('');
@@ -985,7 +985,10 @@ async function loadDesignList(selected){
 let tab='model', ownShown=false; // ownShown: a draft or design of theirs is on the stage
 // "Make yours" is a page of its own (upload mode) until a design of theirs is on the way: the sample
 // house and the other tabs stay out of it, and come back with their house's first draft
-function uploadMode(){ const on=tab==='design'&&!ownShown&&!HERO_MODE; document.documentElement.classList.toggle('upload',on);
+// the tab's title: the upload page's own, or the model on the stage (the sample loads behind the upload page)
+function pageTitle(){ document.title=document.documentElement.classList.contains('upload')?'Make your house · Brickhouse'
+  :curDesign?`${curDesign.name||'Brick house'}, brick model`:'Brickhouse'; }
+function uploadMode(){ const on=tab==='design'&&!ownShown&&!HERO_MODE; document.documentElement.classList.toggle('upload',on); pageTitle();
   if(on){ if(location.hash!=='#design') try{ history.replaceState(null,'','#design'); }catch(e){} }
   else if(location.hash==='#design') try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){}
   // the top bar's button: to the upload page, or from it to the example
