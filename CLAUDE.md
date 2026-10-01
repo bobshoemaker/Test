@@ -39,7 +39,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
   finishes bare ground (irregular patches of lighter and darker plates, grass tufts, a few flowers;
   textures lawn, meadow, dry) and a warning for a big open stretch of bare baseplate (about 12 ft
   square; `"lot": false` for a building alone, as most unit tests are), hints (never
-  blocking) for big open stretches of plain tile, a fixture library for roofs (skylight, HVAC unit,
+  blocking) for big open stretches of plain tile, a lattice fence (3633) whose top is smooth, so nothing stacks on it (a tall fence stands on a course of bricks), a fixture library for roofs (skylight, HVAC unit,
   vents, solar panel, hatch, chimney), manual step grouping (one layer a step, like a big LEGO set: split evenly past
   20 pieces, a step under 6 joins its neighbour), and the inventory.
   Parts must be easy to buy: `src/engine/parts-availability.js` (built by `scripts/availability.js`
@@ -262,7 +262,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   prices, the piece target and the design code editor, all marked `dev-only`; standalone copies are technical.
 - `src/viewer/`: single-page three.js (r128, CDN) viewer, at `/app`: model, manual (sub-builds shown on
   their own), parts and BrickLink XML, design editor, photo upload, and "Lift roof" for designs
-  whose roof ops carry `"liftoff"` (floors show underneath; the rooms too when there was a plan).
+  whose roof ops carry `"liftoff"` (floors show underneath; the rooms too when there was a plan), one group a tap from
+  the top, with Put back beside it to bring everything back at once.
   Play build drops each step's bricks straight down into place; lifting raises a roof's or floor's
   bricks straight up, layer by layer, and putting back lowers them (skipped with reduced motion).
 - `designs/`: hand-built reference designs. `634-unit-a.json` was built by hand from three

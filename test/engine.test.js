@@ -35,7 +35,7 @@ test('the Mini counts 2 courses as a story: its one-story walls enclose a floor'
   assert.match(compile({ name: 'x', plate: 24, phases: ['p'], ops: [] }).errors[0].msg, /plate must be 16, 32 or 48/);
 });
 
-for (const [name, pieces] of [['savannah-dr', 1266], ['634-unit-a', 827]]) {
+for (const [name, pieces] of [['savannah-dr', 1266], ['634-unit-a', 826]]) {
   test(`${name} compiles clean`, () => {
     const r = compile(load(name));
     assert.deepEqual(r.errors.map((e) => e.msg), []);
@@ -189,6 +189,14 @@ test('wall details hang on side-stud bricks set in the wall, and need them', () 
   assert.equal(ok.inventory.filter((l) => l.no === '87087').reduce((a, l) => a + l.q, 0), 3);
   assert.match(compile(d([{ kind: 'lantern', at: [[8, 6, 16]] }])).errors[0].msg, /No side-stud brick at \(8, 6, 16\)/);
   assert.match(compile(d([{ kind: 'house number', at: [[6, 6, 16]] }])).errors[0].msg, /two side-stud bricks side by side/);
+});
+
+test('a lattice fence has a smooth top: a second fence stacked on it holds on to nothing', () => {
+  const run = (y) => ({ op: 'fence', phase: 'a', color: 'Black', line: [4, 4, 7, 4], y });
+  const stacked = compile({ name: 't', lot: false, phases: ['a'], ops: [run(0), run(3)] });
+  assert.ok(stacked.errors.some((e) => /Fence 1 x 4 x 1 .* nothing to hold on to/.test(e.msg)), stacked.errors.map((e) => e.msg).join('; '));
+  const onBase = compile({ name: 't', lot: false, phases: ['a'], ops: [{ op: 'fill', phase: 'a', kind: 'brick', color: 'Black', y: 0, rects: [[4, 4, 7, 4]] }, run(3)] });
+  assert.equal(onBase.errors.length, 0, onBase.errors.map((e) => e.msg).join('; '));
 });
 
 test('a door must meet the ground in front of it, and a garage door needs a drive to the edge of the plate', () => {

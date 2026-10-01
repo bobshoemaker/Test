@@ -38,7 +38,7 @@ const SPECIAL = {
   arch42:{no:'6182', name:'Arch 1 x 4 x 2', w:4,d:1,h:6, shape:'arch', archTop:2, cost:0.20},
   arch41:{no:'3659', name:'Arch 1 x 4', w:4,d:1,h:3, shape:'arch', archTop:1, cost:0.10},
   win23:{no:'60593', name:'Window 1 x 2 x 3', w:2,d:1,h:9, shape:'window', glass:'60602', glassName:'Glass for window 1 x 2 x 3', cost:0.20},
-  fence4:{no:'3633', name:'Fence 1 x 4 x 1', w:4,d:1,h:3, shape:'fence', cost:0.10},
+  fence4:{no:'3633', name:'Fence 1 x 4 x 1', w:4,d:1,h:3, shape:'fence', studs:false, cost:0.10},
   // palm top: a hub with four upright bars; fronds clip onto the bars
   palmtop:{no:'2566', name:'Palm tree top', w:1,d:1,h:3, studs:false, shape:'palm', cost:0.30},
   swordleaf:{no:'30239', name:'Plant leaves 6 x 5 swordleaf with clip', w:5,d:6,h:1, clip:true, shape:'swordleaf', cost:0.15},
