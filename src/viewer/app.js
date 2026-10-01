@@ -908,6 +908,7 @@ async function pollJob(gen=pollGen){
   if(!curDesign) loadSample(); // nothing of theirs to show yet: the sample for the Model tab
   renderReview(j.review||null,j.status); // the admin's check (only the admin's view carries it)
   renderApproval(j); // an order's owner: OK it or ask for a change
+  if(R) refreshOrderUI(); // the Kit tab's note, now the design is in place
   if(j.status==='awaiting_payment'){ status(`This design is waiting for its design fee.`); setBusy(false); return; }
   // finished, and being checked by our team before its owner sees it (jobs.js hold): look again now and then
   // received and paid, and our team is looking the photos over before the design starts (jobs.js intake)
