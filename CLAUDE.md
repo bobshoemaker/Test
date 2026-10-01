@@ -210,8 +210,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   (status "review", no design, no "ready" email, no kit or fix round). Opening it (Check it) shows a review card on the
   Model tab: tap bricks to select them (blue; each listed by the design op that made it, with Select all), say in words
   what to change, and `POST /admin/api/jobs/<id>/revise {note, parts}` has Claude revise the design from the one it has
-  (fix mode with `reviseTask`: the note, the selected pieces by op, renders; $5 cap), until it compiles clean. Every
-  version is kept (`undo`), and `approve` releases it to its owner and sends the email. Designs finished before the hold
+  (fix mode with `reviseTask`: the note, the selected pieces by op, renders; $5 cap), until it compiles clean. A change
+  that fails or is cut off by a restart leaves the design as it was and says so on the card. Every
+  version is kept (`undo`, which skips changes that didn't go through), and `approve` releases it to its owner and sends the email. Designs finished before the hold
   (no `j.review`) stay as their owners saw them. Customer designs are held to GoBricks (`BRICKHOUSE_SUPPLIER`, default gobricks; not the scripted
   demo): designHouse's `supplier` stamps every draft and tells Claude. `POST /api/quote {lots}` returns GoBricks' price and stock
   for a parts list today (cached a day per list; `BRICKHOUSE_GOBRICKS_QUOTES=0` turns it off, `BRICKHOUSE_CNY_PER_USD`
