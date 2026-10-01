@@ -785,18 +785,21 @@ async function askServer(mode){
     const notes=$('notes').value.trim().slice(0,1500), target=Math.max(300,Math.min(2500,+$('target').value||1200));
     if(!photos.length&&!notes){ status('Add at least one photo or a short description first.',true); return; }
     if(!houseAddress()){ status('Please enter the house\'s address.',true,true); $('addrInput').focus(); return; }
-    setBusy(true); status('Preparing photos…');
+    // straight to the page after Design: the photos are sent and checked there, as its first step (a photo the
+    // check turns away brings the form back with the message, below)
+    setBusy(true); showSent(); $('sentGot').textContent=photos.length?'Sending your photos…':'Sending your request…';
+    $('subStatus').textContent='Starts once your photos are checked.';
     const plate=chosenPlate();
     const body={notes,target:plate===48?Math.max(target,2400):plate===16?Math.min(target,350):target,plate,address:houseAddress(),email:$('emailInput').value.trim()||undefined,
       plan:planFile?await toPayload(planFile,2400):undefined, photos:await Promise.all(photos.map(f=>toPayload(f))),views:photoViews(),
       credits:photos.map(f=>photoCredit.get(f)).filter(Boolean), choices:surveyChoices()};
-    if(photos.length) status('Checking your photos…');
+    if(photos.length) $('sentGot').textContent='Checking your photos… (this takes a moment)';
     const res=await fetch('/api/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}), j=await res.json();
     if(!res.ok) throw failed(res,j);
     rememberDesign(j.id,'',{address:houseAddress(),status:j.checkout?'unpaid':'designing'});
-    if(j.checkout){ status('Taking you to the secure payment page for the design fee…'); location.href=j.checkout; return; }
+    if(j.checkout){ $('sentGot').textContent='Photos checked. Taking you to the secure payment page for the design fee…'; location.href=j.checkout; return; }
     jobId=j.id; showSent(); watchJob(j.id,false);
-  }catch(e){ status(esc(e.message),true,e.plain); setBusy(false); }
+  }catch(e){ hideSent(); status(esc(e.message),true,e.plain); setBusy(false); $('photoStatus').scrollIntoView({block:'center'}); }
 }
 // "Made one on another device?": the server emails a link (the same answer either way) that opens them all here
 $('findMine').onsubmit=async e=>{ e.preventDefault(); const email=$('findEmail').value.trim(), st=$('findStatus'); if(!email) return;
