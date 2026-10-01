@@ -7,7 +7,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const MAX_FIXES = 2; // "ask Claude to fix these" rounds included with a paid job
 const RESUME_WITHIN_MS = 24 * 3600e3; // older cut-off jobs are left alone (no surprise API spend on stale ones)
 const FULFILLMENT = ['new', 'ordered', 'packed', 'shipped', 'cancelled']; // a kit order's progress, set on the admin page
 const MAX_RESUMES = 2; // times a job cut off by a restart is picked up again (a crash that recurs stops there)
@@ -83,6 +82,22 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
         j.status = j.result ? 'done' : 'error'; save(j); });
   }
 
+  // A change to a finished design (the admin's): the one it had is kept so the change can be undone.
+  function change(id, { note, parts, runFn, extra }) {
+    const j = load(id);
+    if (!j || !runFn) return { code: 404, error: 'No such job' };
+    if (j.status !== 'done' || !j.result) return { code: 409, error: j.status === 'running' ? 'A change is already being made.' : 'The design is not finished yet.' };
+    if (!note) return { code: 400, error: 'Say what to change.' };
+    j.versions = j.versions || []; j.revisions = j.revisions || [];
+    j.versions.push({ at: now(), result: j.result });
+    const rev = { at: now(), note, parts };
+    j.revisions.push(rev); j.revising = { at: rev.at, note };
+    emit(j, { type: 'status', message: `Making the change: ${note}` });
+    const design = j.result.design;
+    launch(j, (params, e) => runFn({ ...params, design, ...extra }, (ev) => { if (ev.type === 'cost') rev.costUsd = ev.usd; e(ev); }));
+    return { code: 200, status: j.status };
+  }
+
   return {
     fee: feeOn ? { amountCents: feeCents, currency } : null,
 
@@ -90,7 +105,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     async create(params, origin) {
       // the owner's email (to send the link) and the site's address (for links in emails) ride on the job, not in its params
       const { email = null, ...rest } = params;
-      const j = { id: crypto.randomUUID(), createdAt: now(), status: feeOn ? 'awaiting_payment' : 'queued', params: rest, events: [], fixes: 0, email, origin };
+      const j = { id: crypto.randomUUID(), createdAt: now(), status: feeOn ? 'awaiting_payment' : 'queued', params: rest, events: [], email, origin };
       jobs.set(j.id, j);
       if (!feeOn) { if (intake) { j.status = 'intake'; save(j); } else { save(j); launch(j, run); } return { id: j.id }; }
       const s = await stripe.createCheckout({ jobId: j.id, amountCents: feeCents, currency, name: 'Brick model design fee',
@@ -125,7 +140,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
         const j = f.endsWith('.json') ? load(f.slice(0, -5)) : null;
         if (!j || j.status !== 'interrupted' || (feeOn && j.sessionId && !j.paid)) continue;
         if (j.result) { j.status = 'done';
-          if (j.revising) revisionFailed(j, 'Cut off by a server restart.'); else j.fixes = Math.max(0, j.fixes - 1);
+          if (j.revising) revisionFailed(j, 'Cut off by a server restart.');
           save(j); continue; }
         if (now() - (j.createdAt || 0) > RESUME_WITHIN_MS) { emit(j, { type: 'error', message: 'The design was cut off and is too old to pick up again.' }); j.status = 'error'; save(j); continue; }
         if ((j.resumes || 0) >= MAX_RESUMES) { emit(j, { type: 'error', message: 'The design was cut off too many times to finish.' }); j.status = 'error'; save(j); continue; }
@@ -240,11 +255,11 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       const open = full || !!j.kit;
       // held for the admin's check: its owner sees it still in progress ("review"), with no drafts or result
       if (held(j) && !full && j.result) {
-        return { id: j.id, status: 'review', paid: !!j.paid || !feeOn, fixesLeft: MAX_FIXES - j.fixes, kit: null, kitCents: null, kitCurrency: currency,
+        return { id: j.id, status: 'review', paid: !!j.paid || !feeOn, kit: null, kitCents: null, kitCurrency: currency,
           photos: j.params && Array.isArray(j.params.photos) ? j.params.photos.length : 0,
           events: j.events.slice(after).filter((e) => e.type === 'status' || e.type === 'part' || e.type === 'site'), next: j.events.length };
       }
-      return { id: j.id, status: j.status, paid: !!j.paid || !feeOn, fixesLeft: MAX_FIXES - j.fixes,
+      return { id: j.id, status: j.status, paid: !!j.paid || !feeOn,
         ...(full && (j.review || j.approved) ? { review: { approved: j.approved ? j.approved.at : null, revisions: (j.revisions || []).map(({ at, note, parts, costUsd, undone, failed }) => ({ at, note, parts, costUsd, undone: !!undone, failed: failed || null })),
           revising: j.revising || null, canUndo: (j.versions || []).length > 0 } } : {}),
         kit: j.kit ? { at: j.kit.at, test: !!j.kit.test } : null, kitCents: kitCents(plateOf(j)), kitCurrency: currency,
@@ -313,20 +328,14 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     // The admin asks for a change in words, about the pieces they selected (selection: [{op, phase, kind, parts: [...]}]):
     // the design is revised from the one it has, and the one it had is kept so the change can be undone.
     revise(id, { note, selection = [], parts = 0 } = {}) {
-      const j = load(id);
-      if (!j || !reviseRun) return { code: 404, error: 'No such job' };
-      if (j.status !== 'done' || !j.result) return { code: 409, error: j.status === 'running' ? 'A change is already being made.' : 'The design is not finished yet.' };
       note = String(note || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 1000);
-      if (!note) return { code: 400, error: 'Say what to change.' };
-      j.versions = j.versions || []; j.revisions = j.revisions || [];
-      j.versions.push({ at: now(), result: j.result });
-      const rev = { at: now(), note, parts: Number(parts) || 0 };
-      j.revisions.push(rev); j.revising = { at: rev.at, note };
-      emit(j, { type: 'status', message: `Making the change: ${note}` });
-      const design = j.result.design;
-      launch(j, (params, e) => reviseRun({ ...params, design, note, selection }, (ev) => { if (ev.type === 'cost') rev.costUsd = ev.usd; e(ev); }));
-      return { code: 200, status: j.status };
+      return change(id, { note, parts: Number(parts) || 0, runFn: reviseRun, extra: { note, selection } });
     },
+
+    // The admin has the design go through repair rounds again until it compiles clean ("Fix what the checker
+    // found"), kept and undone like a change. Customers can't: what they see is what the admin approved.
+    fix(id) { return change(id, { note: 'Fix what the checker found', parts: 0, runFn: fixRun, extra: {} }); },
+
 
     // Put back the design as it was before the last change.
     undo(id) {
@@ -352,18 +361,8 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       return { code: 200, approved: j.approved.at };
     },
 
-    // One more round on a finished paid job's design ("fix these"), limited per job.
-    fix(id) {
-      const j = load(id);
-      if (!j || !fixRun) return { code: 404, error: 'No such job' };
-      if (j.status !== 'done' || !j.result || held(j)) return { code: 409, error: 'The design is not finished yet.' };
-      if (j.fixes >= MAX_FIXES) return { code: 429, error: 'The fix rounds included with this design are used up.' };
-      j.fixes++;
-      const design = j.result.design;
-      launch(j, (params, e) => fixRun({ ...params, design }, e));
-      return { code: 200, status: j.status };
-    },
+
   };
 }
 
-module.exports = { createJobs, MAX_FIXES, MAX_RESUMES, FULFILLMENT };
+module.exports = { createJobs, MAX_RESUMES, FULFILLMENT };

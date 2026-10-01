@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { createJobs, MAX_FIXES } = require('../src/server/jobs');
+const { createJobs } = require('../src/server/jobs');
 const { makeStripe, form } = require('../src/server/payments');
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'jobs-'));
@@ -52,16 +52,18 @@ test('with a fee, a job waits for its own paid session, runs once, and survives 
   assert.equal(jobs.get(other.id).status, 'awaiting_payment');
 });
 
-test('fix rounds need a finished job and are limited; without a fee jobs start at once', async () => {
+test('the admin\'s fix rounds need a finished job, are kept like a change and can be undone; without a fee jobs start at once', async () => {
   let fixes = 0;
-  const jobs = createJobs({ dir: tmp(), run: async (p, e) => e({ type: 'done', design: { name: 'x' } }), fixRun: async (p, e) => { fixes++; e({ type: 'done', design: p.design }); } });
+  const jobs = createJobs({ dir: tmp(), run: async (p, e) => e({ type: 'done', design: { name: 'x' } }), fixRun: async (p, e) => { fixes++; e({ type: 'done', design: { name: `${p.design.name}+fixed` } }); } });
   assert.equal(jobs.fee, null);
   const { id, checkout } = await jobs.create({ notes: 'n' }, 'http://x');
   assert.equal(checkout, undefined);
   await until(() => jobs.get(id).status === 'done');
-  for (let k = 0; k < MAX_FIXES; k++) { assert.equal(jobs.fix(id).code, 200); await until(() => jobs.get(id).status === 'done'); }
-  assert.equal(jobs.fix(id).code, 429);
-  assert.equal(fixes, MAX_FIXES);
+  for (let k = 0; k < 3; k++) { assert.equal(jobs.fix(id).code, 200); await until(() => jobs.get(id).status === 'done'); } // no round limit for the admin
+  assert.equal(fixes, 3);
+  assert.equal(jobs.get(id, { full: true }).result.design.name, 'x+fixed+fixed+fixed');
+  assert.equal(jobs.undo(id).code, 200);
+  assert.equal(jobs.get(id, { full: true }).result.design.name, 'x+fixed+fixed');
   assert.equal(jobs.get('not-a-job'), null);
 });
 
@@ -109,11 +111,11 @@ test('a job cut off by a restart is picked up again at the part it was on, from 
   assert.equal(last.get(id).status, 'error');
 });
 
-test('a restart leaves unpaid jobs alone and gives back a cut-off fix round', async () => {
+test('a restart leaves unpaid jobs alone and a finished job as it was', async () => {
   const dir = tmp(), stripe = fakeStripe(); let runs = 0;
   const jobs = createJobs({ dir, stripe, feeCents: 1500, run: async () => { runs++; } });
   const unpaid = await jobs.create({ notes: 'x', photos: [] }, 'https://site.test');
-  // a finished job whose fix round was running when the server went away
+  // a finished job whose change was running when the server went away
   const done = { id: '00000000-0000-4000-8000-000000000001', status: 'running', paid: { at: 1 }, params: {}, events: [], fixes: 1, result: { type: 'done', design: { name: 'kept' } } };
   fs.writeFileSync(path.join(dir, `${done.id}.json`), JSON.stringify(done));
   const after = createJobs({ dir, stripe, feeCents: 1500, run: async () => { runs++; } });
@@ -125,7 +127,7 @@ test('a restart leaves unpaid jobs alone and gives back a cut-off fix round', as
   fs.writeFileSync(path.join(dir, `${old.id}.json`), JSON.stringify(old));
   const later = createJobs({ dir, stripe, feeCents: 1500, run: async () => { runs++; } });
   assert.deepEqual([later.resumeInterrupted(), runs, later.get(old.id).status], [[], 0, 'error']);
-  assert.deepEqual([after.get(done.id).status, after.get(done.id).fixesLeft, after.get(done.id).result.design.name], ['done', MAX_FIXES, 'kept']);
+  assert.deepEqual([after.get(done.id).status, after.get(done.id).result.design.name], ['done', 'kept']);
 });
 
 test("a job serves its own photos by index, for the viewer to show beside the model", async () => {
@@ -235,14 +237,13 @@ test('held for the admin: the owner sees it in progress until it is approved; ch
   const J = createJobs({ dir: tmp(), run, reviseRun, fixRun: run, hold: true, notify: async (j, kind) => told.push(kind), kitCents: () => 5000 });
   const { id } = await J.create({ photos: [], notes: 'n', email: 'a@b.test' }, 'https://x');
   await until(() => J.get(id, { full: true }).status === 'done');
-  // the owner: still in progress, no design, no email, no kit, no fix round
+  // the owner: still in progress, no design, no email, no kit
   const owner = J.get(id);
   assert.equal(owner.status, 'review'); assert.equal(owner.result, undefined); assert.equal(owner.draft, undefined);
   assert.ok(owner.events.every((e) => ['status', 'part', 'site'].includes(e.type)));
   assert.deepEqual(told, []);
   assert.equal(J.summary(id).status, 'designing');
   assert.equal((await J.kit(id, { origin: 'https://x' })).code, 409);
-  assert.equal(J.fix(id).code, 409);
   // the admin: the design, and what the check needs
   const admin = J.get(id, { full: true });
   assert.equal(admin.result.design.name, 'first'); assert.equal(admin.review.approved, null); assert.equal(admin.review.canUndo, false);

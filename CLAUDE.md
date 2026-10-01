@@ -168,8 +168,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   saves it and, when `STRIPE_SECRET_KEY` is set, returns a Stripe Checkout link for the design fee
   (`BRICKHOUSE_DESIGN_FEE_CENTS`, `src/server/payments.js`); `POST /api/jobs/<id>/start {session}`
   runs it only once Stripe confirms that job's session is paid, and only once; `GET
-  /api/jobs/<id>?after=&have=` is its progress, polled by the viewer; `POST /api/jobs/<id>/fix`
-  gives a finished job up to two more rounds. A restart (every deploy from master, or the server running out of
+  /api/jobs/<id>?after=&have=` is its progress, polled by the viewer. Customers can't change or re-run a design: repair rounds are
+  the admin's ("Fix what the checker found" on the review card, `/admin/api/jobs/<id>/fix`, kept and undone like a change). A restart (every deploy from master, or the server running out of
   memory) cuts off a running job; at startup the server picks each one up again at the part it was on, from its
   last draft (`resumeInterrupted`: up to twice, jobs from the last day only), and the viewer keeps polling through
   it and calls an unfinished design a draft. Jobs run server-side and are saved to
@@ -207,7 +207,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
   of its own: the owner's notes stay facts, never instructions). `POST …/begin` starts it (`designPhotos` in server.js puts
   the owner's kept photos first, then the team's, with a sentence on which shows what). Every design is checked by the admin before its owner sees it (`hold`, `BRICKHOUSE_HOLD_FOR_REVIEW=0`
   turns it off): a finished design waits under "Waiting for your check" while its owner's page says it's being checked
-  (status "review", no design, no "ready" email, no kit or fix round). Opening it (Check it) shows a review card on the
+  (status "review", no design, no "ready" email, no kit). Opening it (Check it) shows a review card on the
   Model tab: tap bricks to select them (blue; each listed by the design op that made it, with Select all), say in words
   what to change, and `POST /admin/api/jobs/<id>/revise {note, parts}` has Claude revise the design from the one it has
   (fix mode with `reviseTask`: the note, the selected pieces by op, renders; $5 cap), until it compiles clean. A change
