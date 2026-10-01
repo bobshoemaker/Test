@@ -228,7 +228,7 @@ async function runDesign(p0, emit) {
   finishDesign(out, p, emit, t0, prep.site);
 }
 
-// One more round on a finished design ("ask Claude to fix these").
+// Repair rounds on a finished design, which the admin asks for from the review card (jobs.js fix).
 async function runFix(p, emit) {
   const client = makeClient(), t0 = Date.now();
   if (!client) throw new Error(NO_KEY);
@@ -310,7 +310,7 @@ async function handleJobs(req, res, url) {
     if (!img || !/^image\/(jpeg|png|webp|gif)$/.test(img.mediaType)) return send(res, 404, { error: 'No such photo' });
     return send(res, 200, Buffer.from(img.data, 'base64'), img.mediaType);
   }
-  const m = /^\/api\/jobs(?:\/([a-f0-9-]{36})(?:\/(start|fix|kit))?)?$/.exec(url.pathname);
+  const m = /^\/api\/jobs(?:\/([a-f0-9-]{36})(?:\/(start|kit))?)?$/.exec(url.pathname);
   if (!m) return send(res, 404, { error: 'Not found' });
 
   const [, id, action] = m;
@@ -334,7 +334,6 @@ async function handleJobs(req, res, url) {
       const r = await JOBS.start(id, body.session ? String(body.session) : null);
       return send(res, r.code, r);
     }
-    if (req.method === 'POST' && action === 'fix') { const r = JOBS.fix(id); return send(res, r.code, r); }
     // order the kit (a Stripe Checkout link), or confirm it on return from Stripe ({session})
     if (req.method === 'POST' && action === 'kit') {
       const body = JSON.parse((await readBody(req)) || '{}');
@@ -490,7 +489,7 @@ async function handleAdmin(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/admin/logout') { res.setHeader('set-cookie', adminCookie(req, '', 0)); return send(res, 200, { ok: true }); }
   if (!isAdmin(req)) return send(res, 401, { error: 'Sign in first.' });
   if (req.method === 'GET' && url.pathname === '/admin/api/jobs') return send(res, 200, { jobs: JOBS.list(), supplier: SUPPLIER, mail: !!MAILER, payments: !!JOBS.fee, stock: !!QUOTER });
-  const m = /^\/admin\/api\/jobs\/([a-f0-9-]{36})\/(parts\.xml|fulfillment|retry|stock|site|revise|undo|approve|intake|candidates|begin)$/.exec(url.pathname);
+  const m = /^\/admin\/api\/jobs\/([a-f0-9-]{36})\/(parts\.xml|fulfillment|retry|stock|site|revise|fix|undo|approve|intake|candidates|begin)$/.exec(url.pathname);
   if (!m) return send(res, 404, { error: 'Not found' });
   const [, id, what] = m;
   if (req.method === 'GET' && what === 'parts.xml') {
@@ -518,6 +517,7 @@ async function handleAdmin(req, res, url) {
     const selection = selectionOf(d, body.parts);
     const r = JOBS.revise(id, { note: body.note, selection, parts: selection.reduce((n, s) => n + s.count, 0) }); return send(res, r.code, r);
   }
+  if (req.method === 'POST' && what === 'fix') { const r = JOBS.fix(id); return send(res, r.code, r); }
   if (req.method === 'POST' && what === 'undo') { const r = JOBS.undo(id); return send(res, r.code, r); }
   // before the design: the request to look over, the buildings near the address to pick the house from, and starting it
   if (req.method === 'GET' && what === 'intake') { const r = JOBS.intakeOf(id); return r ? send(res, 200, r) : send(res, 404, { error: 'No such job' }); }

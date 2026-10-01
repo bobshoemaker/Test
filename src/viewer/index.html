@@ -338,7 +338,7 @@ if(/[?&]job=/.test(location.search)&&!/[?&](canceled|hero)=/.test(location.searc
           <div class="revsel" id="revSel"></div>
           <label class="addrlabel" for="revNote">What to change</label>
           <textarea class="revnote" id="revNote" maxlength="1000" rows="3" placeholder="e.g. Make this roof lower and dark brown, with deeper eaves"></textarea>
-          <div class="row"><button class="btn primary" id="revSend" type="button">Make this change</button><button class="btn" id="revUndo" type="button">Undo last change</button></div>
+          <div class="row"><button class="btn primary" id="revSend" type="button">Make this change</button><button class="btn" id="revUndo" type="button">Undo last change</button><button class="btn" id="revFix" type="button" hidden>Fix what the checker found</button></div>
           <p class="note" id="revBusy" aria-live="polite"></p>
           <ol class="revlog" id="revLog"></ol>
           <div class="row"><button class="btn primary" id="revApprove" type="button">Approve and send to the customer</button></div>

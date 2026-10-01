@@ -779,13 +779,8 @@ $('lastBtn').hidden=true;
 let jobId=null, jobAfter=0, jobHave=0, jobT0=0;
 const feeText=()=>health&&health.fee?` (${(health.fee.amountCents/100).toLocaleString(undefined,{style:'currency',currency:health.fee.currency.toUpperCase()})} design fee)`:'';
 async function askServer(mode){
-  if(busyCtl||jobId&&mode!=='fix') return;
+  if(busyCtl||jobId) return;
   try{
-    if(mode==='fix'){
-      const r=await fetch(`/api/jobs/${jobId}/fix`,{method:'POST'}), j=await r.json();
-      if(!r.ok) throw new Error(j.error||`Server error ${r.status}`);
-      return watchJob(jobId,true);
-    }
     const notes=$('notes').value.trim().slice(0,1500), target=Math.max(300,Math.min(2500,+$('target').value||1200));
     if(!photos.length&&!notes){ status('Add at least one photo or a short description first.',true); return; }
     if(!houseAddress()){ status('Please enter the house\'s address.',true,true); $('addrInput').focus(); return; }
@@ -894,9 +889,7 @@ function handleEvent(ev,t0){
     // no timeline or steps: only that it's being designed
     if(ev.type==='site'||ev.type==='part'||ev.type==='draft') status(DESIGNING);
     else if(ev.type==='done'&&ev.design){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; showOwn(); draftOnly=false; run(t); DESIGN_TEXT=t;
-      status((ev.errors||ev.warnings)?'Almost there: a few details still need finishing. <button class="btn sm primary" id="fixBtn">Finish the design</button>'
-        :'Your house is ready. Turn it around, then open the building guide to see how it goes together.');
-      const fb=$('fixBtn'); if(fb) fb.onclick=()=>askServer('fix'); }
+      status('Your house is ready. Turn it around, then open the building guide to see how it goes together.'); }
     else if(ev.type==='error') status('Something went wrong on our side. Please try again in a little while.',true);
     return; }
   if(ev.type==='status') status(`${esc(ev.message)} <span style="color:var(--muted)">${secs()} s</span>`);
@@ -904,8 +897,8 @@ function handleEvent(ev,t0){
   else if(ev.type==='draft') status(`Draft ${ev.n} compiled: ${ev.stats.pieces.toLocaleString()} pieces, ${ev.errors} errors, ${ev.warnings} warnings. Claude is revising… <span style="color:var(--muted)">${secs()} s</span>`);
   else if(ev.type==='done'&&ev.design){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; showOwn(); draftOnly=false; run(t); DESIGN_TEXT=t;
     status(`Done: ${ev.stats.pieces.toLocaleString()} pieces, ${ev.errors} errors, ${ev.warnings} warnings. Saved as designs/${esc(ev.saved)}.json.`
-      +(ev.note?` ${esc(ev.note)}`:'')+((ev.errors||ev.warnings)?' <button class="btn sm" id="fixBtn">Ask Claude to fix these</button>':''));
-    const fb=$('fixBtn'); if(fb) fb.onclick=()=>askServer('fix'); loadDesignList(ev.saved); }
+      +(ev.note?` ${esc(ev.note)}`:''));
+    loadDesignList(ev.saved); }
   else if(ev.type==='error') status(esc(ev.message),true);
 }
 $('designBtn').onclick=()=>askServer('design');
@@ -941,7 +934,8 @@ function renderReview(rv,st){
   if(!rv){ if(was){ picked.clear(); applyState(); } return; }
   const busy=st==='running';
   $('revState').textContent=rv.approved?`Approved ${new Date(rv.approved).toLocaleString()}: the customer can see it.`:'Waiting for your check: the customer can\'t see it yet.';
-  $('revSend').disabled=busy; $('revUndo').disabled=busy||!rv.canUndo; $('revApprove').hidden=!!rv.approved; $('revApprove').disabled=busy;
+  $('revSend').disabled=busy; $('revUndo').disabled=busy||!rv.canUndo;
+  $('revFix').hidden=!(R&&(R.errors.length||R.warnings.length)); $('revFix').disabled=busy; $('revApprove').hidden=!!rv.approved; $('revApprove').disabled=busy;
   if(busy&&rv.revising) $('revBusy').textContent=`Making the change: "${rv.revising.note}". This takes a few minutes.`;
   else if(/^Making the change/.test($('revBusy').textContent)) $('revBusy').textContent='';
   $('revLog').innerHTML=(rv.revisions||[]).map((r,i,all)=>`<li class="${r.undone?'undone':r.failed?'failed':''}">${esc(r.note)}${r.parts?` (${r.parts} piece${r.parts===1?'':'s'} selected)`:''}${r.costUsd!=null?`, $${Number(r.costUsd).toFixed(2)}`:''}${
@@ -956,6 +950,7 @@ $('revSend').onclick=async()=>{ const note=$('revNote').value.trim();
   $('revSend').disabled=true;
   try{ await adminPost('revise',{note,parts:[...picked]}); $('revNote').value=''; picked.clear(); applyState(); renderPicked(); kickPoll(); }
   catch(e){ $('revBusy').textContent=e.message; $('revSend').disabled=false; } };
+$('revFix').onclick=async()=>{ $('revFix').disabled=true; try{ await adminPost('fix'); kickPoll(); }catch(e){ $('revBusy').textContent=e.message; $('revFix').disabled=false; } };
 $('revUndo').onclick=async()=>{ try{ await adminPost('undo'); kickPoll(); }catch(e){ $('revBusy').textContent=e.message; } };
 $('revApprove').onclick=async()=>{ try{ await adminPost('approve'); $('revBusy').textContent='Approved: the customer can see it now.'; kickPoll(); }catch(e){ $('revBusy').textContent=e.message; } };
 
