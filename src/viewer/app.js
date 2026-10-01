@@ -450,10 +450,14 @@ function renderStep(){
 $('prev').onclick=()=>{ stopPlay(); if(showAll){ showAll=false; stepIdx=R.steps.length-1; } else stepIdx=Math.max(0,stepIdx-1); renderStep(); };
 $('next').onclick=()=>{ stopPlay(); if(stepIdx>=R.steps.length-1) showAll=true; else stepIdx++; renderStep(); };
 $('slider').oninput=e=>{ stopPlay(); showAll=false; stepIdx=+e.target.value; renderStep(); };
-// Lift steps through the lift-off groups from the top (roof, then each floor), then puts them all back.
+// Lift steps through the lift-off groups from the top (roof, then each floor), then puts them all back;
 function liftLabel(){ const L=R.stats.liftoff||[]; return lifted>=L.length?'Put back':`Lift ${L[lifted].toLowerCase()}`; }
+// Put back, beside it once something is off, puts everything back at once.
+function liftShow(){ const L=R.stats.liftoff||[]; $('lift').setAttribute('aria-pressed',lifted>0); $('lift').textContent=liftLabel();
+  $('liftBack').hidden=!(lifted>0&&lifted<L.length); }
+$('liftBack').onclick=()=>{ const L=R.stats.liftoff||[], was=lifted; if(!was) return; lifted=0; liftShow(); flyGroups(L.slice(0,was),true); applyState(); };
 $('lift').onclick=()=>{ const L=R.stats.liftoff||[], was=lifted; lifted=(lifted+1)%(L.length+1);
-  $('lift').setAttribute('aria-pressed',lifted>0); $('lift').textContent=liftLabel();
+  liftShow();
   if(lifted>was) flyGroups([L[was]],false); else flyGroups(L.slice(0,was),true);
   applyState(); };
 $('startOver').onclick=()=>{ stopPlay(); showAll=false; stepIdx=0; renderStep(); };
@@ -586,7 +590,7 @@ $('stress').onchange=e=>{ stress=e.target.checked; applyState(); };
 let curDesign=null;
 function esc(t){ return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function showDesign(d){
-  const first=!curDesign; curDesign=d; picked.clear(); if(reviewing) renderPicked(); base.visible=true; R=d.preview?previewR(d):compile(d); lifted=0; $('lift').hidden=!(R.stats.liftoff&&R.stats.liftoff.length); $('lift').textContent=liftLabel(); $('lift').setAttribute('aria-pressed','false'); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,R.stats.baseThick?PH/0.14:1,PLATE/32); base.position.y=R.stats.baseThick?-PH/2:-0.07; base.material.color.copy(lin(COLORS[R.stats.baseColor||'Green'].hex)); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
+  const first=!curDesign; curDesign=d; picked.clear(); if(reviewing) renderPicked(); base.visible=true; R=d.preview?previewR(d):compile(d); lifted=0; $('lift').hidden=!(R.stats.liftoff&&R.stats.liftoff.length); liftShow(); PLATE=R.stats.plate||32; OFF=PLATE/2; base.scale.set(PLATE/32,R.stats.baseThick?PH/0.14:1,PLATE/32); base.position.y=R.stats.baseThick?-PH/2:-0.07; base.material.color.copy(lin(COLORS[R.stats.baseColor||'Green'].hex)); stopPlay(); showAll=true; stepIdx=Math.max(0,R.steps.length-1); lastMode='';
   buildScene(); renderReport(); renderParts(); renderStep(); frame();
   $('title').textContent=d.name||'Brick house'; pageTitle();
   $('subline').textContent=(d.place?d.place+'. ':'')+(d.unit?`Unit ${d.unit}, cut from its building. `:'')+'A brick model with a step-by-step building guide.';
