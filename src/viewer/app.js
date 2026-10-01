@@ -844,13 +844,15 @@ function watchJob(id,keep){
   try{ history.replaceState(null,'','?job='+id); }catch(e){}
   $('sentLink').value=`${location.origin}/app?job=${id}`;
   status(DEV?'Claude is studying the photos. This usually takes 15 to 25 minutes; you can close this page and come back with the same address.'
-    :'We\'re designing your house from the photos. It takes a while to get right; you can close this page and come back to this link any time.');
-  if(!$('sent').hidden) $('subStatus').textContent='Studying your photos…';
+    :DESIGNING);
+  if(!$('sent').hidden&&DEV) $('subStatus').textContent='Studying your photos…';
   pollJob();
 }
 // a design's link opens hidden (index.html) until the first answer about it; never longer than a few seconds
 const jobLoaded=()=>document.documentElement.classList.remove('jobload');
 setTimeout(jobLoaded,8000);
+// what a customer reads while their house is being designed: no timeline, no steps
+const DESIGNING='Your house is being designed.';
 // one polling loop at a time: kickPoll starts a new one (after the admin asks for a change) and the old one stops
 let pollGen=0;
 function kickPoll(){ pollGen++; pollJob(pollGen); }
@@ -875,21 +877,18 @@ async function pollJob(gen=pollGen){
   if(j.status==='awaiting_payment'){ status(`This design is waiting for its design fee.`); setBusy(false); return; }
   // finished, and being checked by our team before its owner sees it (jobs.js hold): look again now and then
   // received and paid, and our team is looking the photos over before the design starts (jobs.js intake)
-  if(j.status==='intake'){ status('We have your photos. Our team is looking them over before your design starts; we\'ll show your house here when it\'s ready.'); $('subBar').style.width='5%'; setBusy(false); setTimeout(()=>pollJob(gen),20000); return; }
-  if(j.status==='review'){ status('Your design is done, and our team is checking it against your photos. We\'ll show it to you here as soon as it\'s approved.'); $('subBar').style.width='95%'; setBusy(false); setTimeout(()=>pollJob(gen),20000); return; }
+  if(j.status==='intake'){ status('We have your photos and we\'re looking them over.'); $('subBar').style.width='5%'; setBusy(false); setTimeout(()=>pollJob(gen),20000); return; }
+  if(j.status==='review'){ status('We\'re checking your house against your photos before we send it to you.'); $('subBar').style.width='95%'; setBusy(false); setTimeout(()=>pollJob(gen),20000); return; }
   // cut off by a restart: the server picks it up again at the part it was on (jobs.resumeInterrupted)
-  if(j.status==='interrupted'){ status('Picking your design up where it left off…'); setTimeout(()=>pollJob(gen),4000); return; }
+  if(j.status==='interrupted'){ status(DEV?'Picking your design up where it left off…':DESIGNING); setTimeout(()=>pollJob(gen),4000); return; }
   if(j.status==='done'||j.status==='error'){ setBusy(false); return; }
   setTimeout(()=>pollJob(gen),2000);
 }
-// what comes after each step of finding and mapping the house (site events arrive as each step finishes)
-const SITE_NEXT={candidates:'Finding your house on the map…',pick:'Checking the lot…',records:'Mapping your house from above…',map:'Fitting your house to the baseplate…',fit:'Designing your house…'};
 function handleEvent(ev,t0){
   const secs=()=>Math.round((Date.now()-t0)/1000);
   if(!DEV){ // the customer's view: what we're working on, not how
-    if(ev.type==='site') status(SITE_NEXT[ev.id]||'Mapping your house from above…');
-    else if(ev.type==='part'){ status(`Designing your house: ${esc(String(ev.name).toLowerCase())} (${ev.n} of ${ev.of})…`); $('subBar').style.width=`${Math.round((ev.n-0.5)/ev.of*100)}%`; }
-    else if(ev.type==='draft') status('Checking every brick and refining the details…');
+    // no timeline or steps: only that it's being designed
+    if(ev.type==='site'||ev.type==='part'||ev.type==='draft') status(DESIGNING);
     else if(ev.type==='done'&&ev.design){ const t=JSON.stringify(ev.design,null,2); $('designSrc').value=t; showOwn(); draftOnly=false; run(t); DESIGN_TEXT=t;
       status((ev.errors||ev.warnings)?'Almost there: a few details still need finishing. <button class="btn sm primary" id="fixBtn">Finish the design</button>'
         :'Your house is ready. Turn it around, then open the building guide to see how it goes together.');

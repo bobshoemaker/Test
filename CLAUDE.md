@@ -243,7 +243,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
   design knows which photo shows which side. A missing front or side gets a note above the Design button that those
   sides get guessed, so the model won't be as accurate (not a block). The size is a choice of three cards,
   Mini, Classic and Grand, with the landing page's sizes and piece counts (`#sizeMini`, `#sizeClassic`, `#bigPlate`). After Design, the upload page gives way to a
-  page of its own (`#sent`): thanks, the steps (photos received, designing with the live progress, ready), the private link
+  page of its own (`#sent`): thanks, the steps (photos received, being designed, ready; no time estimate, progress bar or stage-by-stage status, which would read as automated; `?dev=1` shows them), the private link
   with Copy, and what happens next; the job's link lands there too while the design is in progress. A job's link never shows the sample house first: the
   stage waits ("Loading your house…") for theirs, and the sample loads only when there's nothing of theirs to show. The owner never
   sees a design in progress: `GET /api/jobs/<id>` sends drafts only once it's finished (or to the server's own machine
