@@ -50,3 +50,12 @@ test('a job emails its owner once when the design is ready (not again after a fi
   assert.deepEqual(jobs.byEmail('other@b.test'), []);
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir, `${id}.json`), 'utf8')).params.email, undefined, 'the email stays out of the design parameters');
 });
+
+test('an order\'s design asks its owner for their OK, says one change is included, and when it builds without an answer', () => {
+  const { approveEmail } = require('../src/server/mail');
+  const e = approveEmail({ name: '806 Alta St', link: 'https://site.test/app?job=1', until: 'Friday, October 3 at 5:00 PM PDT' });
+  assert.match(e.subject, /ready to look at: 806 Alta St/);
+  assert.match(e.text, /change it once/); assert.match(e.text, /by Friday, October 3 at 5:00 PM PDT/);
+  assert.match(e.text, /See your house: https:\/\/site\.test\/app\?job=1/);
+  assert.doesNotMatch(e.text, /Claude|AI\b/);
+});

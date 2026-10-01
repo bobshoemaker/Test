@@ -7,7 +7,7 @@ const path = require('node:path');
 const { designHouse, surveyHouse, checkPhotos } = require('./designer');
 const { reviseTask } = require('./prompt');
 const { makePreview } = require('./preview');
-const { makeMailer, cleanEmail, readyEmail, kitEmail, shippedEmail, mineEmail } = require('./mail');
+const { makeMailer, cleanEmail, readyEmail, approveEmail, kitEmail, shippedEmail, mineEmail } = require('./mail');
 const { scaleFor, sizeName } = require('./scale');
 const { okPhoto, cleanViews, viewsNote: viewsNoteOf, VIEWS } = require('./views');
 const { lookupAddress, fetchMapillaryImage } = require('./lookup');
@@ -181,6 +181,7 @@ function parseDesignRequest(body) {
     frontStreet: body.frontStreet ? String(body.frontStreet).slice(0, 100) : null,
     // optional: where to email the design's link (jobs.js keeps it on the job, not in the design's parameters)
     email: cleanEmail(body.email),
+    surprise: body.surprise === true, // a gift: no preview for its owner, it goes to building once our team approves it
   };
 }
 
@@ -266,20 +267,24 @@ async function runRevise(p, emit) {
 const SUPPLIER = FAKE ? null : (process.env.BRICKHOUSE_SUPPLIER !== undefined ? process.env.BRICKHOUSE_SUPPLIER || null : 'gobricks');
 // Email through Resend (mail.js): RESEND_API_KEY turns it on, BRICKHOUSE_MAIL_FROM is the sender
 const MAILER = makeMailer({ apiKey: process.env.RESEND_API_KEY, ...(process.env.BRICKHOUSE_MAIL_FROM ? { from: process.env.BRICKHOUSE_MAIL_FROM } : {}) });
+// The price by baseplate, Mini (16), Classic (32) and Grand (48), design and kit together; unset means that size isn't on sale
+// yet (its design is paid for with the design fee and its kit ordered later, if ever).
+const KIT_PRICES = Object.fromEntries([16, 32, 48].map((plate) => [plate, Number(process.env[`BRICKHOUSE_KIT_${sizeName(plate).toUpperCase()}_CENTS`]) || null]));
 const JOBS = createJobs({
   dir: path.join(ROOT, 'designs/generated/jobs'),
   stripe: makeStripe({ secretKey: process.env.STRIPE_SECRET_KEY, ...(process.env.BRICKHOUSE_STRIPE_API ? { apiBase: process.env.BRICKHOUSE_STRIPE_API } : {}) }), // the override is for local tests
   feeCents: Number(process.env.BRICKHOUSE_DESIGN_FEE_CENTS || 1500), currency: process.env.BRICKHOUSE_CURRENCY || 'usd',
   run: runDesign, fixRun: runFix, reviseRun: runRevise, hold: HOLD, intake: INTAKE,
-  // the kit's price by baseplate: Mini (16), Classic (32) and Grand (48); unset means that size isn't on sale yet
-  kitCents: (plate) => Number(process.env[`BRICKHOUSE_KIT_${sizeName(plate).toUpperCase()}_CENTS`]) || null,
+  kitCents: (plate) => KIT_PRICES[plate] || null,
   preview: makePreview,
   onKit: (j) => QUOTER && SUPPLIER === 'gobricks' && stockCheck(j.id),
   notify: async (j, kind) => {
     if (!MAILER) return;
     const link = `${j.origin}/app?job=${j.id}`, name = j.result && j.result.design && j.result.design.name;
-    const make = kind === 'kit' ? kitEmail : kind === 'shipped' ? shippedEmail : readyEmail;
-    await MAILER.send({ to: j.email, ...make({ name, link, tracking: j.fulfillment && j.fulfillment.tracking }) });
+    const make = kind === 'kit' ? kitEmail : kind === 'shipped' ? shippedEmail : kind === 'approve' ? approveEmail : readyEmail;
+    // the date an order goes to building without an answer, in the US's Pacific time (our customers are in the US)
+    const until = j.awaiting ? new Date(j.awaiting.until).toLocaleString('en-US', { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'America/Los_Angeles', timeZoneName: 'short' }) : null;
+    await MAILER.send({ to: j.email, ...make({ name, link, until, tracking: j.fulfillment && j.fulfillment.tracking }) });
   },
 });
 const originOf = (req) => `${req.headers['x-forwarded-proto'] || 'http'}://${req.headers['x-forwarded-host'] || req.headers.host}`;
@@ -310,7 +315,7 @@ async function handleJobs(req, res, url) {
     if (!img || !/^image\/(jpeg|png|webp|gif)$/.test(img.mediaType)) return send(res, 404, { error: 'No such photo' });
     return send(res, 200, Buffer.from(img.data, 'base64'), img.mediaType);
   }
-  const m = /^\/api\/jobs(?:\/([a-f0-9-]{36})(?:\/(start|kit))?)?$/.exec(url.pathname);
+  const m = /^\/api\/jobs(?:\/([a-f0-9-]{36})(?:\/(start|kit|confirm|change))?)?$/.exec(url.pathname);
   if (!m) return send(res, 404, { error: 'Not found' });
 
   const [, id, action] = m;
@@ -333,6 +338,12 @@ async function handleJobs(req, res, url) {
       const body = JSON.parse((await readBody(req)) || '{}');
       const r = await JOBS.start(id, body.session ? String(body.session) : null);
       return send(res, r.code, r);
+    }
+    // an order's owner OKs the design (it goes to building), or asks for its one change in words
+    if (req.method === 'POST' && action === 'confirm') { const r = JOBS.confirm(id); return send(res, r.code, r); }
+    if (req.method === 'POST' && action === 'change') {
+      const body = JSON.parse((await readBody(req)) || '{}');
+      const r = JOBS.requestChange(id, cleanText(body.note, NOTES_MAX)); return send(res, r.code, r);
     }
     // order the kit (a Stripe Checkout link), or confirm it on return from Stripe ({session})
     if (req.method === 'POST' && action === 'kit') {
@@ -573,7 +584,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, fs.readFileSync(path.join(ROOT, file)), type);
     }
     if (req.method === 'GET' && url.pathname === '/api/health') {
-      return send(res, 200, { ok: true, model: FAKE ? 'fake' : MODEL, effort: EFFORT, ready: FAKE || !!anthropicKey(), fee: JOBS.fee, maxPhotos: MAX_PHOTOS, streetPhotos: !!process.env.MAPILLARY_TOKEN, quote: !!QUOTER, cnyPerUsd: CNY_PER_USD, mail: !!MAILER });
+      return send(res, 200, { ok: true, model: FAKE ? 'fake' : MODEL, effort: EFFORT, ready: FAKE || !!anthropicKey(), fee: JOBS.fee, prices: KIT_PRICES, maxPhotos: MAX_PHOTOS, streetPhotos: !!process.env.MAPILLARY_TOKEN, quote: !!QUOTER, cnyPerUsd: CNY_PER_USD, mail: !!MAILER });
     }
     if (req.method === 'GET' && url.pathname === '/api/designs') return send(res, 200, listDesigns(onThisMachine(req)));
     const m = /^\/designs\/((?:generated\/)?[a-z0-9._-]+)\.json$/i.exec(url.pathname);
@@ -605,6 +616,9 @@ const server = http.createServer(async (req, res) => {
 if (require.main === module) {
   server.listen(PORT, () => {
     const resumed = JOBS.resumeInterrupted();
+    // an order whose owner said nothing in 48 hours goes to building: checked now and every ten minutes
+    const sweep = () => { try { const ids = JOBS.sweep(); if (ids.length) console.log(`Went to building without an answer: ${ids.join(', ')}`); } catch (e) { console.error(`Sweep failed: ${e.message}`); } };
+    sweep(); setInterval(sweep, 10 * 60e3).unref();
     if (resumed.length) console.log(`Picked up ${resumed.length} design${resumed.length === 1 ? '' : 's'} cut off by a restart: ${resumed.join(', ')}`);
     console.log(`Brickhouse on http://localhost:${PORT}  (model: ${FAKE ? 'fake' : MODEL}${EFFORT ? ', effort ' + EFFORT : ''})`);
     if (!FAKE && !anthropicKey()) console.log('No Anthropic API key: the viewer works, photo design is off. Add a key to .env or use BRICKHOUSE_FAKE=1.');

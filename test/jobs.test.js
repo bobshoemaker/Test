@@ -16,9 +16,9 @@ function fakeStripe() {
   return {
     sessions,
     pay: (id) => { sessions.get(id).payment_status = 'paid'; },
-    createCheckout: async ({ jobId, amountCents, successUrl, kind = 'fee' }) => {
+    createCheckout: async ({ jobId, amountCents, successUrl, kind = 'fee', shipping = false }) => {
       const id = `cs_test_${sessions.size + 1}`;
-      sessions.set(id, { id, url: `https://checkout.stripe.test/${id}`, payment_status: 'unpaid', metadata: { job: jobId, kind }, amount_total: amountCents, currency: 'usd', successUrl });
+      sessions.set(id, { id, url: `https://checkout.stripe.test/${id}`, payment_status: 'unpaid', metadata: { job: jobId, kind }, amount_total: amountCents, currency: 'usd', successUrl, ...(shipping ? { shipping_address_collection: { allowed_countries: ['US'] } } : {}) });
       return sessions.get(id);
     },
     getSession: async (id) => sessions.get(id),
@@ -139,11 +139,12 @@ test("a job serves its own photos by index, for the viewer to show beside the mo
   assert.equal(jobs.photo('not-a-job', 0), null);
 });
 
-test('the design is a preview until its kit is ordered and paid; a design-fee payment doesn\'t unlock it', async () => {
+test('a design made before kits were on sale is a preview until its kit is ordered and paid; a design-fee payment doesn\'t unlock it', async () => {
   const stripe = fakeStripe(), design = { name: 'house', plate: 32 };
   const run = async (p, emit) => { emit({ type: 'draft', n: 1, design }); emit({ type: 'done', design }); };
-  const jobs = createJobs({ dir: tmp(), stripe, feeCents: 0, run, kitCents: (plate) => (plate === 32 ? 9900 : null), preview: (d) => ({ preview: true, name: d.name }) });
-  const { id } = await jobs.create({ notes: 'x', photos: [] }, 'https://site.test');
+  let onSale = false; // kits go on sale after this design was made (one made since is an order, paid up front)
+  const jobs = createJobs({ dir: tmp(), stripe, feeCents: 0, run, kitCents: (plate) => (onSale && plate === 32 ? 9900 : null), preview: (d) => ({ preview: true, name: d.name }) });
+  const { id } = await jobs.create({ notes: 'x', photos: [] }, 'https://site.test'); onSale = true;
   await until(() => jobs.get(id).status === 'done');
   let g = jobs.get(id);
   assert.deepEqual([g.result.design, g.draft, g.kit, g.kitCents], [{ preview: true, name: 'house' }, { preview: true, name: 'house' }, null, 9900]);
@@ -273,12 +274,70 @@ test('held for the admin: the owner sees it in progress until it is approved; ch
   a = J.get(id, { full: true });
   assert.equal(a.result.design.name, 'first'); assert.deepEqual(a.review.revisions.map((r) => !!r.undone), [true, true, false]);
   assert.equal(J.undo(id).code, 409);
-  // approve: the owner sees it and is told once
+  // approve: the owner sees it and is told once (kits are on sale here, so it's an order: asked for their OK)
   assert.equal(J.approve(id).code, 200); J.approve(id);
   await until(() => told.length);
-  assert.deepEqual(told, ['ready']);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(told, ['approve']);
   assert.equal(J.get(id).status, 'done'); assert.equal(J.get(id).result.design.name, 'first');
   assert.equal(J.summary(id).status, 'ready');
+});
+
+test('an order: paid up front with its shipping address; its owner OKs the design, or asks for one change, or it goes to building after 48 hours', async () => {
+  const stripe = fakeStripe(), told = [], kits = []; let t = 1e12;
+  const run = async (p, emit) => emit({ type: 'done', design: { name: 'house', plate: 32 }, stats: { pieces: 10 } });
+  const reviseRun = async (p, emit) => emit({ type: 'done', design: { name: `${p.design.name}+${p.note}`, plate: 32 }, stats: { pieces: 10 } });
+  const J = createJobs({ dir: tmp(), stripe, feeCents: 1500, run, reviseRun, hold: true, now: () => t, kitCents: (plate) => (plate === 32 ? 17900 : null),
+    notify: async (j, kind) => told.push(kind), onKit: (j) => kits.push(j.id) });
+  const { id, checkout } = await J.create({ notes: 'x', photos: [], plate: 32, email: 'o@x.test' }, 'https://site.test');
+  const sess = [...stripe.sessions.values()].at(-1);
+  // one checkout: the size's price (not the design fee), for an order, with the shipping address
+  assert.deepEqual([checkout, sess.amount_total, sess.metadata.kind, !!sess.shipping_address_collection], [sess.url, 17900, 'order', true]);
+  stripe.pay(sess.id); Object.assign(sess, { customer_details: { email: 'o@x.test' }, shipping_details: { name: 'O W', address: { city: 'LA' } } });
+  assert.equal((await J.start(id, sess.id)).code, 200);
+  await until(() => J.get(id, { full: true }).status === 'done');
+  assert.deepEqual(J.list()[0].kit.shipping, { city: 'LA' });
+  assert.equal(J.list()[0].toFulfill, false, 'not to fulfill before its owner OKs it');
+  assert.equal(J.setFulfillment(id, { status: 'ordered' }).code, 409);
+  // held for the admin; the owner can't OK it or ask for a change yet
+  assert.equal(J.get(id).status, 'review'); assert.equal(J.confirm(id).code, 409); assert.equal(J.requestChange(id, 'x').code, 409);
+  // approved: the owner is asked for their OK, with 48 hours to give it
+  J.approve(id); await until(() => told.length);
+  let a = J.get(id).approval;
+  assert.deepEqual([told, a.until, a.changesLeft, a.confirmed], [['approve'], t + 48 * 3600e3, 1, null]);
+  // one change in words: back to the admin's check, held from the owner, with what they asked for on the review card
+  assert.equal(J.requestChange(id, '').code, 400);
+  assert.equal(J.requestChange(id, 'The door is blue').code, 200);
+  assert.equal(J.get(id).status, 'review'); assert.equal(J.get(id, { full: true }).review.changeRequest.note, 'The door is blue');
+  assert.equal(J.list()[0].review.approved, null);
+  J.revise(id, { note: 'blue door' }); await until(() => J.get(id, { full: true }).status === 'done');
+  J.approve(id); a = J.get(id).approval;
+  assert.deepEqual([J.get(id).status, J.get(id).result.design.name, a.changesLeft, !!a.changeRequest.done], ['done', 'house+blue door', 0, true]);
+  assert.equal(J.requestChange(id, 'and the roof').code, 409, 'one change included');
+  // silence: nothing before 48 hours, then it goes to building, once
+  t += 47 * 3600e3; assert.deepEqual(J.sweep(), []);
+  t += 2 * 3600e3; assert.deepEqual(J.sweep(), [id]); assert.deepEqual(J.sweep(), []);
+  assert.equal(J.get(id).approval.confirmed.by, 'time'); assert.equal(J.list()[0].toFulfill, true);
+  await until(() => kits.length); assert.deepEqual(kits, [id]); await until(() => told.includes('kit'));
+  assert.equal(J.setFulfillment(id, { status: 'ordered' }).code, 200);
+});
+
+test('an order\'s owner can OK it at once; a surprise goes to building when the admin approves it; without Stripe it\'s a test order', async () => {
+  const told = [];
+  const run = async (p, emit) => emit({ type: 'done', design: { name: 'house', plate: 32 } });
+  const J = createJobs({ dir: tmp(), run, hold: true, kitCents: () => 17900, notify: async (j, kind) => told.push(kind) });
+  const a = (await J.create({ notes: 'x', photos: [], plate: 32, email: 'o@x.test' }, 'https://x')).id;
+  await until(() => J.get(a, { full: true }).status === 'done');
+  assert.equal(J.get(a, { full: true }).kit.test, true);
+  J.approve(a); assert.equal(J.confirm(a).code, 200); assert.equal(J.confirm(a).code, 200, 'twice is fine');
+  assert.equal(J.get(a).approval.confirmed.by, 'owner'); assert.equal(J.get(a).approval.until, null);
+  assert.equal(J.requestChange(a, 'x').code, 409);
+  const b = (await J.create({ notes: 'x', photos: [], plate: 32, email: 'o@x.test', surprise: true }, 'https://x')).id;
+  await until(() => J.get(b, { full: true }).status === 'done');
+  J.approve(b);
+  assert.equal(J.get(b).approval.confirmed.by, 'surprise'); assert.equal(J.list().find((r) => r.id === b).toFulfill, true);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(told.sort(), ['approve', 'kit', 'kit'].sort());
 });
 
 test('a change cut off by a restart says so, and Undo skips it', async () => {

@@ -559,7 +559,35 @@ let kitInfo=null; // from the job: {kit, kitCents, kitCurrency}
 function orderLabel(){ const c=kitInfo&&kitInfo.kitCents; return c?`Order your kit, ${(c/100).toLocaleString(undefined,{style:'currency',currency:(kitInfo.kitCurrency||'usd').toUpperCase(),maximumFractionDigits:c%100?2:0})}`:'Order your kit'; }
 function refreshOrderUI(){ document.querySelectorAll('[data-order]').forEach(b=>{ b.textContent=orderLabel(); b.hidden=!jobId; });
   const k=kitInfo&&kitInfo.kit, done=$('kitDone'); done.hidden=!k||!!R.preview;
-  if(k) done.textContent=k.test?'Test order: this site takes no payments yet, so the full guide and parts list are unlocked.':'Your kit is ordered. Thank you! The full guide and parts list are unlocked.'; }
+  const ap=kitInfo.approval;
+  if(k) done.textContent=ap&&!ap.confirmed?'Your kit is paid for. We\'ll order its pieces as soon as you tell us the design looks right.'
+    :k.test?'Test order: this site takes no payments yet, so the full guide and parts list are unlocked.':'Your kit is ordered. Thank you! The full guide and parts list are unlocked.'; }
+// An order's design, once our team has checked it: its owner OKs it, or asks for one change, or it's built after 48 hours.
+// (The admin's view shows the review card instead.)
+function renderApproval(j){
+  const ap=j.approval, card=$('approval');
+  if(!ap||j.review||j.status!=='done'||ap.surprise&&!ap.confirmed){ card.hidden=true; return; }
+  card.hidden=false;
+  const when=ap.until?new Date(ap.until).toLocaleString(undefined,{weekday:'long',month:'long',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+  if(ap.confirmed){ $('apTitle').textContent='We\'re building your kit'; $('apButtons').hidden=true; $('apChange').hidden=true;
+    $('apLead').textContent='Thank you! We\'re ordering every piece and will email you when your kit ships.'; return; }
+  $('apTitle').textContent='Is this your house?'; $('apButtons').hidden=false; $('apAsk').hidden=!ap.changesLeft;
+  $('apLead').textContent=(ap.changeRequest&&ap.changeRequest.done?'We made the change you asked for. Turn it around and check it looks like home. '
+    :'Turn it around and check it looks like home. If something should be different, tell us once and we\'ll change it. ')
+    +(when?`If we don't hear from you by ${when}, we'll build it as it is.`:'');
+}
+async function approvalPost(what,body){
+  const r=await fetch(`/api/jobs/${jobId}/${what}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body||{})}), j=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(j.error||'Something went wrong on our side. Please try again in a little while.'); return j; }
+$('apYes').onclick=async()=>{ $('apYes').disabled=true; $('apMsg').textContent='';
+  try{ await approvalPost('confirm'); kickPoll(); }catch(e){ $('apMsg').textContent=e.message; } finally{ $('apYes').disabled=false; } };
+$('apAsk').onclick=()=>{ $('apChange').hidden=false; $('apButtons').hidden=true; $('apNote').focus(); };
+$('apCancel').onclick=()=>{ $('apChange').hidden=true; $('apButtons').hidden=false; };
+$('apSend').onclick=async()=>{ const note=$('apNote').value.trim();
+  if(!note){ $('apMsg').textContent='Tell us what should be different.'; $('apNote').focus(); return; }
+  $('apSend').disabled=true; $('apMsg').textContent='';
+  try{ await approvalPost('change',{note}); $('apChange').hidden=true; $('apNote').value=''; $('approval').hidden=true; kickPoll(); }
+  catch(e){ $('apMsg').textContent=e.message; } finally{ $('apSend').disabled=false; } };
 async function orderKit(b){
   const notes=document.querySelectorAll('[data-ordernote]'), say=t=>notes.forEach(n=>n.textContent=t);
   b.disabled=true; say('Taking you to the secure checkout…');
@@ -690,7 +718,7 @@ function renderThumbs(){
   const extras=photos.map((f,i)=>photoView.get(f)?'':tile(i,'More','','','more')).join('');
   $('thumbs').innerHTML=named.join('')+extras+(photos.length<max?tile(null,'More','Optional',PLUS,'more'):'');
   $('refPhotos').innerHTML=html; $('refWrap').hidden=!photos.length;
-  $('designBtn').textContent=(DEV?(photos.length?`Design from ${photos.length} photo${photos.length>1?'s':''}`:'Design from description'):'Design my house')+feeText();
+  designBtnLabel();
   fewPhotosNote(); $('surveyBtn').hidden=!photos.length; if(survey){ survey=null; $('survey').hidden=true; $('survey').innerHTML=''; } // new photos: ask again
 }
 async function toPayload(file,maxSide=1568){
@@ -777,7 +805,13 @@ $('lastBtn').hidden=true;
 // and starts when Stripe sends the owner back paid; either way the page polls the job for progress,
 // so paying, reloading or closing the tab doesn't lose it (the job id is in the address bar).
 let jobId=null, jobAfter=0, jobHave=0, jobT0=0;
-const feeText=()=>health&&health.fee?` (${(health.fee.amountCents/100).toLocaleString(undefined,{style:'currency',currency:health.fee.currency.toUpperCase()})} design fee)`:'';
+const money=(c,cur)=>(c/100).toLocaleString(undefined,{style:'currency',currency:(cur||'usd').toUpperCase(),maximumFractionDigits:c%100?2:0});
+// what Design costs: the size's price (the design and its kit, paid up front) when it's on sale, else the design fee
+const orderPrice=()=>health&&health.prices?health.prices[chosenPlate()]||null:null;
+const feeText=()=>{ const c=orderPrice(); return c?` · ${money(c,health.fee&&health.fee.currency)}`:health&&health.fee?` (${money(health.fee.amountCents,health.fee.currency)} design fee)`:''; };
+function designBtnLabel(){ $('designBtn').textContent=(DEV?(photos.length?`Design from ${photos.length} photo${photos.length>1?'s':''}`:'Design from description'):'Design my house')+feeText();
+  $('surpriseRow').hidden=!orderPrice(); }
+['sizeMini','sizeClassic','bigPlate'].forEach(id=>{ const el=$(id); if(el) el.addEventListener('change',designBtnLabel); });
 async function askServer(mode){
   if(busyCtl||jobId) return;
   try{
@@ -789,14 +823,14 @@ async function askServer(mode){
     setBusy(true); showSent(); $('sentGot').textContent=photos.length?'Sending your photos…':'Sending your request…';
     $('subStatus').textContent='Starts once your photos are checked.';
     const plate=chosenPlate();
-    const body={notes,target:plate===48?Math.max(target,2400):plate===16?Math.min(target,350):target,plate,address:houseAddress(),email:$('emailInput').value.trim()||undefined,
+    const body={notes,target:plate===48?Math.max(target,2400):plate===16?Math.min(target,350):target,plate,address:houseAddress(),email:$('emailInput').value.trim()||undefined,surprise:orderPrice()&&$('surpriseInput').checked?true:undefined,
       plan:planFile?await toPayload(planFile,2400):undefined, photos:await Promise.all(photos.map(f=>toPayload(f))),views:photoViews(),
       credits:photos.map(f=>photoCredit.get(f)).filter(Boolean), choices:surveyChoices()};
     if(photos.length) $('sentGot').textContent='Checking your photos… (this takes a moment)';
     const res=await fetch('/api/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}), j=await res.json();
     if(!res.ok) throw failed(res,j);
     rememberDesign(j.id,'',{address:houseAddress(),status:j.checkout?'unpaid':'designing'});
-    if(j.checkout){ $('sentGot').textContent='Photos checked. Taking you to the secure payment page for the design fee…'; location.href=j.checkout; return; }
+    if(j.checkout){ $('sentGot').textContent='Photos checked. Taking you to the secure checkout…'; location.href=j.checkout; return; }
     jobId=j.id; showSent(); watchJob(j.id,false);
   }catch(e){ hideSent(); status(esc(e.message),true,e.plain); setBusy(false); $('photoStatus').scrollIntoView({block:'center'}); }
 }
@@ -861,7 +895,7 @@ async function pollJob(gen=pollGen){
   try{ const r=await fetch(`/api/jobs/${jobId}?after=${jobAfter}&have=${jobHave}`); j=await r.json(); if(!r.ok) throw new Error(j.error||`Server error ${r.status}`); }
   catch(e){ jobLoaded(); if(!curDesign) loadSample(); status(DEV?esc(e.message):'Reconnecting… your design keeps going on our side.',DEV); setTimeout(()=>pollJob(gen),5000); return; } // a restart or a dropped connection
   if(gen!==pollGen) return;
-  kitInfo={kit:j.kit,kitCents:j.kitCents,kitCurrency:j.kitCurrency}; if(R) refreshOrderUI();
+  kitInfo={kit:j.kit,kitCents:j.kitCents,kitCurrency:j.kitCurrency,approval:j.approval||null}; if(R) refreshOrderUI();
   // no draft of theirs yet: the page after Design (opened from its link too)
   if(!j.draft&&!ownShown&&!['done','awaiting_payment'].includes(j.status)&&$('sent').hidden) showSent(j.photos);
   { const d=(j.result&&j.result.design)||j.draft; rememberDesign(jobId,d&&d.name,{status:j.status==='done'?'ready':j.status==='error'?'problem':'designing'}); }
@@ -873,14 +907,16 @@ async function pollJob(gen=pollGen){
   jobAfter=j.next; jobLoaded(); // the right view is in place: show the page
   if(!curDesign) loadSample(); // nothing of theirs to show yet: the sample for the Model tab
   renderReview(j.review||null,j.status); // the admin's check (only the admin's view carries it)
+  renderApproval(j); // an order's owner: OK it or ask for a change
   if(j.status==='awaiting_payment'){ status(`This design is waiting for its design fee.`); setBusy(false); return; }
   // finished, and being checked by our team before its owner sees it (jobs.js hold): look again now and then
   // received and paid, and our team is looking the photos over before the design starts (jobs.js intake)
   if(j.status==='intake'){ status('We have your photos and we\'re looking them over.'); $('subBar').style.width='5%'; setBusy(false); setTimeout(()=>pollJob(gen),20000); return; }
-  if(j.status==='review'){ status('We\'re checking your house against your photos before we send it to you.'); $('subBar').style.width='95%'; setBusy(false); setTimeout(()=>pollJob(gen),20000); return; }
+  if(j.status==='review'){ const cr=j.approval&&j.approval.changeRequest;
+    status(cr&&!cr.done?'We\'re making the change you asked for. We\'ll email you when your house is ready to look at again.':'We\'re checking your house against your photos before we send it to you.'); $('subBar').style.width='95%'; setBusy(false); setTimeout(()=>pollJob(gen),20000); return; }
   // cut off by a restart: the server picks it up again at the part it was on (jobs.resumeInterrupted)
   if(j.status==='interrupted'){ status(DEV?'Picking your design up where it left off…':DESIGNING); setTimeout(()=>pollJob(gen),4000); return; }
-  if(j.status==='done'||j.status==='error'){ setBusy(false); return; }
+  if(j.status==='done'||j.status==='error'){ setBusy(false); if(j.approval&&!j.approval.confirmed) setTimeout(()=>pollJob(gen),60000); return; }
   setTimeout(()=>pollJob(gen),2000);
 }
 function handleEvent(ev,t0){
@@ -933,7 +969,10 @@ function renderReview(rv,st){
   const was=!!reviewing; reviewing=rv; $('review').hidden=!rv;
   if(!rv){ if(was){ picked.clear(); applyState(); } return; }
   const busy=st==='running';
-  $('revState').textContent=rv.approved?`Approved ${new Date(rv.approved).toLocaleString()}: the customer can see it.`:'Waiting for your check: the customer can\'t see it yet.';
+  const cr=rv.changeRequest&&!rv.changeRequest.done?rv.changeRequest:null;
+  $('revState').textContent=cr?`The customer asked for a change: "${cr.note}". Make it, then send it back to them.`
+    :rv.approved?`Approved ${new Date(rv.approved).toLocaleString()}: the customer can see it.`:'Waiting for your check: the customer can\'t see it yet.';
+  $('revApprove').textContent=cr?'Send it back to the customer':'Approve and send to the customer';
   $('revSend').disabled=busy; $('revUndo').disabled=busy||!rv.canUndo;
   $('revFix').hidden=!(R&&(R.errors.length||R.warnings.length)); $('revFix').disabled=busy; $('revApprove').hidden=!!rv.approved; $('revApprove').disabled=busy;
   if(busy&&rv.revising) $('revBusy').textContent=`Making the change: "${rv.revising.note}". This takes a few minutes.`;
@@ -1071,6 +1110,7 @@ async function boot(){
   // email: the link to the design, and finding designs by email; both only when the site can send it
   for(const id of ['emailLabel','emailInput','findMineBox']) $(id).hidden=!health.mail;
   renderMine();
+  designBtnLabel(); // the price, now that the server has said it
   $('photoIntro').textContent=DEV?`Enter the address to find street photos${health.streetPhotos?'':' (needs MAPILLARY_TOKEN)'}, or pick up to ${health.maxPhotos} exterior photos, front first, then each side, the back, the garage and any yard or patio: Claude builds only what a photo, the floor plan or your notes show, so a side no photo shows gets guessed. Claude (${health.model}) studies them, writes a design, compiles it here, fixes what the checker flags, and saves it.`
     :'A few photos and the address are all we need.';
   renderThumbs();

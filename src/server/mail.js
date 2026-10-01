@@ -41,6 +41,12 @@ const mail = (subject, title, paragraphs, button) => ({ subject, html: layout(ti
 const readyEmail = ({ name, link }) => mail(`Your brick house is ready: ${name || 'your house'}`, 'Your house is ready',
   [`We've finished designing ${name || 'your house'} in bricks. Turn it around in 3D, look through the first steps of the building guide, and order the kit when you're happy with it.`],
   { label: 'See your house', href: link });
+// An order's design, checked and ready for its owner's OK: one change in words, or it goes to building by the date given.
+const approveEmail = ({ name, link, until }) => mail(`Your brick house is ready to look at: ${name || 'your house'}`, 'Your house is ready to look at',
+  [`We've finished designing ${name || 'your house'} in bricks. Turn it around in 3D and check it looks like home.`,
+    'If it looks right, tell us to build it. If something should be different, tell us in a sentence and we\'ll change it once before we build it.',
+    `If we don't hear from you by ${until}, we'll go ahead and build it as it is.`],
+  { label: 'See your house', href: link });
 const kitEmail = ({ name, link }) => mail(`Your kit is ordered: ${name || 'your house'}`, 'Thank you for your order',
   [`Your kit for ${name || 'your house'} is ordered. We'll sort every piece into bags and send it to you with the baseplate.`, 'The full building guide and parts list are unlocked now, whenever you want to look ahead.'],
   { label: 'Open your guide', href: link });
@@ -52,4 +58,4 @@ const mineEmail = ({ count, link }) => mail('Your Brickhouse designs', 'Your des
     'The link works for 24 hours. If you didn\'t ask for it, you can ignore this email.'],
   { label: 'See my designs', href: link });
 
-module.exports = { makeMailer, cleanEmail, readyEmail, kitEmail, shippedEmail, mineEmail };
+module.exports = { makeMailer, cleanEmail, readyEmail, approveEmail, kitEmail, shippedEmail, mineEmail };
