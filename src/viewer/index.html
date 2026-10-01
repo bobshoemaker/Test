@@ -60,7 +60,7 @@ button,select,input,textarea{font:inherit;color:inherit}
 .btn:disabled{opacity:.4;cursor:default}
 :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
-.tabs{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--line)}
+.tabs{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border-bottom:1px solid var(--line)}
 .tabs button{border:0;background:none;padding:12px 4px;font-size:15px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent}
 .tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
 .pane{padding:16px}
@@ -327,7 +327,7 @@ if(/[?&]job=/.test(location.search)&&!/[?&](canceled|hero)=/.test(location.searc
         <button role="tab" aria-selected="true" data-tab="model">Model</button>
         <button role="tab" aria-selected="false" data-tab="manual">Guide</button>
         <button role="tab" aria-selected="false" data-tab="parts">Kit</button>
-        <button role="tab" aria-selected="false" data-tab="design">Make yours</button>
+        <button role="tab" aria-selected="false" data-tab="design" class="dev-only">Make yours</button>
       </div>
       <section class="pane" id="pane-model">
         <!-- the admin's check before a design goes to its owner (only the admin's view of a held design shows it) -->

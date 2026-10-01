@@ -230,7 +230,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   loop (the "Everything you need" section, `634-unit-a`, still `build-house.png`), loaded as it scrolls near, paused
   offscreen, posting its step to the page. Neither loads with reduced motion.
 - The app at `/app` is consumer-facing in the home page's theme (warm palette, Jersey 10 headings, pill buttons;
-  tabs Model, Guide, Kit, Make yours), under the same top bar as the home page: one component, `src/viewer/topbar.html`, that the server (and
+  tabs Model, Guide, Kit; Make yours is the top bar's button, which opens the upload page on its own, and a tab only in the
+  technical view), under the same top bar as the home page: one component, `src/viewer/topbar.html`, that the server (and
   `bundle.js`) puts in place of each page's `<!-- topbar -->`, so it doesn't move between pages; its button reads
   "See an example" on the upload page). The upload page (above the Design button), the Model tab (under "What we filled
   in") and the home page's questions say the model takes some artistic license: a brick interpretation, not an exact

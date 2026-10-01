@@ -1026,7 +1026,11 @@ function showTab(t){ tab=t;
   if(was&&!document.documentElement.classList.contains('upload')){ scrollTo(0,0); requestAnimationFrame(resize); } }
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 $('seeExample').onclick=e=>{ e.preventDefault(); showTab('model'); };
-$('topCta').onclick=e=>{ e.preventDefault(); showTab(document.documentElement.classList.contains('upload')?'model':'design'); if(innerWidth<960&&tab==='design') document.querySelector('.panel').scrollIntoView(); };
+// The top bar's Make yours is the way to the upload page (there's no tab for it outside the technical view): over a
+// house of theirs it opens the upload page on its own, not the form squeezed beside the model.
+$('topCta').onclick=e=>{ e.preventDefault(); const up=document.documentElement.classList.contains('upload');
+  if(!up&&(ownShown||jobId)){ location.assign('/app#design'); return; }
+  showTab(up?'model':'design'); if(innerWidth<960&&tab==='design') document.querySelector('.panel').scrollIntoView(); };
 // /app#design (the landing page's "Make yours") opens on the upload page
 if(location.hash==='#design') showTab('design');
 function applyTheme(){ const c=getComputedStyle(document.documentElement).getPropertyValue('--stage').trim()||'#D9E2EB'; stageLin=lin(c); scene.background=HERO?null:new THREE.Color(c); if(R) applyState(); dirty=true; }
