@@ -407,11 +407,11 @@ if(/[?&]job=/.test(location.search)&&!/[?&](canceled|hero)=/.test(location.searc
         <div class="card sent" id="sent" hidden>
           <div class="sentmark" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></div>
           <h2 id="sentTitle">We're designing your house</h2>
-          <p class="sentlead" id="sentLead">Thank you! It usually takes about half an hour. You can close this page: your house keeps going on our side.</p>
+          <p class="sentlead" id="sentLead">Thank you! We'll let you know as soon as it's ready. You can close this page and come back to your link any time.</p>
           <div class="sentphotos" id="sentPhotos"></div>
           <ol class="steps">
             <li class="done"><span class="dot" aria-hidden="true"></span><div><b>Photos received</b><span id="sentGot"></span></div></li>
-            <li class="now"><span class="dot" aria-hidden="true"></span><div><b>Designing your model</b><span id="subStatus" aria-live="polite">Getting started…</span><span class="bar" aria-hidden="true"><i id="subBar"></i></span></div></li>
+            <li class="now"><span class="dot" aria-hidden="true"></span><div><b>Designing your model</b><span id="subStatus" aria-live="polite">Your house is being designed.</span><span class="bar dev-only" aria-hidden="true"><i id="subBar"></i></span></div></li>
             <li><span class="dot" aria-hidden="true"></span><div><b>Ready to see in 3D</b><span id="sentNext">Come back to this page's link to see it, turn it around and look through the building guide.</span></div></li>
           </ol>
           <label class="sentlinklabel" for="sentLink">Your private link</label>
