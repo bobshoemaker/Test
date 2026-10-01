@@ -10,6 +10,8 @@ const crypto = require('node:crypto');
 const RESUME_WITHIN_MS = 24 * 3600e3; // older cut-off jobs are left alone (no surprise API spend on stale ones)
 const FULFILLMENT = ['new', 'ordered', 'packed', 'shipped', 'cancelled']; // a kit order's progress, set on the admin page
 const MAX_RESUMES = 2; // times a job cut off by a restart is picked up again (a crash that recurs stops there)
+const CONFIRM_WITHIN_MS = 48 * 3600e3; // an order's design goes to building this long after it's shown, unless its owner asks for a change
+const CHANGES_INCLUDED = 1; // changes in words an owner can ask for before their design goes to building
 
 // kitCents(plate): the kit's price for a design on that baseplate, or null when kits aren't on sale.
 // preview(design): what a customer sees before ordering the kit (preview.js); the full design after.
@@ -19,6 +21,11 @@ const MAX_RESUMES = 2; // times a job cut off by a restart is picked up again (a
 // meanwhile the admin can ask for changes in words (reviseRun), undo them, and approve.
 // intake: a paid request waits (status "intake") for the admin to look over its photos and add what the design needs (their
 // own photos, the house picked on the map, instructions) before it runs (begin).
+// An order: when the size has a kit price, the owner pays for the design and kit up front, in one checkout with the shipping
+// address (j.kit is set then, j.order says how). Once the admin approves the design its owner sees it and either OKs it
+// (confirm), asks for one change in words (requestChange: back to the admin's check), or says nothing, and it goes to building
+// CONFIRM_WITHIN_MS later (sweep). A gift marked a surprise goes to building as soon as the admin approves it. Only then is the
+// kit's to fulfill (j.confirmed). Without a kit price for the size, the design fee comes first and the kit is ordered later.
 function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, fixRun = null, reviseRun = null, hold = false, intake = false, now = () => Date.now(),
   kitCents = () => null, preview = null, notify = null, onKit = null }) {
   fs.mkdirSync(dir, { recursive: true });
@@ -42,7 +49,8 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     return previews.get(design); };
   // held: finished under the hold (j.review) and not yet approved, so its owner sees it as still in progress. Designs
   // finished before the hold was turned on (no j.review) stay as their owners have seen them.
-  const held = (j) => hold && !!j.review && !j.approved;
+  // An owner's change request is held for the admin too, hold or not.
+  const held = (j) => (hold && !!j.review && !j.approved) || !!(j.changeRequest && !j.changeRequest.done);
   const plateOf = (j) => (j.result && j.result.design && j.result.design.plate) || (j.params && j.params.plate) || 32;
 
   function emit(j, ev) {
@@ -56,6 +64,9 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     if (ev.type === 'done' || ev.type === 'error' || ev.type === 'draft' || ev.type === 'part' || ev.type === 'siteDone') save(j); // part: where a restart picks up
   }
 
+  // an order's kit is to fulfill once the design is confirmed; a kit ordered after its design, at once
+  const toFulfill = (j) => !!j.kit && (!j.order || !!j.confirmed);
+  const confirmOrder = (j, by) => { if (j.confirmed) return; j.confirmed = { at: now(), by }; j.awaiting = null; ordered(j); tell(j, 'kit'); };
   const ordered = (j) => { if (onKit) Promise.resolve().then(() => onKit(j)).catch((e) => console.error(`Stock check for ${j.id} failed: ${e.message}`)); };
   const tell = (j, kind) => { if (!notify || !j.email) return;
     Promise.resolve().then(() => notify(j, kind)).catch((e) => console.error(`Email (${kind}) for ${j.id} failed: ${e.message}`)); };
@@ -82,6 +93,15 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
         j.status = j.result ? 'done' : 'error'; save(j); });
   }
 
+  // Where an order's design stands with its owner: the time to give an OK (null once confirmed or a surprise), whether they
+  // can still ask for a change, the change they asked for, and the confirmation.
+  const approvalOf = (j) => ({ until: j.awaiting ? j.awaiting.until : null, surprise: !!j.order.surprise, confirmed: j.confirmed || null,
+    changesLeft: Math.max(0, CHANGES_INCLUDED - (j.changesAsked || 0)), changeRequest: j.changeRequest ? { at: j.changeRequest.at, note: j.changeRequest.note, done: j.changeRequest.done || null } : null });
+
+  // A paid kit from its Stripe Checkout Session: what was paid, and where it ships.
+  const kitFromSession = (s, session) => { const cd = s.customer_details || {}, ship = (s.collected_information && s.collected_information.shipping_details) || s.shipping_details || null;
+    return { at: now(), amount: s.amount_total, currency: s.currency, session, email: cd.email || null, name: (ship && ship.name) || cd.name || null, shipping: ship ? ship.address : cd.address || null }; };
+
   // A change to a finished design (the admin's): the one it had is kept so the change can be undone.
   function change(id, { note, parts, runFn, extra }) {
     const j = load(id);
@@ -104,12 +124,22 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     // A new job for these (already cleaned) design parameters. Returns {id, checkout?}.
     async create(params, origin) {
       // the owner's email (to send the link) and the site's address (for links in emails) ride on the job, not in its params
-      const { email = null, ...rest } = params;
-      const j = { id: crypto.randomUUID(), createdAt: now(), status: feeOn ? 'awaiting_payment' : 'queued', params: rest, events: [], email, origin };
+      const { email = null, surprise = false, ...rest } = params;
+      // the size's kit price, when it's on sale: the design and kit are paid for together, up front
+      const price = kitCents(rest.plate || 32);
+      const j = { id: crypto.randomUUID(), createdAt: now(), status: feeOn || (stripe && price) ? 'awaiting_payment' : 'queued', params: rest, events: [], email, origin,
+        ...(price ? { order: { cents: price, surprise: !!surprise } } : {}) };
       jobs.set(j.id, j);
-      if (!feeOn) { if (intake) { j.status = 'intake'; save(j); } else { save(j); launch(j, run); } return { id: j.id }; }
-      const s = await stripe.createCheckout({ jobId: j.id, amountCents: feeCents, currency, name: 'Brick model design fee',
-        successUrl: `${origin}/app?job=${j.id}&session={CHECKOUT_SESSION_ID}`, cancelUrl: `${origin}/app?job=${j.id}&canceled=1` });
+      if (j.status !== 'awaiting_payment') {
+        if (j.order) j.kit = { at: now(), test: true }; // no payments on this site: a test order
+        if (intake) { j.status = 'intake'; save(j); } else { save(j); launch(j, run); } return { id: j.id };
+      }
+      const size = { 16: 'Mini', 48: 'Grand' }[rest.plate] || 'Classic';
+      const s = await stripe.createCheckout(j.order
+        ? { jobId: j.id, amountCents: price, currency, kind: 'order', shipping: true, name: `Brick model of your house (${size}): design and kit`,
+          successUrl: `${origin}/app?job=${j.id}&session={CHECKOUT_SESSION_ID}`, cancelUrl: `${origin}/app?job=${j.id}&canceled=1` }
+        : { jobId: j.id, amountCents: feeCents, currency, name: 'Brick model design fee',
+          successUrl: `${origin}/app?job=${j.id}&session={CHECKOUT_SESSION_ID}`, cancelUrl: `${origin}/app?job=${j.id}&canceled=1` });
       j.sessionId = s.id; save(j);
       return { id: j.id, checkout: s.url };
     },
@@ -122,9 +152,11 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
         if (!j.paid) {
           if (!sessionId || sessionId !== j.sessionId) return { code: 402, error: 'This payment link is not for this design.' };
           const s = await stripe.getSession(sessionId);
-          if (s.payment_status !== 'paid' || (s.metadata && s.metadata.job) !== id) return { code: 402, error: 'The design fee has not been paid yet.' };
+          if (s.payment_status !== 'paid' || (s.metadata && s.metadata.job) !== id || (s.metadata.kind || 'fee') !== (j.order ? 'order' : 'fee'))
+            return { code: 402, error: j.order ? 'The order has not been paid yet.' : 'The design fee has not been paid yet.' };
           j.paid = { at: now(), amount: s.amount_total, currency: s.currency };
           if (!j.email && s.customer_details && s.customer_details.email) j.email = String(s.customer_details.email).toLowerCase();
+          if (j.order) j.kit = kitFromSession(s, sessionId);
         }
         if (intake && !j.begun) { j.status = 'intake'; save(j); } else launch(j, run);
       }
@@ -187,6 +219,8 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
           pieces: j.result && j.result.stats ? j.result.stats.pieces : null, problems: j.result ? (j.result.errors || 0) + (j.result.warnings || 0) : null,
           paid: !!j.paid, kit: j.kit ? { at: j.kit.at, amount: j.kit.amount, currency: j.kit.currency, name: j.kit.name, email: j.kit.email, shipping: j.kit.shipping, test: !!j.kit.test } : null,
           review: j.review || j.approved ? { approved: j.approved ? j.approved.at : null, since: j.review ? j.review.since : null, revisions: (j.revisions || []).length, revising: !!j.revising } : null,
+          order: j.order ? { surprise: !!j.order.surprise, confirmed: j.confirmed || null, until: j.awaiting ? j.awaiting.until : null,
+            changeRequest: j.changeRequest || null } : null, toFulfill: toFulfill(j),
           fulfillment: j.fulfillment || null, stock: j.stock || null, site: j.site ? { ftPerStud: j.site.ftPerStud, costUsd: j.site.costUsd, report: !!j.siteReport, needsCheck: !!(j.site.found && j.site.found.needsCheck) } : null });
       }
       return out.sort((a, b) => b.createdAt - a.createdAt);
@@ -203,6 +237,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
     setFulfillment(id, { status, supplierOrder, tracking, note } = {}) {
       const j = load(id);
       if (!j || !j.kit) return { code: 404, error: 'No kit order for that design.' };
+      if (!toFulfill(j)) return { code: 409, error: 'The design isn\'t confirmed yet: its kit waits for the owner\'s OK (or the time to give it).' };
       if (!FULFILLMENT.includes(status)) return { code: 400, error: `Status is one of ${FULFILLMENT.join(', ')}.` };
       const clip = (t, n) => String(t || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
       const was = j.fulfillment || {}, keep = (v, k, n) => (v === undefined ? was[k] || '' : clip(v, n)); // fields not sent stay as they were
@@ -256,12 +291,14 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       // held for the admin's check: its owner sees it still in progress ("review"), with no drafts or result
       if (held(j) && !full && j.result) {
         return { id: j.id, status: 'review', paid: !!j.paid || !feeOn, kit: null, kitCents: null, kitCurrency: currency,
+          ...(j.order ? { approval: approvalOf(j) } : {}),
           photos: j.params && Array.isArray(j.params.photos) ? j.params.photos.length : 0,
           events: j.events.slice(after).filter((e) => e.type === 'status' || e.type === 'part' || e.type === 'site'), next: j.events.length };
       }
       return { id: j.id, status: j.status, paid: !!j.paid || !feeOn,
         ...(full && (j.review || j.approved) ? { review: { approved: j.approved ? j.approved.at : null, revisions: (j.revisions || []).map(({ at, note, parts, costUsd, undone, failed }) => ({ at, note, parts, costUsd, undone: !!undone, failed: failed || null })),
-          revising: j.revising || null, canUndo: (j.versions || []).length > 0 } } : {}),
+          revising: j.revising || null, canUndo: (j.versions || []).length > 0, changeRequest: j.changeRequest || null } } : {}),
+        ...(j.order ? { approval: approvalOf(j) } : {}),
         kit: j.kit ? { at: j.kit.at, test: !!j.kit.test } : null, kitCents: kitCents(plateOf(j)), kitCurrency: currency,
         photos: j.params && Array.isArray(j.params.photos) ? j.params.photos.length : 0,
         events: j.events.slice(after), next: j.events.length,
@@ -284,10 +321,9 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
         if (session !== j.kitSession) return { code: 402, error: 'This payment link is not for this kit.' };
         const s = await stripe.getSession(session);
         if (s.payment_status !== 'paid' || !s.metadata || s.metadata.job !== id || s.metadata.kind !== 'kit') return { code: 402, error: 'The kit has not been paid for yet.' };
-        const cd = s.customer_details || {}, ship = (s.collected_information && s.collected_information.shipping_details) || s.shipping_details || null;
-        j.kit = { at: now(), amount: s.amount_total, currency: s.currency, session, email: cd.email || null, name: (ship && ship.name) || cd.name || null, shipping: ship ? ship.address : cd.address || null };
+        j.kit = kitFromSession(s, session);
         save(j);
-        if (!j.email && cd.email) j.email = String(cd.email).toLowerCase();
+        if (!j.email && j.kit.email) j.email = String(j.kit.email).toLowerCase();
         tell(j, 'kit'); ordered(j);
         return { code: 200, ordered: true };
       }
@@ -356,13 +392,56 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       if (!j) return { code: 404, error: 'No such job' };
       if (j.status !== 'done' || !j.result) return { code: 409, error: 'The design is not finished yet.' };
       if (!j.approved) j.approved = { at: now() };
-      if (!j.readySent) { j.readySent = now(); tell(j, 'ready'); }
+      if (j.changeRequest && !j.changeRequest.done) j.changeRequest.done = now(); // the change they asked for, made: back to them
+      if (j.order && !j.confirmed) {
+        // an order: its owner OKs it or asks for a change; a surprise goes straight to building
+        if (j.order.surprise) confirmOrder(j, 'surprise');
+        else if (!j.awaiting) { j.awaiting = { since: now(), until: now() + CONFIRM_WITHIN_MS }; tell(j, 'approve'); }
+      } else if (!j.readySent) { j.readySent = now(); tell(j, 'ready'); }
+      if (!j.readySent) j.readySent = now();
       save(j);
       return { code: 200, approved: j.approved.at };
+    },
+
+    // The owner OKs their design: it goes to building (the kit is ours to fulfill from now on).
+    confirm(id) {
+      const j = load(id);
+      if (!j || !j.order) return { code: 404, error: 'No such order' };
+      if (j.confirmed) return { code: 200, confirmed: j.confirmed };
+      if (!j.awaiting || held(j) || j.status !== 'done') return { code: 409, error: 'Your design isn\'t ready to look at yet.' };
+      confirmOrder(j, 'owner'); save(j);
+      return { code: 200, confirmed: j.confirmed };
+    },
+
+    // The owner asks for a change in words (once): it goes back to the admin's check, and they see it again after.
+    requestChange(id, note) {
+      const j = load(id);
+      if (!j || !j.order) return { code: 404, error: 'No such order' };
+      note = String(note || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 500);
+      if (!note) return { code: 400, error: 'Tell us what to change.' };
+      if (j.confirmed) return { code: 409, error: 'Your design has already gone to building.' };
+      if (!j.awaiting || held(j) || j.status !== 'done') return { code: 409, error: 'Your design isn\'t ready to look at yet.' };
+      if ((j.changesAsked || 0) >= CHANGES_INCLUDED) return { code: 409, error: 'The change included with your design is used.' };
+      j.changesAsked = (j.changesAsked || 0) + 1;
+      j.changeRequest = { at: now(), note }; j.awaiting = null; j.approved = null; j.review = { since: now() };
+      emit(j, { type: 'status', message: 'The owner asked for a change.' });
+      save(j);
+      return { code: 200 };
+    },
+
+    // Orders whose owner said nothing in time go to building. Run now and then (server.js); returns the ids confirmed.
+    sweep() {
+      const ids = [];
+      for (const f of fs.readdirSync(dir)) {
+        const j = f.endsWith('.json') ? load(f.slice(0, -5)) : null;
+        if (!j || !j.order || j.confirmed || !j.awaiting || held(j) || j.awaiting.until > now()) continue;
+        confirmOrder(j, 'time'); save(j); ids.push(j.id);
+      }
+      return ids;
     },
 
 
   };
 }
 
-module.exports = { createJobs, MAX_RESUMES, FULFILLMENT };
+module.exports = { createJobs, MAX_RESUMES, FULFILLMENT, CONFIRM_WITHIN_MS, CHANGES_INCLUDED };

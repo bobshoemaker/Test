@@ -95,6 +95,10 @@ ul.facts li{margin:2px 0}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .review{border:2px solid var(--accent);border-radius:14px;padding:14px;margin-bottom:16px;background:var(--panel)}
 .review h2{margin-top:0}
+.approval .row{margin-top:10px}
+.giftopt{display:flex;gap:10px;align-items:flex-start;margin:14px 0 4px;font-weight:600;cursor:pointer}
+.giftopt input{margin-top:4px;width:18px;height:18px;flex:none}
+.giftopt .opt{display:block;font-weight:400;color:var(--muted);font-size:14px}
 .revstate{margin:0 0 6px;font-weight:600}
 .revsel{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
 .revsel .chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:4px 6px 4px 10px;font-size:13px}
@@ -330,6 +334,18 @@ if(/[?&]job=/.test(location.search)&&!/[?&](canceled|hero)=/.test(location.searc
         <button role="tab" aria-selected="false" data-tab="design" class="dev-only">Make yours</button>
       </div>
       <section class="pane" id="pane-model">
+        <!-- an order's design, checked by our team: its owner OKs it or asks for one change, or it's built after 48 hours -->
+        <div class="review approval" id="approval" hidden>
+          <h2 id="apTitle">Is this your house?</h2>
+          <p id="apLead"></p>
+          <div class="row" id="apButtons"><button class="btn primary" id="apYes" type="button">Looks right, build it</button><button class="btn" id="apAsk" type="button">Ask for a change</button></div>
+          <div id="apChange" hidden>
+            <label class="addrlabel" for="apNote">What should be different?</label>
+            <textarea class="revnote" id="apNote" maxlength="500" rows="3" placeholder="e.g. The front door is blue, and there's a palm tree by the driveway"></textarea>
+            <div class="row"><button class="btn primary" id="apSend" type="button">Send my change</button><button class="btn" id="apCancel" type="button">Never mind</button></div>
+          </div>
+          <p class="note" id="apMsg" aria-live="polite"></p>
+        </div>
         <!-- the admin's check before a design goes to its owner (only the admin's view of a held design shows it) -->
         <div class="review" id="review" hidden>
           <h2>Check before it goes out</h2>
@@ -459,6 +475,7 @@ if(/[?&]job=/.test(location.search)&&!/[?&](canceled|hero)=/.test(location.searc
             <div class="survey" id="survey" hidden></div>
             <label class="addrlabel" for="emailInput" id="emailLabel">Email me when it's ready <span class="opt" id="emailWhy">(optional)</span></label>
             <input class="field" id="emailInput" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com">
+            <label class="giftopt" id="surpriseRow" hidden><input type="checkbox" id="surpriseInput"> <span>It's a gift: keep it a surprise <span class="opt">We'll build it without showing it to you first. Our team still checks every design.</span></span></label>
             <p class="fewphotos" id="fewPhotos" role="status" hidden></p>
             <p class="fine" id="licenseNote">Your model is a brick interpretation of your home, not an exact copy.</p>
             <div class="row go"><button class="btn" id="surveyBtn" hidden>Check my photos first</button><button class="btn primary cta" id="designBtn">Design my house</button><button class="btn" id="stopBtn" hidden>Stop</button><button class="btn" id="lastBtn" hidden>Show my last design</button></div>

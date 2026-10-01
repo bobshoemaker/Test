@@ -164,9 +164,15 @@ closing gift that realtors give clients: a brick model of the house they just bo
   them on the design as `photoCredits` and the viewer shows them.
 - `src/server/server.js`: zero-dependency HTTP server. Serves the viewer and designs; takes up to 12
   photos a design (`MAX_PHOTOS`; the design loop's 90-image budget keeps the rest for renders). A design is a
-  job (`src/server/jobs.js`): `POST /api/jobs {photos, notes, address?, plan?, plate?, choices?}`
-  saves it and, when `STRIPE_SECRET_KEY` is set, returns a Stripe Checkout link for the design fee
-  (`BRICKHOUSE_DESIGN_FEE_CENTS`, `src/server/payments.js`); `POST /api/jobs/<id>/start {session}`
+  job (`src/server/jobs.js`): `POST /api/jobs {photos, notes, address?, plan?, plate?, choices?, surprise?}`
+  saves it and, when `STRIPE_SECRET_KEY` is set, returns a Stripe Checkout link (`src/server/payments.js`): an order, the
+  size's full price for the design and its kit with the US shipping address (kind "order"), when that size has a kit price
+  (`BRICKHOUSE_KIT_<SIZE>_CENTS`), else the design fee (`BRICKHOUSE_DESIGN_FEE_CENTS`) with the kit ordered after (below).
+  An order's design goes to its owner after the admin's check: they OK it ("Looks right, build it", `POST …/confirm`) or ask
+  for one change in words (`POST …/change {note}`, back under the admin's "Waiting for your check" with the request shown;
+  approving sends it back to them), and with no answer in 48 hours it goes to building anyway (`sweep`, every ten minutes).
+  A gift marked a surprise skips that: it goes to building when the admin approves it. Only then is its kit listed to
+  fulfill; the admin page lists the ones waiting for their owner's OK; `POST /api/jobs/<id>/start {session}`
   runs it only once Stripe confirms that job's session is paid, and only once; `GET
   /api/jobs/<id>?after=&have=` is its progress, polled by the viewer. Customers can't change or re-run a design: repair rounds are
   the admin's ("Fix what the checker found" on the review card, `/admin/api/jobs/<id>/fix`, kept and undone like a change). A restart (every deploy from master, or the server running out of

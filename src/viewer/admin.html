@@ -63,6 +63,9 @@ th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute
     <h2>Waiting for your check <span class="pill" id="nCheck">0</span></h2>
     <p class="note" style="margin-top:-4px">Finished designs the customer can't see yet. Open one to look it over, tap bricks and ask for changes in words, then approve it: the customer sees it and gets the email only then.</p>
     <div id="checks"></div>
+    <h2>Waiting for the customer's OK <span class="pill" id="nOk">0</span></h2>
+    <p class="note" style="margin-top:-4px">Paid orders you've approved, now with their owner: they OK the design or ask for one change (it comes back to you under Waiting for your check). With no answer the kit goes to fulfill at the time shown.</p>
+    <div id="oks"></div>
     <h2>Kit orders to fulfill <span class="pill" id="nOpen">0</span></h2>
     <div id="orders"></div>
     <h2>Needs attention <span class="pill" id="nAttn">0</span></h2>
@@ -102,7 +105,12 @@ function render(){
   const {jobs}=data;
   $('flags').innerHTML=[['Payments',data.payments,'Stripe isn\'t set up: designs are free and kit orders are test orders'],['Email',data.mail,'Resend isn\'t set up'],['Held to '+(data.supplier==='gobricks'?'GoBricks':data.supplier||'a supplier'),!!data.supplier,'Designs are held to LEGO availability, not to what the kit supplier makes']]
     .map(([k,on,off])=>`<span class="flag${on?'':' off'}" title="${esc(on?'':off)}">${esc(k)}: ${on?'on':'off'}</span>`).join('');
-  const open=jobs.filter(j=>j.kit&&!['shipped','cancelled'].includes(j.fulfillment&&j.fulfillment.status)).sort((a,b)=>a.kit.at-b.kit.at);
+  // an order's kit is to fulfill once its design is confirmed (by its owner, the time running out, or a surprise)
+  const okAt=j=>j.order&&j.order.confirmed?j.order.confirmed.at:j.kit.at;
+  const open=jobs.filter(j=>j.kit&&j.toFulfill&&!['shipped','cancelled'].includes(j.fulfillment&&j.fulfillment.status)).sort((a,b)=>okAt(a)-okAt(b));
+  const oks=jobs.filter(j=>j.order&&!j.order.confirmed&&j.order.until&&j.review&&j.review.approved).sort((a,b)=>a.order.until-b.order.until);
+  $('nOk').textContent=oks.length;
+  $('oks').innerHTML=oks.length?`<div class="tablewrap"><table><tbody>${oks.map(rowHtml).join('')}</tbody></table></div>`:'<p class="muted">None waiting.</p>';
   $('nOpen').textContent=open.length;
   $('orders').innerHTML=open.length?open.map(orderCard).join(''):'<p class="muted">No kit orders waiting.</p>';
   const preps=jobs.filter(j=>j.status==='intake').sort((a,b)=>a.createdAt-b.createdAt);
@@ -118,8 +126,15 @@ function render(){
 }
 function statusHtml(j){ const rv=j.review, s=`<span class="st ${esc(j.status)}">${esc(j.status)}</span>`
     +(j.status==='intake'?' <span class="small err">waiting for you to prepare it</span>':'')+(rv&&j.status==='done'&&!rv.approved?' <span class="small err">waiting for your check</span>':'')+(rv&&rv.revising?' <span class="muted small">making a change</span>':'')
-    +(rv&&rv.approved?` <span class="muted small">approved${rv.revisions?`, ${rv.revisions} change${rv.revisions>1?'s':''}`:''}</span>`:'');
+    +(rv&&rv.approved?` <span class="muted small">approved${rv.revisions?`, ${rv.revisions} change${rv.revisions>1?'s':''}`:''}</span>`:'')+orderHtml(j);
   return s+(j.site&&j.site.needsCheck?'<div class="small err">Check it\'s the right house (Site map)</div>':'')+(j.status==='running'&&j.part?` <span class="muted small">part ${esc(j.part)}</span>`:'')+(j.error?`<div class="small err">${esc(j.error)}</div>`:'')+(j.status==='done'&&j.problems?`<div class="small err">${j.problems} problem${j.problems>1?'s':''} left</div>`:''); }
+// an order (paid up front): a surprise, the owner's change request, the time to OK it, or how it was confirmed
+function orderHtml(j){ const o=j.order; if(!o) return '';
+  const cr=o.changeRequest&&!o.changeRequest.done?`<div class="small err">The customer asked: "${esc(o.changeRequest.note)}"</div>`:'';
+  const by={owner:'the customer OK\'d it',time:'no answer in 48 hours',surprise:'a surprise'};
+  return (o.surprise?' <span class="muted small">gift, a surprise</span>':'')+cr
+    +(o.confirmed?`<div class="small muted">Confirmed ${when(o.confirmed.at)}: ${esc(by[o.confirmed.by]||o.confirmed.by)}</div>`
+      :o.until?`<div class="small">Waiting for the customer's OK; builds ${when(o.until)} without one</div>`:''); }
 function rowHtml(j){ const f=j.fulfillment;
   return `<tr><td class="small">${when(j.createdAt)}</td><td><b>${esc(j.name||'(untitled)')}</b><div class="small muted">${esc(j.address)} · ${SIZE(j.plate)} · ${j.photos} photo${j.photos===1?'':'s'}</div></td>
     <td>${statusHtml(j)}</td><td>${j.pieces?j.pieces.toLocaleString():''}</td><td class="small">${esc(j.email||'')}</td>
