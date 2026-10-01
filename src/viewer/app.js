@@ -644,10 +644,10 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') $('lightbox').hidd
 // (a map from above: the house, the street along the bottom, the camera and what it sees). The views go to the
 // server with the photos, so the design knows which photo shows which side.
 const SHOTS=[
-  {key:'front',name:'Front',hint:'Straight on, the whole house in view',cam:[32,57],at:[32,40]},
-  {key:'left',name:'Left corner',hint:'From the front left, so that side shows too',cam:[7,55],at:[19,39]},
-  {key:'right',name:'Right corner',hint:'From the front right, so that side shows too',cam:[57,55],at:[45,39]},
-  {key:'back',name:'Back',hint:'From the yard, if you can get there',cam:[32,5],at:[32,16]},
+  {key:'front',name:'Front',hint:'Straight on',cam:[32,57],at:[32,40]},
+  {key:'left',name:'Left corner',hint:'From the front left',cam:[7,55],at:[19,39]},
+  {key:'right',name:'Right corner',hint:'From the front right',cam:[57,55],at:[45,39]},
+  {key:'back',name:'Back',hint:'From the yard',cam:[32,5],at:[32,16]},
 ];
 const photoView=new Map(); // photo file -> the view it was added for (none for extras)
 let shotFor=null; // the tile whose photo the file picker is choosing
@@ -684,9 +684,9 @@ function renderThumbs(){
     +(i!=null?`<button type="button" class="shotdel" data-del="${i}"${dis} aria-label="Remove this photo">×</button>`:'')+`</div>`;
   const named=SHOTS.map(s=>{ const i=photos.findIndex(f=>photoView.get(f)===s.key); return tile(i<0?null:i,s.name,i<0?s.hint:'',shotMap(s),s.key); });
   const extras=photos.map((f,i)=>photoView.get(f)?'':tile(i,'More','','','more')).join('');
-  $('thumbs').innerHTML=named.join('')+extras+(photos.length<max?tile(null,'More (optional)','Sides, garage, roof, yard or details',PLUS,'more'):'');
+  $('thumbs').innerHTML=named.join('')+extras+(photos.length<max?tile(null,'More','Optional',PLUS,'more'):'');
   $('refPhotos').innerHTML=html; $('refWrap').hidden=!photos.length;
-  $('designBtn').textContent=(photos.length?`Design from ${photos.length} photo${photos.length>1?'s':''}`:'Design from description')+feeText();
+  $('designBtn').textContent=(DEV?(photos.length?`Design from ${photos.length} photo${photos.length>1?'s':''}`:'Design from description'):'Design my house')+feeText();
   fewPhotosNote(); $('surveyBtn').hidden=!photos.length; if(survey){ survey=null; $('survey').hidden=true; $('survey').innerHTML=''; } // new photos: ask again
 }
 async function toPayload(file,maxSide=1568){
@@ -806,6 +806,7 @@ $('findMine').onsubmit=async e=>{ e.preventDefault(); const email=$('findEmail')
   catch(err){ st.textContent='We couldn\'t send that just now. Please try again in a little while.'; } };
 // the emailed link, /app?mine=<token>: list that email's designs and remember them on this device
 async function openMine(token){
+  $('findMineBox').open=true; // its message shows inside
   try{ history.replaceState(null,'','/app#design'); }catch(e){}
   showTab('design');
   try{ const r=await fetch('/api/mine?token='+encodeURIComponent(token)), j=await r.json();
@@ -823,7 +824,7 @@ function rememberDesign(id,name,more={}){ try{ const a=myDesigns(), old=a.find(d
 const TAGS={ready:'Ready',designing:'Designing',problem:'Needs a look',unpaid:'Not started'};
 function renderMine(){ const a=myDesigns();
   // the card: the list, and the email link when the site can send one; not on the page after Design
-  $('myDesigns').hidden=!$('sent').hidden||(!a.length&&$('findMine').hidden);
+  $('myDesigns').hidden=!$('sent').hidden||!a.length;
   $('myDesignList').innerHTML=a.map(d=>`<li><a href="/app?job=${encodeURIComponent(d.id)}"><b>${esc(d.name||d.address||'Your house')}${d.status&&TAGS[d.status]?`<span class="tag ${d.status}">${TAGS[d.status]}</span>`:''}</b>`
     +`<small>${new Date(d.at).toLocaleDateString(undefined,{month:'short',day:'numeric',year:new Date(d.at).getFullYear()===new Date().getFullYear()?undefined:'numeric'})}</small></a></li>`).join(''); }
 renderMine();
@@ -1048,19 +1049,19 @@ async function boot(){
     requestAnimationFrame(()=>requestAnimationFrame(()=>{ try{ parent.postMessage({brickhouse:'hero-ready'},location.origin); }catch(e){} }));
     if(BUILD&&!window.BRICKHOUSE_STILL) playBuildLoop();
     return; }
-  if(embedded){ $('homeLink').hidden=true; $('topCta').hidden=true; $('photoControls').hidden=true; $('findMine').hidden=true; renderMine(); $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }
+  if(embedded){ $('homeLink').hidden=true; $('topCta').hidden=true; $('photoControls').hidden=true; $('findMineBox').hidden=true; renderMine(); $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }
   try{ health=await (await fetch('/api/health')).json(); }catch(e){ health=null; }
   loadDesignList();
   const closed='Designing new houses isn\'t open just yet. Please check back soon.';
   // the form shows from the start (no jump on the usual path); it goes only when the server can't design
-  if(!health){ $('photoControls').hidden=true; $('findMine').hidden=true; renderMine(); $('photoIntro').textContent=DEV?'Start the server with npm start to design from photos.':closed; return; }
-  if(!health.ready){ $('photoControls').hidden=true; $('findMine').hidden=true; renderMine(); $('photoIntro').textContent=DEV?'Add BRICKHOUSE_ANTHROPIC_API_KEY to .env and restart the server to design from photos (or run with BRICKHOUSE_FAKE=1 to try the flow).':closed; return; }
+  if(!health){ $('photoControls').hidden=true; $('findMineBox').hidden=true; renderMine(); $('photoIntro').textContent=DEV?'Start the server with npm start to design from photos.':closed; return; }
+  if(!health.ready){ $('photoControls').hidden=true; $('findMineBox').hidden=true; renderMine(); $('photoIntro').textContent=DEV?'Add BRICKHOUSE_ANTHROPIC_API_KEY to .env and restart the server to design from photos (or run with BRICKHOUSE_FAKE=1 to try the flow).':closed; return; }
   $('photoControls').hidden=false; $('addrBtn').hidden=!health.streetPhotos;
   // email: the link to the design, and finding designs by email; both only when the site can send it
-  for(const id of ['emailLabel','emailInput','emailWhy','findMine']) $(id).hidden=!health.mail;
+  for(const id of ['emailLabel','emailInput','findMineBox']) $(id).hidden=!health.mail;
   renderMine();
   $('photoIntro').textContent=DEV?`Enter the address to find street photos${health.streetPhotos?'':' (needs MAPILLARY_TOKEN)'}, or pick up to ${health.maxPhotos} exterior photos, front first, then each side, the back, the garage and any yard or patio: Claude builds only what a photo, the floor plan or your notes show, so a side no photo shows gets guessed. Claude (${health.model}) studies them, writes a design, compiles it here, fixes what the checker flags, and saves it.`
-    :`Add a photo for each view below: the front, both front corners and the back. Tap a tile to take or choose its photo, and add more (the sides, the garage, details) if you have them, up to ${health.maxPhotos} in all. Anything the photos don't show, you can tell us below.`;
+    :'A few photos and the address are all we need.';
   renderThumbs();
   // Back from Stripe (?job=…&session=…): confirm the payment and start the design; ?job=… alone
   // picks up a design in progress or finished.

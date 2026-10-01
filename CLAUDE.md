@@ -234,7 +234,10 @@ closing gift that realtors give clients: a brick model of the house they just bo
   "See an example" on the upload page). The upload page (above the Design button), the Model tab (under "What we filled
   in") and the home page's questions say the model takes some artistic license: a brick interpretation, not an exact
   or photorealistic copy; keep that said wherever the model is sold. "Make yours" (`/app#design`) is an upload page of its own, the sample house hidden,
-  until the first draft of their house comes back. Photos go in through a checklist, a tile per view (front, front left
+  until the first draft of their house comes back. It reads as three plain steps (photos, the address, a size; the
+  notes and floor plan under "Add details (optional)", the email above Design my house, short license and privacy lines,
+  Your designs only when there are some, and the emailed sign-in under "Made one on another device?"); keep it plain:
+  no explaining how the design works there. Photos go in through a checklist, a tile per view (front, front left
   corner, front right corner, back) with a small map of where to stand, then "More" for extras; the views go with the
   photos (`views`) and the server turns the known ones into a sentence after the owner's notes (`viewsNote`), so the
   design knows which photo shows which side. A missing front or side gets a note above the Design button that those
