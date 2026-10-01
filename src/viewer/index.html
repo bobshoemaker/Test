@@ -133,6 +133,17 @@ textarea.xml{width:100%;height:140px;margin-top:10px;background:var(--code);colo
 .shotdel{position:absolute;top:4px;right:4px;width:30px;height:30px;border-radius:999px;border:0;background:rgba(20,16,12,.72);color:#fff;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .shotdel:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
 .shottips{margin:10px 0 0;font-size:13px;color:var(--muted);line-height:1.45}
+.lead{margin:2px 0 4px;color:var(--ink);font-size:16px}
+.step{display:flex;align-items:center;gap:10px;margin:22px 0 10px;font-size:17px;font-weight:700;padding:0}
+.step label{display:flex;align-items:center;gap:10px;cursor:text}
+.stepn{flex:none;width:26px;height:26px;border-radius:999px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-size:14px;font-weight:700}
+details.extra,details.other{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+details.extra summary,details.other summary{cursor:pointer;font-weight:600;font-size:15px;color:var(--ink)}
+details.other summary{font-weight:500;font-size:14px;color:var(--muted)}
+.row.go{margin-top:18px}
+.btn.cta{padding:13px 26px;font-size:17px}
+.fine{margin:10px 0 0;font-size:13px;color:var(--muted);line-height:1.45}
+.fine.privacy{margin-top:4px;padding:0;background:none}
 #refPhotos img{width:112px;height:112px;cursor:zoom-in}
 .lightbox{position:fixed;inset:0;z-index:50;background:rgba(20,16,12,.88);display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
 .lightbox img{max-width:100%;max-height:100%;border-radius:10px;object-fit:contain}
@@ -171,7 +182,8 @@ textarea.notes{width:100%;margin-top:10px;border:1px solid var(--line);border-ra
 .kitdone{color:var(--ink)!important;font-weight:600}
 .guidelock p{margin:0 0 10px}
 .sizes{border:0;padding:0;margin:16px 0 0;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.sizes legend{font-weight:700;font-size:14px;margin-bottom:6px;padding:0}
+.sizes legend{padding:0}
+.findmine{margin-top:10px}
 .size{position:relative;display:flex;flex-direction:column;gap:2px;border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;cursor:pointer;background:var(--panel)}
 .size:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 1.5px var(--accent) inset}
 .size:has(input:focus-visible){outline:3px solid var(--accent);outline-offset:2px}
@@ -402,55 +414,62 @@ if((location.hash==='#design'||/[?&]mine=/.test(location.search))&&!/[?&](job|he
         </div>
         <div class="card" id="makeCard">
           <h2 style="margin-top:0">Make your house</h2>
-          <p class="note" style="margin-top:0;color:var(--ink)" id="photoIntro">Add photos of the outside of the house: the front first, then the sides, the back and the garage if you have them (up to 12). A floor plan helps us get the walls just right, and anything the photos don't show, you can tell us below.</p>
+          <p class="lead" id="photoIntro">A few photos and the address are all we need.</p>
           <div id="photoControls">
+            <h3 class="step"><span class="stepn" aria-hidden="true">1</span>Photos of your house</h3>
             <div class="shots" id="thumbs" aria-label="Photos of the house"></div>
-            <p class="shottips">Stand back far enough to fit the whole house, in daylight if you can. Photos you take yourself work best, and listing photos are fine too.</p>
-            <div class="row" id="pickRow"><input type="file" id="photoInput" multiple hidden>
-              <button class="btn" id="planBtn" type="button">Add a floor plan (optional)</button><input type="file" id="planInput" accept="image/jpeg,image/png,image/webp" hidden>
-              <label class="target dev-only">About <input type="number" id="target" value="1200" min="300" max="2500" step="50" inputmode="numeric"> pieces</label>
-</div>
-            <div class="out" id="planStatus"></div>
-            <label class="addrlabel" for="addrInput">The house's address</label>
-            <form class="addr" id="addrForm"><input id="addrInput" type="text" autocomplete="street-address" maxlength="200" required aria-required="true" placeholder="e.g. 634 Main St, Springfield, IL"><button class="btn dev-only" id="addrBtn" type="submit">Find photos</button></form>
-            <p class="addrwhy">We use it to find the house's outline on the map and how the ground slopes, so the walls, driveway and yard come out true to life.</p>
+            <p class="shottips">Stand back so the whole house fits. Listing photos work too.</p>
+            <h3 class="step"><label for="addrInput"><span class="stepn" aria-hidden="true">2</span>Its address</label></h3>
+            <form class="addr" id="addrForm"><input id="addrInput" type="text" autocomplete="street-address" maxlength="200" required aria-required="true" placeholder="634 Main St, Springfield, IL"><button class="btn dev-only" id="addrBtn" type="submit">Find photos</button></form>
             <div class="out" id="addrStatus" aria-live="polite"></div>
             <div class="cands" id="cands"></div>
             <div class="row" id="candRow" hidden><button class="btn" id="useCands">Add selected photos</button></div>
-            <label class="addrlabel" for="emailInput" id="emailLabel">Your email <span class="opt">(optional)</span></label>
-            <input class="field" id="emailInput" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com">
-            <p class="addrwhy" id="emailWhy">We'll email you the link to your design when it's ready, so you can come back to it from any device.</p>
             <fieldset class="sizes">
-              <legend>Choose a size</legend>
+              <legend class="step"><span class="stepn" aria-hidden="true">3</span>Pick a size</legend>
               <label class="size"><input type="radio" name="size" id="sizeMini">
-                <span class="sizename">Mini</span><span class="sizedim">5 × 5 in base</span>
-                <span class="sizeabout">The whole house, smaller and simpler, at our lowest price. About 250 to 450 pieces, an afternoon to build.</span></label>
+                <span class="sizename">Mini</span><span class="sizedim">5 × 5 in</span>
+                <span class="sizeabout">Just the house. About 300 pieces.</span></label>
               <label class="size"><input type="radio" name="size" id="sizeClassic" checked>
-                <span class="sizename">Classic</span><span class="sizedim">10 × 10 in base</span>
-                <span class="sizeabout">The house and its front yard. About 800 to 1,300 pieces, an evening or two to build.</span></label>
+                <span class="sizename">Classic</span><span class="sizedim">10 × 10 in</span>
+                <span class="sizeabout">The house and front yard. About 1,000 pieces.</span></label>
               <label class="size"><input type="radio" name="size" id="bigPlate">
-                <span class="sizename">Grand</span><span class="sizedim">15 × 15 in base</span>
-                <span class="sizeabout">Room for the whole yard, the garden and the street. About 2,000 to 2,400 pieces, a weekend or two.</span></label>
+                <span class="sizename">Grand</span><span class="sizedim">15 × 15 in</span>
+                <span class="sizeabout">The house, yard and street. About 2,400 pieces.</span></label>
             </fieldset>
-            <textarea class="notes" id="notes" rows="2" maxlength="500" placeholder="Anything the photos don't show, like the roof color or which side the garage is on"></textarea>
-            <p class="count" id="notesCount" aria-live="polite">0 / 500</p>
+            <details class="extra" id="extra">
+              <summary>Add details (optional)</summary>
+              <label class="addrlabel" for="notes">Anything the photos don't show</label>
+              <textarea class="notes" id="notes" rows="2" maxlength="500" placeholder="Like the roof color, or which side the garage is on"></textarea>
+              <p class="count" id="notesCount" aria-live="polite">0 / 500</p>
+              <div class="row" id="pickRow"><input type="file" id="photoInput" multiple hidden>
+                <button class="btn" id="planBtn" type="button">Add a floor plan</button><input type="file" id="planInput" accept="image/jpeg,image/png,image/webp" hidden>
+                <label class="target dev-only">About <input type="number" id="target" value="1200" min="300" max="2500" step="50" inputmode="numeric"> pieces</label>
+              </div>
+              <div class="out" id="planStatus"></div>
+            </details>
             <div class="survey" id="survey" hidden></div>
+            <label class="addrlabel" for="emailInput" id="emailLabel">Email me when it's ready <span class="opt" id="emailWhy">(optional)</span></label>
+            <input class="field" id="emailInput" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com">
             <p class="fewphotos" id="fewPhotos" role="status" hidden></p>
-            <p class="note" id="licenseNote">We take some artistic license: your model is a brick interpretation of your home, not an exact or photorealistic copy.</p>
-            <div class="row"><button class="btn" id="surveyBtn" hidden>Check my photos first</button><button class="btn primary" id="designBtn">Design from photos</button><button class="btn" id="stopBtn" hidden>Stop</button><button class="btn" id="lastBtn" hidden>Show my last design</button></div>
+            <p class="fine" id="licenseNote">Your model is a brick interpretation of your home, not an exact copy.</p>
+            <div class="row go"><button class="btn" id="surveyBtn" hidden>Check my photos first</button><button class="btn primary cta" id="designBtn">Design my house</button><button class="btn" id="stopBtn" hidden>Stop</button><button class="btn" id="lastBtn" hidden>Show my last design</button></div>
             <div class="out" id="photoStatus" aria-live="polite"></div>
-            <p class="privacy"><b>Your privacy.</b> We use your photos, address and email only to design your model and send your kit. We never sell them or share them for advertising, and your house isn't shown to anyone else: you see it through your own private link.</p>
+            <p class="fine privacy">We use your photos, address and email only to make your model and kit, and never sell or share them.</p>
           </div>
-          <p class="seeex">Want to see one first? <a href="/app" id="seeExample">Look at an example house</a></p>
+          <p class="seeex" hidden><a href="/app" id="seeExample">See an example</a></p>
+          <!-- finding designs made on another device: an emailed link (only when the site can send email) -->
+          <details class="other" id="findMineBox">
+            <summary>Made one on another device?</summary>
+            <form class="findmine" id="findMine"><label for="findEmail">Enter the email you used and we'll send you a link that opens your designs here.</label>
+              <div class="addr"><input id="findEmail" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required><button class="btn" type="submit">Email me a link</button></div>
+              <p class="note" id="findStatus" aria-live="polite"></p></form>
+          </details>
         </div>
-        <!-- Your designs: the ones made on this device, and a sign-in link by email for the ones made elsewhere -->
+        <!-- Your designs: the ones made on this device (shown only when there are some) -->
         <div class="card minecard" id="myDesigns" hidden>
           <h3>Your designs</h3>
           <ul class="minelist" id="myDesignList"></ul>
-          <p class="note" id="mineEmpty">The houses you design show up here, so you can come back to them.</p>
-          <form class="findmine" id="findMine"><label for="findEmail">Made one on another device? Enter the email you used and we'll send you a link that opens all your designs here.</label>
-            <div class="addr"><input id="findEmail" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required><button class="btn" type="submit">Email me a link</button></div>
-            <p class="note" id="findStatus" aria-live="polite"></p></form>
+          <p class="note" id="mineEmpty" hidden></p>
         </div>
         <div class="dev-only">
         <h2>Design code</h2>
