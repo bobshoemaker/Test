@@ -113,9 +113,20 @@ function readBody(req) {
 function slug(s) { return String(s || 'house').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'house'; }
 
 const NO_KEY = 'Set BRICKHOUSE_ANTHROPIC_API_KEY (or ANTHROPIC_API_KEY) in .env, or run with BRICKHOUSE_FAKE=1 to try the flow.';
-// Draft renders need Playwright; one browser serves every job, started on first use.
-let rendererP = null;
+// Draft renders need Playwright; one browser serves every job, started on first use. Headless Chromium takes a few hundred
+// megabytes, so it closes once nothing has used it for two minutes and starts again when next needed.
+let rendererP = null, renderUsers = 0, renderIdle = null;
+const RENDER_IDLE_MS = 2 * 60e3;
 const getRenderer = () => (rendererP = rendererP || require('./render').makeRenderer().catch(() => null));
+async function acquireRenderer() { renderUsers++; clearTimeout(renderIdle); return getRenderer(); }
+function releaseRenderer() {
+  if (--renderUsers > 0) return;
+  renderUsers = 0; clearTimeout(renderIdle);
+  renderIdle = setTimeout(() => { const p = rendererP; rendererP = null; if (p) p.then((r) => r && r.close()).catch(() => {}); }, RENDER_IDLE_MS);
+  renderIdle.unref();
+}
+// A job's run holds the browser from start to end.
+const withRenderer = (fn) => async (...args) => { const renderer = await acquireRenderer(); try { return await fn(renderer, ...args); } finally { releaseRenderer(); } };
 // Free text from the form, cleaned before it goes anywhere near the design: no control characters, one line, no
 // double quotes (the task quotes the notes), and short. The limits match the form's (index.html).
 const NOTES_MAX = 500, ADDRESS_MAX = 200, ANSWER_MAX = 200;
@@ -211,11 +222,11 @@ function designPhotos(p) {
 // The same steps as scripts/design.js: address facts, the house found and mapped from above (or walls locked to
 // the plan or the building outline), then the house built in parts with renders of each draft (pipeline.js).
 // A resumed job reuses the site it mapped (jobs.js keeps it), so its walls stay the ones the draft was built on.
-async function runDesign(p0, emit) {
+const runDesign = withRenderer(async (renderer, p0, emit) => {
   const client = makeClient(), t0 = Date.now();
   if (!client) throw new Error(NO_KEY);
   const dp = designPhotos(p0), p = { ...p0, photos: dp.photos, views: dp.views, notes: dp.notes };
-  const renderer = await getRenderer(), kept = (p.resume && p.resume.site) || null;
+  const kept = (p.resume && p.resume.site) || null;
   if (p.address && !kept) emit({ type: 'status', message: 'Looking up the building, streets and slope…' });
   const prep = await prepareDesign({ address: p.address, notes: p.notes, plan: p.plan, plate: p.plate, frontStreet: p.frontStreet, site: kept,
     photos: FAKE ? [] : p.photos, views: p.views || [], client, model: MODEL, siteModel: SITE_MODEL, tools: renderer, onEvent: emit, pickAt: p.pickAt || null });
@@ -227,7 +238,7 @@ async function runDesign(p0, emit) {
     budgetUsd: BUDGET_USD, spentUsd: prep.site && !kept ? prep.site.costUsd || 0 : 0, review: FAKE ? null : REVIEW, views: p.views || [], teamNotes: p.instructions || '',
     ...(p.resume ? { fromPart: p.resume.fromPart, seed: p.resume.seed } : {}) });
   finishDesign(out, p, emit, t0, prep.site);
-}
+});
 
 // Repair rounds on a finished design, which the admin asks for from the review card (jobs.js fix).
 async function runFix(p, emit) {
@@ -250,16 +261,16 @@ function selectionOf(design, ids) {
 }
 
 // A change the admin asked for on a finished design (jobs.js revise): Claude edits it from the one it has.
-async function runRevise(p, emit) {
+const runRevise = withRenderer(async (renderer, p, emit) => {
   const client = makeClient(), t0 = Date.now();
   if (!client) throw new Error(NO_KEY);
-  const renderer = await getRenderer(), dp = designPhotos(p); // the photos the design was made from, our team's included
+  const dp = designPhotos(p); // the photos the design was made from, our team's included
   const out = await designHouse({ client, model: MODEL, effort: EFFORT, photos: dp.photos, notes: dp.notes, target: p.target, plate: p.plate, mode: 'fix', design: p.design,
     task: reviseTask({ design: p.design, note: p.note, selection: p.selection || [] }), render: renderer && renderer.render, supplier: SUPPLIER,
     ftPerStud: p.design && p.design.stud, budgetUsd: REVISE_BUDGET_USD, onEvent: emit });
   emit({ type: 'cost', usd: out.costUsd });
   finishDesign(out, p, emit, t0);
-}
+});
 
 // Design jobs, paid for through Stripe Checkout when STRIPE_SECRET_KEY is set (see jobs.js).
 // Kits are made from GoBricks bricks (bought at Brickwith), so every customer design is held to what GoBricks makes;
@@ -535,8 +546,8 @@ async function handleAdmin(req, res, url) {
   if (req.method === 'POST' && what === 'candidates') {
     const r = JOBS.intakeOf(id);
     if (!r || !r.address) return send(res, 404, { error: 'This request has no address.' });
-    const tools = await getRenderer();
-    if (!tools) return send(res, 503, { error: 'The map needs the renderer (Playwright) on this server.' });
+    const tools = await acquireRenderer();
+    if (!tools) { releaseRenderer(); return send(res, 503, { error: 'The map needs the renderer (Playwright) on this server.' }); }
     try {
       const place = await require('./lookup').geocode(r.address);
       if (!place) return send(res, 404, { error: `The address wasn't found: ${r.address}` });
@@ -544,7 +555,7 @@ async function handleAdmin(req, res, url) {
       const f = await findCandidates({ address: r.address, place, tools });
       return send(res, 200, { image: `data:${f.mapImage.mediaType || 'image/jpeg'};base64,${f.mapImage.data}`, pin: { lat: place.lat, lon: place.lon },
         candidates: f.candidates.map((c) => ({ n: c.n, line: candidateLine(c).replace(/^\d+\.\s*/, ''), ...toLL(c.c) })) });
-    } catch (e) { return send(res, 502, { error: e.message }); }
+    } catch (e) { return send(res, 502, { error: e.message }); } finally { releaseRenderer(); }
   }
   if (req.method === 'POST' && what === 'begin') {
     let body = {}; try { body = JSON.parse(await readBody(req)); } catch (e) { return send(res, 400, { error: e.message }); }

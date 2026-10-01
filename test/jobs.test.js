@@ -390,3 +390,18 @@ test('with intake on, a paid request waits for the admin, who starts it with the
   assert.equal(J.begin(id, {}).code, 409); // once
   assert.equal(J.photo(id, 2).data, 'c'); // the owner's page still shows every photo they sent
 });
+
+test('only jobs in use stay in memory: others are read from disk, and the admin list follows their files', async () => {
+  const dir = tmp(), run = async (p, emit) => emit({ type: 'done', design: { name: p.notes } });
+  const J = createJobs({ dir, run });
+  const ids = [];
+  for (let k = 0; k < 7; k++) { const { id } = await J.create({ notes: `h${k}`, photos: [] }, 'https://x'); ids.push(id); await until(() => J.get(id).status === 'done'); }
+  assert.equal(J.list().length, 7);
+  // the first job left memory long ago: a change to its file (another copy of the server, say) is what it reads now
+  const f = path.join(dir, `${ids[0]}.json`), j = JSON.parse(fs.readFileSync(f, 'utf8'));
+  j.email = 'late@x.test'; fs.writeFileSync(f, JSON.stringify(j));
+  assert.equal(J.list().find((r) => r.id === ids[0]).email, 'late@x.test');
+  assert.equal(J.get(ids[0], { full: true }).result.design.name, 'h0');
+  assert.deepEqual(J.byEmail('late@x.test').map((r) => r.id), [ids[0]]);
+  assert.equal(J.list()[0].email_, undefined, 'the list carries no internal fields');
+});
