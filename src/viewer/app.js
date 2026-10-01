@@ -702,7 +702,7 @@ async function toPayload(file,maxSide=1568){
 let planFile=null;
 $('planBtn').onclick=()=>$('planInput').click();
 $('planInput').onchange=e=>{ planFile=e.target.files[0]||null; e.target.value='';
-  $('planStatus').textContent=planFile?`Floor plan: ${planFile.name}. The walls will follow it.`:''; $('planBtn').textContent=planFile?'Change floor plan':'Add floor plan'; };
+  $('planStatus').textContent=planFile?`Floor plan added: ${planFile.name}`:''; $('planBtn').textContent=planFile?'Change floor plan':'Add a floor plan'; };
 const chosenPlate=()=>$('sizeMini').checked?16:$('bigPlate').checked?48:32; // the size cards: Mini, Classic, Grand
 const houseAddress=()=>$('addrInput').value.trim().slice(0,200)||undefined; // the server adds its building, street and slope facts
 $('photoInput').accept='image/jpeg,image/png,image/webp';
