@@ -41,6 +41,10 @@ textarea{min-height:110px;resize:vertical;line-height:1.4}
 .cand input{width:auto;margin-top:3px}
 .cand b{min-width:1.6em}
 .cand:has(input:checked){border-color:var(--accent);background:var(--stage)}
+.prog{height:6px;border-radius:999px;background:var(--stage);overflow:hidden;margin-top:10px;max-width:420px}
+.prog i{display:block;height:100%;width:0;background:var(--accent);border-radius:999px;transition:width .4s ease-out}
+.prog.err i{background:var(--bad)}
+@media (prefers-reduced-motion:reduce){.prog i{transition:none}}
 .start{position:sticky;bottom:0;background:var(--paper);padding:10px 0;border-top:1px solid var(--line)}
 [hidden]{display:none!important}
 </style>
@@ -70,6 +74,7 @@ textarea{min-height:110px;resize:vertical;line-height:1.4}
       <h2>The house on the map</h2>
       <p class="note">The buildings near the address, numbered on a public-domain aerial (north up; the red dot is where the address lookup landed, often a few lots off). Pick the house, and the design maps that building instead of choosing one itself.</p>
       <div class="row"><button class="btn" id="mapBtn" type="button">Find the buildings</button><span class="small muted" id="mapNote"></span></div>
+      <div class="prog" id="mapProg" hidden role="progressbar" aria-label="Finding the buildings" aria-valuemin="0" aria-valuemax="100"><i id="mapBar"></i></div>
       <div class="map" id="map" hidden><img id="mapImg" alt="The numbered buildings near the address on an aerial photo"><div class="cands" id="cands"></div></div>
     </section>
     <section class="card">
@@ -115,12 +120,20 @@ function renderAdded(){ $('added').innerHTML=added.map((a,i)=>`<div class="ph"><
   $('addBtn').disabled=added.length>=4; }
 $('addBtn').onclick=()=>$('addInput').click();
 $('addInput').onchange=async(e)=>{ for(const f of [...e.target.files].slice(0,4-added.length)){ try{ added.push({...(await shrink(f)),view:added.length?'':'aerial'}); }catch(err){ fail(`Couldn't read ${esc(f.name)}.`); } } e.target.value=''; renderAdded(); };
-$('mapBtn').onclick=async()=>{ $('mapBtn').disabled=true; $('mapNote').textContent='Looking up the address and the buildings around it (about half a minute)…';
+// the map lookup doesn't report its progress: the bar fills over its usual half minute, waits short of the end until
+// the map comes back, then fills
+let mapTimer=null;
+function mapProgress(state){ const bar=$('mapBar'), box=$('mapProg'); clearInterval(mapTimer); box.classList.toggle('err',state==='err');
+  const set=(v)=>{ bar.style.width=v+'%'; box.setAttribute('aria-valuenow',Math.round(v)); };
+  if(state==='start'){ box.hidden=false; const t0=Date.now(); set(2); mapTimer=setInterval(()=>set(95*(1-Math.exp(-(Date.now()-t0)/14000))),300); }
+  else if(state==='done'){ set(100); setTimeout(()=>{ box.hidden=true; },900); }
+  else set(100); }
+$('mapBtn').onclick=async()=>{ $('mapBtn').disabled=true; $('mapNote').textContent='Looking up the address and the buildings around it (about half a minute)…'; mapProgress('start');
   try{ const m=await api('candidates',{method:'POST'}); cands=m.candidates; $('mapImg').src=m.image;
     $('cands').innerHTML=`<label class="cand"><input type="radio" name="pick" value="" checked><span>Let the design pick it from the photos</span></label>`
       +cands.map((c)=>`<label class="cand"><input type="radio" name="pick" value="${c.n}"><b>${c.n}</b><span>${esc(c.line)}</span></label>`).join('');
-    $('map').hidden=false; $('mapNote').textContent=`${cands.length} buildings. Pick the house by its number.`; }
-  catch(e){ $('mapNote').innerHTML=`<span class="err">${e.message}</span>`; }
+    $('map').hidden=false; $('mapNote').textContent=`${cands.length} buildings. Pick the house by its number.`; mapProgress('done'); }
+  catch(e){ $('mapNote').innerHTML=`<span class="err">${e.message}</span>`; mapProgress('err'); }
   $('mapBtn').disabled=false; };
 $('startBtn').onclick=async()=>{
   const n=(document.querySelector('input[name=pick]:checked')||{}).value, c=cands.find((x)=>String(x.n)===n);
