@@ -22,7 +22,7 @@ const COMPILE_TOOL = {
     properties: {
       design: {
         type: 'object',
-        description: 'The complete design JSON object with name, place, scale, facts, assumed, phases and ops.',
+        description: 'The complete design JSON object with name, place, scale, facts, assumed, guesses, phases and ops.',
       },
     },
     required: ['design'],

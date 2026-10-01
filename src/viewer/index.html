@@ -251,7 +251,7 @@ html.upload #pane-design .sent h2{font-size:40px;margin:0 0 6px}
 .cand[aria-pressed="true"]{border-color:var(--accent,#2F6FDE)}
 .cand img{width:100%;height:92px;object-fit:cover;display:block}
 .cand span{display:block;padding:4px 6px;font-size:12px;color:var(--muted);line-height:1.3}
-.credits{font-size:12px;color:var(--muted);margin:6px 0 0;padding-left:18px}
+.credits{font-size:12px;color:var(--muted);margin:10px 0 0;padding:0}
 .credits a{color:inherit}
 
 .pick{display:inline-flex;align-items:center;gap:8px;margin-top:10px;font-size:14px;color:var(--muted)}
@@ -338,6 +338,7 @@ if(/[?&]job=/.test(location.search)&&!/[?&](canceled|hero)=/.test(location.searc
         <div class="review approval" id="approval" hidden>
           <h2 id="apTitle">Is this your house?</h2>
           <p id="apLead"></p>
+          <div id="apGuesses" hidden><p class="note" style="margin:0">We couldn't see these in your photos, so we filled them in. If any look wrong, tell us.</p><ul class="facts" id="apGuessList"></ul></div>
           <div class="row" id="apButtons"><button class="btn primary" id="apYes" type="button">Looks right, build it</button><button class="btn" id="apAsk" type="button">Ask for a change</button></div>
           <div id="apChange" hidden>
             <label class="addrlabel" for="apNote">What should be different?</label>
@@ -371,12 +372,17 @@ if(/[?&]job=/.test(location.search)&&!/[?&](canceled|hero)=/.test(location.searc
         <ul class="problems dev-only" id="problems"></ul>
         <div id="refWrap" hidden><h2>Your photos</h2><div class="photos" id="refPhotos"></div></div>
         <div class="lightbox" id="lightbox" hidden role="dialog" aria-label="Photo"><img id="lightImg" alt=""></div>
-        <ul class="credits" id="credits" hidden></ul>
-        <h2 id="factsTitle">What we saw in your photos</h2>
-        <ul class="facts" id="facts"></ul>
-        <h2>What we filled in</h2>
-        <p class="note" style="margin-top:0" id="assumed"></p>
+        <!-- what the design read from the photos and what it guessed: for our team (the review card, the technical view);
+             the owner sees the short list of guesses on the approval card instead -->
+        <div class="dev-only" id="designNotes">
+          <h2 id="factsTitle">What we saw in the photos</h2>
+          <ul class="facts" id="facts"></ul>
+          <h2>What we filled in</h2>
+          <p class="note" style="margin-top:0" id="assumed"></p>
+          <p class="note" id="guessesNote" hidden></p>
+        </div>
         <p class="note" id="license">Your model is a brick interpretation of your home, not an exact replica. To make it buildable and recognizable at this scale, we simplify some details, round sizes to whole bricks, and fill in what the photos don't show, so it won't match your house exactly or look photorealistic.</p>
+        <p class="credits" id="credits" hidden></p>
         <label class="toggle dev-only"><input type="checkbox" id="stress"> Color by connection strength</label>
         <div class="legend dev-only"><span><i style="background:#D64B34"></i>under 0.5 joints per stud</span><span><i style="background:#E8A93A"></i>0.5 to 1</span><span><i style="background:#3E9E68"></i>1 or more</span></div>
       </section>

@@ -239,8 +239,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
   tabs Model, Guide, Kit; Make yours is the top bar's button, which opens the upload page on its own, and a tab only in the
   technical view), under the same top bar as the home page: one component, `src/viewer/topbar.html`, that the server (and
   `bundle.js`) puts in place of each page's `<!-- topbar -->`, so it doesn't move between pages; its button reads
-  "See an example" on the upload page). The upload page (above the Design button), the Model tab (under "What we filled
-  in") and the home page's questions say the model takes some artistic license: a brick interpretation, not an exact
+  "See an example" on the upload page). The upload page (above the Design button), the Model tab (its license note) and the home page's questions say the model takes some artistic license: a brick interpretation, not an exact
   or photorealistic copy; keep that said wherever the model is sold. "Make yours" (`/app#design`) is an upload page of its own, the sample house hidden,
   until the first draft of their house comes back. It reads as three plain steps (photos, the address, a size; the
   notes under "Add details (optional)", a short ask for the floor plan under the photos, the email above Design my house, short license and privacy lines,
@@ -256,7 +255,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   stage waits ("Loading your house…") for theirs, and the sample loads only when there's nothing of theirs to show. The owner never
   sees a design in progress: `GET /api/jobs/<id>` sends drafts only once it's finished (or to the server's own machine
   and the admin), so the house takes over from that page when it's done.
-  Designs made in a browser are remembered there (localStorage `brickhouse-designs`: job id, name, address, date,
+  The owner doesn't see the design's "facts" and "assumed" (our team does, on the review card and in the technical view);
+  they see its "guesses", at most 4 plain phrases for what the photos didn't show, on the approval card, and the sources'
+  credits in one small line. Designs made in a browser are remembered there (localStorage `brickhouse-designs`: job id, name, address, date,
   status) and listed in a "Your designs" card under the form, by name or, until a draft names it, its address; each
   page load brings the list up to date (`POST /api/jobs/summary {ids}`, only for ids the device holds); "Made one on another device?" emails a sign-in link (`POST /api/mine
   {email}`, 5 an hour, the same answer either way), `/app?mine=<token>`: the email and an expiry signed with a server
