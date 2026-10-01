@@ -231,7 +231,7 @@ test('held for the admin: the owner sees it in progress until it is approved; ch
   const told = [];
   const run = async (p, emit) => { emit({ type: 'draft', design: { name: 'first' } }); emit({ type: 'done', design: { name: 'first' }, stats: { pieces: 10 } }); };
   let asked = null;
-  const reviseRun = async (p, emit) => { asked = p; emit({ type: 'cost', usd: 0.8 }); emit({ type: 'done', design: { name: `${p.design.name}+${p.note}` }, stats: { pieces: 12 } }); };
+  const reviseRun = async (p, emit) => { asked = p; if (p.note === 'boom') throw new Error('credit balance is too low'); emit({ type: 'cost', usd: 0.8 }); emit({ type: 'done', design: { name: `${p.design.name}+${p.note}` }, stats: { pieces: 12 } }); };
   const J = createJobs({ dir: tmp(), run, reviseRun, fixRun: run, hold: true, notify: async (j, kind) => told.push(kind), kitCents: () => 5000 });
   const { id } = await J.create({ photos: [], notes: 'n', email: 'a@b.test' }, 'https://x');
   await until(() => J.get(id, { full: true }).status === 'done');
@@ -262,12 +262,36 @@ test('held for the admin: the owner sees it in progress until it is approved; ch
   a = J.get(id, { full: true });
   assert.equal(a.result.design.name, 'first'); assert.equal(a.review.revisions[0].undone, true); assert.equal(a.review.canUndo, false);
   assert.equal(J.undo(id).code, 409);
+  // a change that fails says so and leaves the design and Undo as they were
+  J.revise(id, { note: 'lower roof' }); await until(() => J.get(id, { full: true }).status === 'done');
+  assert.equal(J.revise(id, { note: 'boom' }).code, 200);
+  await until(() => J.get(id, { full: true }).review.revisions.at(-1).failed);
+  a = J.get(id, { full: true });
+  assert.equal(a.status, 'done'); assert.equal(a.result.design.name, 'first+lower roof'); assert.match(a.review.revisions.at(-1).failed, /credit balance/);
+  assert.equal(J.undo(id).code, 200, 'Undo takes back the last change that went through');
+  a = J.get(id, { full: true });
+  assert.equal(a.result.design.name, 'first'); assert.deepEqual(a.review.revisions.map((r) => !!r.undone), [true, true, false]);
+  assert.equal(J.undo(id).code, 409);
   // approve: the owner sees it and is told once
   assert.equal(J.approve(id).code, 200); J.approve(id);
   await until(() => told.length);
   assert.deepEqual(told, ['ready']);
   assert.equal(J.get(id).status, 'done'); assert.equal(J.get(id).result.design.name, 'first');
   assert.equal(J.summary(id).status, 'ready');
+});
+
+test('a change cut off by a restart says so, and Undo skips it', async () => {
+  const dir = tmp(), run = async (p, emit) => emit({ type: 'done', design: { name: 'first' }, stats: { pieces: 10 } });
+  const reviseRun = (p) => new Promise(() => {});
+  const J = createJobs({ dir, run, reviseRun, hold: true });
+  const { id } = await J.create({ photos: [], notes: 'n' }, 'https://x');
+  await until(() => J.get(id, { full: true }).status === 'done');
+  assert.equal(J.revise(id, { note: 'taller plants' }).code, 200);
+  const again = createJobs({ dir, run, reviseRun, hold: true }); // the server restarts
+  again.resumeInterrupted();
+  const a = again.get(id, { full: true });
+  assert.equal(a.status, 'done'); assert.equal(a.result.design.name, 'first');
+  assert.match(a.review.revisions[0].failed, /restart/); assert.equal(a.review.canUndo, false);
 });
 
 test('without the hold, a finished design goes to its owner as before', async () => {

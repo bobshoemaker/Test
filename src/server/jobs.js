@@ -60,6 +60,13 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
   const ordered = (j) => { if (onKit) Promise.resolve().then(() => onKit(j)).catch((e) => console.error(`Stock check for ${j.id} failed: ${e.message}`)); };
   const tell = (j, kind) => { if (!notify || !j.email) return;
     Promise.resolve().then(() => notify(j, kind)).catch((e) => console.error(`Email (${kind}) for ${j.id} failed: ${e.message}`)); };
+  // A change that didn't go through leaves the design as it was: say so on it, and drop the copy kept for undo,
+  // so Undo still takes back the last change that did.
+  const revisionFailed = (j, why) => {
+    const rev = (j.revisions || []).find((r) => j.revising && r.at === j.revising.at);
+    if (rev && !rev.failed) { rev.failed = why; if ((j.versions || []).length) j.versions.pop(); }
+    j.revising = null;
+  };
   function launch(j, fn) {
     j.status = 'running'; save(j);
     fn(j.params, (ev) => emit(j, ev))
@@ -70,7 +77,8 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
         if (j.result && hold && !j.review && !j.approved && !j.readySent) j.review = { since: now() }; // waiting for the admin
         if (j.result && !j.readySent && !held(j)) { j.readySent = now(); tell(j, 'ready'); } // once: not again after a fix round
         save(j); })
-      .catch((e) => { emit(j, { type: 'error', message: e && e.message ? e.message : String(e) }); j.revising = null;
+      .catch((e) => { const message = e && e.message ? e.message : String(e); emit(j, { type: 'error', message });
+        if (j.revising) revisionFailed(j, message);
         // a revision that fails leaves the design as it was
         j.status = j.result ? 'done' : 'error'; save(j); });
   }
@@ -116,7 +124,9 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       for (const f of fs.readdirSync(dir)) {
         const j = f.endsWith('.json') ? load(f.slice(0, -5)) : null;
         if (!j || j.status !== 'interrupted' || (feeOn && j.sessionId && !j.paid)) continue;
-        if (j.result) { j.status = 'done'; j.fixes = Math.max(0, j.fixes - 1); save(j); continue; }
+        if (j.result) { j.status = 'done';
+          if (j.revising) revisionFailed(j, 'Cut off by a server restart.'); else j.fixes = Math.max(0, j.fixes - 1);
+          save(j); continue; }
         if (now() - (j.createdAt || 0) > RESUME_WITHIN_MS) { emit(j, { type: 'error', message: 'The design was cut off and is too old to pick up again.' }); j.status = 'error'; save(j); continue; }
         if ((j.resumes || 0) >= MAX_RESUMES) { emit(j, { type: 'error', message: 'The design was cut off too many times to finish.' }); j.status = 'error'; save(j); continue; }
         j.resumes = (j.resumes || 0) + 1;
@@ -235,7 +245,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
           events: j.events.slice(after).filter((e) => e.type === 'status' || e.type === 'part' || e.type === 'site'), next: j.events.length };
       }
       return { id: j.id, status: j.status, paid: !!j.paid || !feeOn, fixesLeft: MAX_FIXES - j.fixes,
-        ...(full && (j.review || j.approved) ? { review: { approved: j.approved ? j.approved.at : null, revisions: (j.revisions || []).map(({ at, note, parts, costUsd, undone }) => ({ at, note, parts, costUsd, undone: !!undone })),
+        ...(full && (j.review || j.approved) ? { review: { approved: j.approved ? j.approved.at : null, revisions: (j.revisions || []).map(({ at, note, parts, costUsd, undone, failed }) => ({ at, note, parts, costUsd, undone: !!undone, failed: failed || null })),
           revising: j.revising || null, canUndo: (j.versions || []).length > 0 } } : {}),
         kit: j.kit ? { at: j.kit.at, test: !!j.kit.test } : null, kitCents: kitCents(plateOf(j)), kitCurrency: currency,
         photos: j.params && Array.isArray(j.params.photos) ? j.params.photos.length : 0,
@@ -324,7 +334,7 @@ function createJobs({ dir, stripe = null, feeCents = 0, currency = 'usd', run, f
       if (!j) return { code: 404, error: 'No such job' };
       if (j.status !== 'done' || !(j.versions || []).length) return { code: 409, error: 'There is no change to undo.' };
       j.result = j.versions.pop().result;
-      const last = [...(j.revisions || [])].reverse().find((r) => !r.undone); if (last) last.undone = now();
+      const last = [...(j.revisions || [])].reverse().find((r) => !r.undone && !r.failed); if (last) last.undone = now();
       j.draft = j.result.design; j.draftN = (j.draftN || 0) + 1;
       emit(j, { type: 'status', message: 'Undid the last change.' });
       save(j);

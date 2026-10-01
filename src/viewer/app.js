@@ -940,7 +940,8 @@ function renderReview(rv,st){
   $('revSend').disabled=busy; $('revUndo').disabled=busy||!rv.canUndo; $('revApprove').hidden=!!rv.approved; $('revApprove').disabled=busy;
   if(busy&&rv.revising) $('revBusy').textContent=`Making the change: "${rv.revising.note}". This takes a few minutes.`;
   else if(/^Making the change/.test($('revBusy').textContent)) $('revBusy').textContent='';
-  $('revLog').innerHTML=(rv.revisions||[]).map(r=>`<li class="${r.undone?'undone':''}">${esc(r.note)}${r.parts?` (${r.parts} piece${r.parts===1?'':'s'} selected)`:''}${r.costUsd!=null?`, $${Number(r.costUsd).toFixed(2)}`:''}</li>`).join('');
+  $('revLog').innerHTML=(rv.revisions||[]).map((r,i,all)=>`<li class="${r.undone?'undone':r.failed?'failed':''}">${esc(r.note)}${r.parts?` (${r.parts} piece${r.parts===1?'':'s'} selected)`:''}${r.costUsd!=null?`, $${Number(r.costUsd).toFixed(2)}`:''}${
+    r.failed?`<div class="revfail">Didn't go through, the design is as it was: ${esc(r.failed)} Ask again to retry.</div>`:busy&&i===all.length-1?' <span class="note">(working on it)</span>':''}</li>`).join('');
   if(!was) renderPicked();
 }
 async function adminPost(what,body){
