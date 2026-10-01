@@ -845,6 +845,9 @@ function watchJob(id,keep){
   if(!$('sent').hidden) $('subStatus').textContent='Studying your photos…';
   pollJob();
 }
+// a design's link opens hidden (index.html) until the first answer about it; never longer than a few seconds
+const jobLoaded=()=>document.documentElement.classList.remove('jobload');
+setTimeout(jobLoaded,8000);
 // one polling loop at a time: kickPoll starts a new one (after the admin asks for a change) and the old one stops
 let pollGen=0;
 function kickPoll(){ pollGen++; pollJob(pollGen); }
@@ -852,7 +855,7 @@ async function pollJob(gen=pollGen){
   if(gen!==pollGen) return;
   let j;
   try{ const r=await fetch(`/api/jobs/${jobId}?after=${jobAfter}&have=${jobHave}`); j=await r.json(); if(!r.ok) throw new Error(j.error||`Server error ${r.status}`); }
-  catch(e){ if(!curDesign) loadSample(); status(DEV?esc(e.message):'Reconnecting… your design keeps going on our side.',DEV); setTimeout(()=>pollJob(gen),5000); return; } // a restart or a dropped connection
+  catch(e){ jobLoaded(); if(!curDesign) loadSample(); status(DEV?esc(e.message):'Reconnecting… your design keeps going on our side.',DEV); setTimeout(()=>pollJob(gen),5000); return; } // a restart or a dropped connection
   if(gen!==pollGen) return;
   kitInfo={kit:j.kit,kitCents:j.kitCents,kitCurrency:j.kitCurrency}; if(R) refreshOrderUI();
   // no draft of theirs yet: the page after Design (opened from its link too)
@@ -863,7 +866,7 @@ async function pollJob(gen=pollGen){
     $('refPhotos').innerHTML=Array.from({length:j.photos},(_,i)=>`<img src="/api/jobs/${jobId}/photos/${i}" alt="Your photo ${i+1}" loading="lazy">`).join(''); $('refWrap').hidden=false; }
   if(j.draft){ jobHave=j.draftN; showOwn(); draftOnly=j.status!=='done'; showDesign(j.draft); $('designSrc').value=JSON.stringify(j.draft,null,2); }
   for(const ev of j.events) handleEvent(ev.type==='done'&&j.result?j.result:ev,jobT0);
-  jobAfter=j.next;
+  jobAfter=j.next; jobLoaded(); // the right view is in place: show the page
   if(!curDesign) loadSample(); // nothing of theirs to show yet: the sample for the Model tab
   renderReview(j.review||null,j.status); // the admin's check (only the admin's view carries it)
   if(j.status==='awaiting_payment'){ status(`This design is waiting for its design fee.`); setBusy(false); return; }
