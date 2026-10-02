@@ -144,7 +144,7 @@ footer p{margin:4px 0;max-width:80ch}
 footer a{color:inherit}
 @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
 /* no page zoom on phones (no double-tap zoom; Safari's pinch is stopped in the script) */
-html{touch-action:manipulation}
+html,body,a,button,.examples,.examples figure{touch-action:manipulation} /* touch-action isn't inherited, and the examples row scrolls on its own */
 /* no text highlighting: selecting text (a drag, a long press) and the tap flash on phones are off, as in an app;
    fields, the code and parts-list boxes stay selectable */
 html{-webkit-tap-highlight-color:transparent}
@@ -312,6 +312,9 @@ input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:tex
 
 <script>
 document.addEventListener('gesturestart',e=>e.preventDefault()); // Safari ignores user-scalable=no
+// and a quick second tap (the examples' arrows, say) still zooms on iOS: a tap within 350 ms of the last one only clicks
+{ let last=0; document.addEventListener('touchend',e=>{ const t=e.timeStamp;
+  if(t-last<350&&e.target.closest('button,.exnav,.examples')){ e.preventDefault(); e.target.closest('button')?.click(); } last=t; },{passive:false}); }
 
 // The live model in the hero: after the page has loaded, and not for anyone who asks for less motion
 if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
