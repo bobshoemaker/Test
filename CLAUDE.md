@@ -202,7 +202,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
   `{session}` confirms it on return, which unlocks the full design); with no Stripe key it's a test order that unlocks
   at once. `scripts/orders.js` lists kit orders to fulfill. The admin page (`/admin`, `src/viewer/admin.html`;
   `BRICKHOUSE_ADMIN_PASSWORD`, an HttpOnly SameSite=Strict cookie holding an HMAC of it): kit orders to fulfill (shipping
-  address, the Brickwith parts file from `/admin/api/jobs/<id>/parts.xml` without the baseplate (the Mini's plate is in it), status new, ordered,
+  address, the design itself from `/admin/api/jobs/<id>/design.json` (Design file, to keep or make a sample of), the Brickwith parts file from `/admin/api/jobs/<id>/parts.xml` without the baseplate (the Mini's plate is in it), status new, ordered,
   packed, shipped or cancelled with the Brickwith order number and tracking; shipped with tracking emails the customer
   once; a GoBricks stock check of the kit's parts, run when the kit is ordered and again on Check stock, naming lots short
   of stock and any the catalog snapshot says GoBricks no longer makes, kept on the job), designs that failed or have problems (Run again, from the part they reached), and all designs; the admin sees
@@ -227,7 +227,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   sets the viewer's dollar rate). `POST /api/lookup {address}` returns the place and ranked candidate
   photos (the dev view's Find photos); `GET /api/photo/<mapillary id>` proxies one image.
 - `src/viewer/landing.html`: the home page at `/`, written for homeowners and gift buyers, not technical (moments,
-  how it works, examples, sizes, questions); renders of the samples on its warm background in `src/viewer/img/`,
+  how it works, examples in a row that snaps a house to the middle at full size with its neighbours smaller either side,
+  sizes, questions); renders of the samples on its warm background in `src/viewer/img/`,
   made by `scripts/landing.js`; "Make yours" goes to `/app#design`. It promises a kit shipped to the customer (we order
   the parts from Brickwith, pack them and reship; the app's kit checkout isn't built yet) and names no prices in its questions.
 - The landing hero is the viewer itself in an iframe (`/app?design=savannah-dr&hero=1`): only the model, from one
