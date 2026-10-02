@@ -103,7 +103,13 @@ h2{font-size:clamp(40px,5.4vw,60px);line-height:1}
 /* the house in the middle at full size, the ones either side smaller and faded; a side one comes to the middle on a tap */
 .examples figure{flex:0 0 var(--slide);scroll-snap-align:center;transform:scale(.8);opacity:.5;transition:transform .35s ease,opacity .35s ease;transform-origin:50% 40%}
 .examples figure.on{transform:none;opacity:1}
-.examples figure:not(.on) .frame{cursor:pointer}
+.examples figure:not(.on) .model{cursor:pointer}
+/* each example is the model alone, no frame: a still picture, and in the middle the live model turning on its own */
+.examples .model{position:relative;aspect-ratio:1200/860}
+.examples .model img,.examples .model iframe{position:absolute;inset:0;width:100%;height:100%;border:0;transition:opacity .5s ease}
+.examples .model iframe{opacity:0;background:transparent;pointer-events:none}
+.examples .model.live iframe{opacity:1}
+.examples .model.live img{opacity:0}
 .examples figure:not(.on) figcaption a{visibility:hidden}
 .exnav{display:flex;justify-content:center;gap:10px;margin-top:6px}
 .exnav button{width:44px;height:44px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:20px;cursor:pointer}
@@ -239,11 +245,11 @@ input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:tex
   </div>
   <div class="examples" id="examplesRow">
       <figure>
-        <div class="frame"><img src="/img/sample-634.jpg" width="1200" height="860" loading="lazy" alt="Brick model of a white Spanish-style house with an orange tile roof."></div>
+        <div class="model" data-design="634-unit-a"><img src="/img/ex-634-unit-a.png" width="1200" height="860" loading="lazy" alt="Brick model of a white Spanish-style house with an orange tile roof."></div>
         <figcaption><div><b>Spanish revival</b><span>827 pieces · made from three listing photos</span></div><a href="/app?design=634-unit-a">See it in 3D →</a></figcaption>
       </figure>
       <figure>
-        <div class="frame"><img src="/img/sample-savannah.jpg" width="1200" height="860" loading="lazy" alt="Brick model of a tan two-story house with a tile roof, chimney, palm trees and a garden."></div>
+        <div class="model" data-design="savannah-dr"><img src="/img/ex-savannah-dr.png" width="1200" height="860" loading="lazy" alt="Brick model of a tan two-story house with a tile roof, chimney, palm trees and a garden."></div>
         <figcaption><div><b>Two-story with a garden</b><span>1,266 pieces</span></div><a href="/app?design=savannah-dr">See it in 3D →</a></figcaption>
       </figure>
   </div>
@@ -342,13 +348,24 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&'IntersectionObserve
   let on=-1, tick=0;
   const mark=()=>{ tick=0; const mid=row.scrollLeft+row.clientWidth/2;
     let best=0; figs.forEach((f,i)=>{ if(Math.abs(f.offsetLeft+f.offsetWidth/2-mid)<Math.abs(figs[best].offsetLeft+figs[best].offsetWidth/2-mid)) best=i; });
-    if(best!==on){ on=best; figs.forEach((f,i)=>f.classList.toggle('on',i===on)); }
+    if(best!==on){ on=best; figs.forEach((f,i)=>f.classList.toggle('on',i===on)); liveSoon(); }
     document.getElementById('exPrev').disabled=on===0; document.getElementById('exNext').disabled=on===figs.length-1; };
   row.addEventListener('scroll',()=>{ if(!tick) tick=requestAnimationFrame(mark); },{passive:true});
-  figs.forEach((f,i)=>f.querySelector('.frame').addEventListener('click',()=>{ if(i!==on) center(f,smooth); }));
+  figs.forEach((f,i)=>f.querySelector('.model').addEventListener('click',()=>{ if(i!==on) center(f,smooth); }));
   document.getElementById('exPrev').onclick=()=>on>0&&center(figs[on-1],smooth);
   document.getElementById('exNext').onclick=()=>on<figs.length-1&&center(figs[on+1],smooth);
   const start=()=>{ center(figs[Math.floor((figs.length-1)/2)],'auto'); mark(); };
+  // The house in the middle turns: one live model at a time (?hero=spin), moved to the middle house once the row
+  // settles, shown over its still picture when it's drawn, paused while the row is out of sight; none with reduced motion
+  const still=smooth==='auto', live=document.createElement('iframe'); let liveTimer=0, near=false;
+  live.title='The example house turning in 3D'; live.setAttribute('aria-hidden','true'); live.tabIndex=-1;
+  function liveSoon(){ clearTimeout(liveTimer); if(!still&&near) liveTimer=setTimeout(goLive,350); }
+  function goLive(){ const box=figs[on]&&figs[on].querySelector('.model'); if(!box||live.parentNode===box) return;
+    if(live.parentNode) live.parentNode.classList.remove('live');
+    box.appendChild(live); live.src=`/app?design=${encodeURIComponent(box.dataset.design)}&hero=spin`; }
+  addEventListener('message',e=>{ if(e.origin===location.origin&&e.source===live.contentWindow&&e.data&&e.data.brickhouse==='hero-ready'&&live.parentNode) live.parentNode.classList.add('live'); });
+  if(!still&&'IntersectionObserver' in window) new IntersectionObserver(([en])=>{ near=en.isIntersecting;
+    if(near) liveSoon(); if(live.contentWindow) live.contentWindow.postMessage({brickhouse:near?'play':'pause'},location.origin); },{rootMargin:'150px 0px'}).observe(row);
   start(); addEventListener('load',start,{once:true}); addEventListener('resize',()=>{ if(on>=0) center(figs[on],'auto'); });
 }
 // The design fee, when the server charges one

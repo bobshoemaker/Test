@@ -228,7 +228,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   photos (the dev view's Find photos); `GET /api/photo/<mapillary id>` proxies one image.
 - `src/viewer/landing.html`: the home page at `/`, written for homeowners and gift buyers, not technical (moments,
   how it works, examples in a row that snaps a house to the middle at full size with its neighbours smaller either side,
-  sizes, questions); renders of the samples on its warm background in `src/viewer/img/`,
+  each the model alone with no frame (a cut-out still, `img/ex-<design>.png`), the middle one turning live (`/app?design=…&hero=spin`, one at a
+  time, paused out of sight, none with reduced motion), sizes, questions); stills of the samples on a transparent background in `src/viewer/img/`,
   made by `scripts/landing.js`; "Make yours" goes to `/app#design`. It promises a kit shipped to the customer (we order
   the parts from Brickwith, pack them and reship; the app's kit checkout isn't built yet) and names no prices in its questions.
 - The landing hero is the viewer itself in an iframe (`/app?design=savannah-dr&hero=1`): only the model, from one
