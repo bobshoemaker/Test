@@ -511,7 +511,7 @@ async function handleAdmin(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/admin/logout') { res.setHeader('set-cookie', adminCookie(req, '', 0)); return send(res, 200, { ok: true }); }
   if (!isAdmin(req)) return send(res, 401, { error: 'Sign in first.' });
   if (req.method === 'GET' && url.pathname === '/admin/api/jobs') return send(res, 200, { jobs: JOBS.list(), supplier: SUPPLIER, mail: !!MAILER, payments: !!JOBS.fee, stock: !!QUOTER });
-  const m = /^\/admin\/api\/jobs\/([a-f0-9-]{36})\/(parts\.xml|fulfillment|retry|stock|site|revise|fix|undo|approve|intake|candidates|begin)$/.exec(url.pathname);
+  const m = /^\/admin\/api\/jobs\/([a-f0-9-]{36})\/(parts\.xml|design\.json|fulfillment|retry|stock|site|revise|fix|undo|approve|intake|candidates|begin)$/.exec(url.pathname);
   if (!m) return send(res, 404, { error: 'Not found' });
   const [, id, what] = m;
   if (req.method === 'GET' && what === 'parts.xml') {
@@ -519,6 +519,13 @@ async function handleAdmin(req, res, url) {
     if (!d) return send(res, 404, { error: 'No finished design.' });
     res.setHeader('content-disposition', `attachment; filename="${slug(d.name || 'design')}-parts.xml"`);
     return send(res, 200, partsXml(d), 'application/xml; charset=utf-8');
+  }
+  // the finished design itself, to keep or to make a sample of (designs/)
+  if (req.method === 'GET' && what === 'design.json') {
+    const j = JOBS.get(id, { full: true }), d = j && j.result && j.result.design;
+    if (!d) return send(res, 404, { error: 'No finished design.' });
+    res.setHeader('content-disposition', `attachment; filename="${slug(d.name || 'design')}.json"`);
+    return send(res, 200, JSON.stringify(d, null, 2), 'application/json; charset=utf-8');
   }
   // how the house was found and mapped from above (site.js): each stage with its pictures and reasoning
   if (req.method === 'GET' && what === 'site') {

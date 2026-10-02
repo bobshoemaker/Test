@@ -97,8 +97,19 @@ h2{font-size:clamp(40px,5.4vw,60px);line-height:1}
 .checks li span{color:var(--muted);font-size:16px}
 .checks svg{color:var(--leaf);margin-top:3px}
 
-.examples{display:grid;gap:24px}
-@media (min-width:860px){.examples{grid-template-columns:1fr 1fr}}
+.examples{--slide:min(640px,80vw);display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;
+  padding:10px calc(50% - var(--slide)/2) 6px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.examples::-webkit-scrollbar{display:none}
+/* the house in the middle at full size, the ones either side smaller and faded; a side one comes to the middle on a tap */
+.examples figure{flex:0 0 var(--slide);scroll-snap-align:center;transform:scale(.8);opacity:.5;transition:transform .35s ease,opacity .35s ease;transform-origin:50% 40%}
+.examples figure.on{transform:none;opacity:1}
+.examples figure:not(.on) .frame{cursor:pointer}
+.examples figure:not(.on) figcaption a{visibility:hidden}
+.exnav{display:flex;justify-content:center;gap:10px;margin-top:6px}
+.exnav button{width:44px;height:44px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-size:20px;cursor:pointer}
+.exnav button:disabled{opacity:.35;cursor:default}
+@media (prefers-reduced-motion: reduce){.examples figure{transition:none}}
+@media (max-width:600px){.examples{--slide:72vw;gap:6px}}
 figure{margin:0}
 figcaption{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-top:14px}
 figcaption b{font-family:"Jersey 10","Archivo",system-ui,sans-serif;font-weight:400;font-size:26px}
@@ -224,8 +235,9 @@ input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:tex
 <section id="examples" style="padding-top:0">
   <div class="wrap">
     <h2>Examples</h2>
-    <p class="intro">Two houses made from photos. Open one to spin it, play the build, and see every piece.</p>
-    <div class="examples">
+    <p class="intro">Swipe through a few of our houses. Open one to spin it, play the build, and see every piece.</p>
+  </div>
+  <div class="examples" id="examplesRow">
       <figure>
         <div class="frame"><img src="/img/sample-634.jpg" width="1200" height="860" loading="lazy" alt="Brick model of a white Spanish-style house with an orange tile roof."></div>
         <figcaption><div><b>Spanish revival</b><span>827 pieces · made from three listing photos</span></div><a href="/app?design=634-unit-a">See it in 3D →</a></figcaption>
@@ -234,8 +246,8 @@ input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:tex
         <div class="frame"><img src="/img/sample-savannah.jpg" width="1200" height="860" loading="lazy" alt="Brick model of a tan two-story house with a tile roof, chimney, palm trees and a garden."></div>
         <figcaption><div><b>Two-story with a garden</b><span>1,266 pieces</span></div><a href="/app?design=savannah-dr">See it in 3D →</a></figcaption>
       </figure>
-    </div>
   </div>
+  <div class="exnav"><button type="button" id="exPrev" aria-label="Previous house">‹</button><button type="button" id="exNext" aria-label="Next house">›</button></div>
 </section>
 
 <section id="sizes" style="padding-top:0">
@@ -318,6 +330,23 @@ if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&'IntersectionObserve
     if(en.isIntersecting&&!f.src){ f.hidden=false; f.src='/app?design=634-unit-a&hero=build'; }
     else if(f.src&&f.contentWindow) f.contentWindow.postMessage({brickhouse:en.isIntersecting?'play':'pause'},location.origin);
   },{rootMargin:'200px 0px'}).observe(box);
+}
+// The examples: a row that snaps a house to the middle, starting on the middle one; the arrows and a tap on a side
+// house bring the next one to the middle
+{ const row=document.getElementById('examplesRow'), figs=[...row.querySelectorAll('figure')];
+  const smooth=matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth';
+  const center=(f,behavior)=>row.scrollTo({left:f.offsetLeft-(row.clientWidth-f.offsetWidth)/2,behavior});
+  let on=-1, tick=0;
+  const mark=()=>{ tick=0; const mid=row.scrollLeft+row.clientWidth/2;
+    let best=0; figs.forEach((f,i)=>{ if(Math.abs(f.offsetLeft+f.offsetWidth/2-mid)<Math.abs(figs[best].offsetLeft+figs[best].offsetWidth/2-mid)) best=i; });
+    if(best!==on){ on=best; figs.forEach((f,i)=>f.classList.toggle('on',i===on)); }
+    document.getElementById('exPrev').disabled=on===0; document.getElementById('exNext').disabled=on===figs.length-1; };
+  row.addEventListener('scroll',()=>{ if(!tick) tick=requestAnimationFrame(mark); },{passive:true});
+  figs.forEach((f,i)=>f.querySelector('.frame').addEventListener('click',()=>{ if(i!==on) center(f,smooth); }));
+  document.getElementById('exPrev').onclick=()=>on>0&&center(figs[on-1],smooth);
+  document.getElementById('exNext').onclick=()=>on<figs.length-1&&center(figs[on+1],smooth);
+  const start=()=>{ center(figs[Math.floor((figs.length-1)/2)],'auto'); mark(); };
+  start(); addEventListener('load',start,{once:true}); addEventListener('resize',()=>{ if(on>=0) center(figs[on],'auto'); });
 }
 // The design fee, when the server charges one
 fetch('/api/health').then(r=>r.ok?r.json():null).then(h=>{
