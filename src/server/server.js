@@ -68,8 +68,8 @@ const STATIC = {
   '/admin': ['src/viewer/admin.html', 'text/html; charset=utf-8'],
   '/admin/intake': ['src/viewer/intake.html', 'text/html; charset=utf-8'], // preparing a request before its design (its API is the admin's)
   '/index.html': ['src/viewer/index.html', 'text/html; charset=utf-8'],
-  '/img/sample-634.jpg': ['src/viewer/img/sample-634.jpg', 'image/jpeg'],
-  '/img/sample-savannah.jpg': ['src/viewer/img/sample-savannah.jpg', 'image/jpeg'],
+  '/img/ex-634-unit-a.png': ['src/viewer/img/ex-634-unit-a.png', 'image/png'],
+  '/img/ex-savannah-dr.png': ['src/viewer/img/ex-savannah-dr.png', 'image/png'],
   '/img/hero-house.png': ['src/viewer/img/hero-house.png', 'image/png'],
   '/img/build-house.png': ['src/viewer/img/build-house.png', 'image/png'],
   '/viewer/app.js': ['src/viewer/app.js', 'text/javascript; charset=utf-8'],

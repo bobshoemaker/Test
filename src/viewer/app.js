@@ -5,8 +5,9 @@ const $=id=>document.getElementById(id);
 // only the model, from one view, on a transparent background so the page shows through, its top story
 // lifting a little while the pointer is over it (a tap on touch screens). ?hero=build plays the building
 // guide instead, step after step, over and over (window.BRICKHOUSE_STILL shows it finished, for a picture).
+// ?hero=spin is an example on the landing page: the model alone, turning slowly (window.BRICKHOUSE_STILL: its first frame).
 const HERO_MODE=new URLSearchParams(location.search).get('hero')||(window.BRICKHOUSE_HERO===true?'1':window.BRICKHOUSE_HERO||null);
-const HERO=HERO_MODE==='1'||HERO_MODE==='build', BUILD=HERO_MODE==='build';
+const HERO=HERO_MODE==='1'||HERO_MODE==='build'||HERO_MODE==='spin', BUILD=HERO_MODE==='build', SPIN=HERO_MODE==='spin';
 if(HERO) document.documentElement.classList.add('hero');
 // ?dev=1 shows the technical view (design list, checker counts, part numbers, suppliers, design code) and
 // remembers it in this browser (?dev=0 forgets it); standalone copies are technical. Customers see neither.
@@ -258,14 +259,15 @@ function applyState(){
 }
 
 // ---------- camera ----------
-let theta=0.62, phi=0.98, radius=70, target=new THREE.Vector3(0,3.5,0), goal={theta, phi, radius, t:target.clone()}, autoSpin=false, dirty=true, userZoom=false, lastMode='main';
-function fitRadius(){ const a=camera.aspect, k=PLATE/32*(HERO?0.88:1); return Math.min(170*k,Math.max(82*k,77*k/Math.max(a,0.45))); }
+let theta=0.62, phi=0.98, radius=70, target=new THREE.Vector3(0,SPIN?1:3.5,0), goal={theta, phi, radius, t:target.clone()}, autoSpin=false, dirty=true, userZoom=false, lastMode='main';
+// (a turning example stands back a little and looks lower, so it stays centered and in frame all the way round)
+function fitRadius(){ const a=camera.aspect, k=PLATE/32*(SPIN?1.02:HERO?0.88:1); return Math.min(170*k,Math.max(82*k,77*k/Math.max(a,0.45))); }
 function frame(){
   if(mode===lastMode) return; lastMode=mode;
   if(mode==='sub'){ const s=R.steps[stepIdx]; const ps=R.parts.filter(p=>p.sub===s.sub&&p.copy===0);
     let mnx=1e9,mxx=-1e9,mnz=1e9,mxz=-1e9,mxy=0; ps.forEach(p=>{mnx=Math.min(mnx,p.x);mxx=Math.max(mxx,p.x+p.w);mnz=Math.min(mnz,p.z);mxz=Math.max(mxz,p.z+p.d);mxy=Math.max(mxy,(p.y+p.h)*PH);});
     goal.t.set((mnx+mxx)/2-OFF,mxy/2,(mnz+mxz)/2-OFF); goal.radius=Math.max(14,mxy*2.7,(mxx-mnx)*2.6)*(camera.aspect<1?1.25:1); }
-  else { goal.t.set(0,3.5,0); goal.radius=fitRadius(); }
+  else { goal.t.set(0,SPIN?1:3.5,0); goal.radius=fitRadius(); }
 }
 function setView(v){ document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===v));
   if(v==='q'){goal.theta=0.62;goal.phi=0.98;} if(v==='f'){goal.theta=0;goal.phi=1.28;} if(v==='t'){goal.theta=0;goal.phi=0.06;}
@@ -276,7 +278,7 @@ document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>setView(b.data
 $('spin').onclick=()=>{ autoSpin=!autoSpin; $('spin').setAttribute('aria-pressed',autoSpin); dirty=true; };
 function placeCam(){ camera.position.set(target.x+radius*Math.sin(phi)*Math.sin(theta),target.y+radius*Math.cos(phi),target.z+radius*Math.sin(phi)*Math.cos(theta)); camera.lookAt(target); }
 const ptrs=new Map(); let pinch0=0,r0=0;
-if(HERO&&!BUILD){ // hovering (or tapping) lifts the top story; a mouse drag tilts the house a little, which springs back
+if(HERO&&!BUILD&&!SPIN){ // hovering (or tapping) lifts the top story; a mouse drag tilts the house a little, which springs back
   // on release; no zooming. On touch the house doesn't follow the finger: a swipe scrolls the page, a tap lifts.
   canvas.addEventListener('pointerenter',e=>{ if(e.pointerType==='mouse'){ liftGoal=1; dirty=true; } });
   canvas.addEventListener('pointerleave',e=>{ if(e.pointerType==='mouse'&&!drag){ liftGoal=0; dirty=true; } });
@@ -308,7 +310,7 @@ const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches
 function loop(){ requestAnimationFrame(loop);
   const k=reduceMotion?1:0.14; let moving=false;
   const ease=(a,b)=>{ const d=b-a; if(Math.abs(d)>1e-4){ moving=true; return a+d*k; } return b; };
-  if(autoSpin){ goal.theta+=HERO?0.0028:0.004; moving=true; }
+  if(autoSpin){ goal.theta+=SPIN?0.005:HERO?0.0028:0.004; moving=true; }
   if(HERO&&heroStep(performance.now())) moving=true;
   if(anims.size){ animFrame(performance.now()); moving=true; }
   theta=ease(theta,goal.theta); phi=ease(phi,goal.phi); radius=ease(radius,goal.radius);
@@ -320,7 +322,7 @@ function loop(){ requestAnimationFrame(loop);
 // not trees and plants, whose tops only reach that high
 let liftT=0, liftGoal=0, liftV=0, liftParts=[];
 // the hero's view, the drag's tilt away from it (springing back once let go), and the last frame's time
-const HERO_VIEW=BUILD?{t:0.62,p:0.98}:{t:-0.35,p:1.1}; let drag=null, heroLast=0; const tilt={t:0,p:0,vt:0,vp:0};
+const HERO_VIEW=BUILD?{t:0.62,p:0.98}:SPIN?{t:0.62,p:1.0}:{t:-0.35,p:1.1}; let drag=null, heroLast=0; const tilt={t:0,p:0,vt:0,vp:0};
 // the lift springs up, overshooting a little, and falls back with a bounce; the tilt wobbles back into place
 function heroStep(now){ const dt=Math.min(0.033,heroLast?(now-heroLast)/1000:0.016); heroLast=now; let busy=false;
   if(Math.abs(liftGoal-liftT)>1e-3||Math.abs(liftV)>1e-3){
@@ -1105,6 +1107,9 @@ async function boot(){
     goal.theta=theta=HERO_VIEW.t; goal.phi=phi=HERO_VIEW.p; radius=goal.radius; liftParts=topStory(); dirty=true;
     requestAnimationFrame(()=>requestAnimationFrame(()=>{ try{ parent.postMessage({brickhouse:'hero-ready'},location.origin); }catch(e){} }));
     if(BUILD&&!window.BRICKHOUSE_STILL) playBuildLoop();
+    // an example turns while it's in the middle of the page's row; the page pauses it when it's out of sight
+    if(SPIN&&!window.BRICKHOUSE_STILL&&!reduceMotion){ autoSpin=true;
+      addEventListener('message',e=>{ if(e.origin===location.origin&&e.data&&(e.data.brickhouse==='pause'||e.data.brickhouse==='play')) autoSpin=e.data.brickhouse==='play'; }); }
     return; }
   if(embedded){ $('homeLink').hidden=true; $('topCta').hidden=true; $('photoControls').hidden=true; $('findMineBox').hidden=true; renderMine(); $('photoIntro').textContent='This is a standalone copy. Run the Brickhouse server (npm start) to design houses from photos.'; return; }
   try{ health=await (await fetch('/api/health')).json(); }catch(e){ health=null; }
