@@ -169,14 +169,14 @@ input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:tex
       <p class="lede">Send a few photos of a house that matters to you. We'll design a brick model of it and send it to you as a kit to build yourself, one step at a time.</p>
       <div class="ctas">
         <a class="btn primary" href="/app#design">Start with your photos</a>
-        <a class="btn" href="/app?design=savannah-dr">See one in 3D</a>
+        <a class="btn" href="/app?design=griffith-park">See one in 3D</a>
       </div>
       <p class="small">Works with LEGO® bricks</p>
     </div>
     <div class="live" id="heroFrame">
       <iframe id="heroLive" title="The example house in 3D" aria-hidden="true" tabindex="-1" hidden></iframe>
       <span class="hint" aria-hidden="true"><span class="h-hover">Hover to peek inside · drag to look around</span><span class="h-tap">Tap to peek inside</span></span>
-      <img src="/img/hero-house.png" width="1200" height="860" alt="A brick model of a tan two-story house with an orange tile roof, two palm trees, a flowering tree, flower beds and a small red car in the driveway.">
+      <img src="/img/hero-house.png" width="1200" height="860" alt="A brick model of a white Spanish-style house on a hillside lot, with red tile-edged flat roofs, a garage under a bedroom wing, a brick patio and a garden.">
     </div>
   </header>
 </div>
@@ -247,6 +247,10 @@ input,textarea,select,[contenteditable]{-webkit-user-select:text;user-select:tex
       <figure>
         <div class="model" data-design="634-unit-a"><img src="/img/ex-634-unit-a.png" width="1200" height="860" loading="lazy" alt="Brick model of a white Spanish-style house with an orange tile roof."></div>
         <figcaption><div><b>Spanish revival</b><span>827 pieces · made from three listing photos</span></div><a href="/app?design=634-unit-a">See it in 3D →</a></figcaption>
+      </figure>
+      <figure>
+        <div class="model" data-design="griffith-park"><img src="/img/ex-griffith-park.png" width="1200" height="860" loading="lazy" alt="Brick model of a white Spanish-style house on a hillside corner lot, with red tile-edged flat roofs, a brick patio and a garden."></div>
+        <figcaption><div><b>Hillside Spanish house</b><span>2,358 pieces · Grand size · roofs and floors lift off</span></div><a href="/app?design=griffith-park">See it in 3D →</a></figcaption>
       </figure>
       <figure>
         <div class="model" data-design="savannah-dr"><img src="/img/ex-savannah-dr.png" width="1200" height="860" loading="lazy" alt="Brick model of a tan two-story house with a tile roof, chimney, palm trees and a garden."></div>
@@ -324,7 +328,7 @@ document.addEventListener('gesturestart',e=>e.preventDefault()); // Safari ignor
 
 // The live model in the hero: after the page has loaded, and not for anyone who asks for less motion
 if(!matchMedia('(prefers-reduced-motion: reduce)').matches){
-  const f=document.getElementById('heroLive'), load=()=>{ f.hidden=false; f.src='/app?design=savannah-dr&hero=1'; };
+  const f=document.getElementById('heroLive'), load=()=>{ f.hidden=false; f.src='/app?design=griffith-park&hero=1'; };
   addEventListener('message',e=>{ if(e.origin===location.origin&&e.data&&e.data.brickhouse==='hero-ready'&&e.source===f.contentWindow) document.getElementById('heroFrame').classList.add('ready'); });
   addEventListener('load',()=>'requestIdleCallback' in window?requestIdleCallback(load,{timeout:1500}):setTimeout(load,300));
 }

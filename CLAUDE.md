@@ -232,8 +232,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
   time, paused out of sight, none with reduced motion), sizes, questions); stills of the samples on a transparent background in `src/viewer/img/`,
   made by `scripts/landing.js`; "Make yours" goes to `/app#design`. It promises a kit shipped to the customer (we order
   the parts from Brickwith, pack them and reship; the app's kit checkout isn't built yet) and names no prices in its questions.
-- The landing hero is the viewer itself in an iframe (`/app?design=savannah-dr&hero=1`): only the model, from one
-  view, on a transparent background, its top story (not plants) springing up on hover or tap and falling back with a
+- The landing hero is the viewer itself in an iframe (`/app?design=griffith-park&hero=1`): only the model, from one
+  view, on a transparent background, its lift-off roofs (or, without them, its top story; not plants) springing up on hover or tap and falling back with a
   bounce; a drag tilts it a little (rubber-banded) and it springs back on release. On touch the models don't follow the finger (a
   swipe scrolls the page natively, a tap on the hero lifts its top story); only a mouse drags them (the build loop too). It loads after the page and
   crossfades with its still picture (`hero-house.png`, the same view). `?hero=build` plays the building guide in a
@@ -279,7 +279,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   Play build drops each step's bricks straight down into place; lifting raises a roof's or floor's
   bricks straight up, layer by layer, and putting back lowers them (skipped with reduced motion).
 - `designs/`: hand-built reference designs. `634-unit-a.json` was built by hand from three
-  listing photos; use it as the quality bar for photo-generated designs.
+  listing photos; use it as the quality bar for photo-generated designs. `griffith-park.json` is a customer-flow design (Grand,
+  from photos and the map, checked and changed on the review card), downloaded from the admin page: the landing hero and the
+  middle example, named for its style rather than its address.
 - `src/viewer/ldraw-parts.js`: real part geometry from the LDraw Parts Library (CC BY 4.0, credited in
   the viewer and file header) for the plant parts and the specialty parts (cheese slope, round bricks
   and plates, cone, bracket, side-stud brick, windows and their glass, arches, fence), at low detail;

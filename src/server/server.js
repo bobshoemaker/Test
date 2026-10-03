@@ -70,6 +70,7 @@ const STATIC = {
   '/index.html': ['src/viewer/index.html', 'text/html; charset=utf-8'],
   '/img/ex-634-unit-a.png': ['src/viewer/img/ex-634-unit-a.png', 'image/png'],
   '/img/ex-savannah-dr.png': ['src/viewer/img/ex-savannah-dr.png', 'image/png'],
+  '/img/ex-griffith-park.png': ['src/viewer/img/ex-griffith-park.png', 'image/png'],
   '/img/hero-house.png': ['src/viewer/img/hero-house.png', 'image/png'],
   '/img/build-house.png': ['src/viewer/img/build-house.png', 'image/png'],
   '/viewer/app.js': ['src/viewer/app.js', 'text/javascript; charset=utf-8'],
