@@ -10,10 +10,11 @@ const { bundleHtml } = require('../src/server/bundle');
 const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(ROOT, 'src/viewer/img');
 // The still pictures behind the live models, each the live model's first frame on a transparent background: the hero
-// (savannah-dr), the build (634-unit-a, finished), and the examples' row (each example's turntable, ?hero=spin).
-const STILLS = [['savannah-dr', 'window.BRICKHOUSE_HERO = true;', 'hero-house.png'],
+// (griffith-park), the build (634-unit-a, finished), and the examples' row (each example's turntable, ?hero=spin).
+const STILLS = [['griffith-park', 'window.BRICKHOUSE_HERO = true;', 'hero-house.png'],
   ['634-unit-a', "window.BRICKHOUSE_HERO = 'build'; window.BRICKHOUSE_STILL = true;", 'build-house.png'],
   ['634-unit-a', "window.BRICKHOUSE_HERO = 'spin'; window.BRICKHOUSE_STILL = true;", 'ex-634-unit-a.png'],
+  ['griffith-park', "window.BRICKHOUSE_HERO = 'spin'; window.BRICKHOUSE_STILL = true;", 'ex-griffith-park.png'],
   ['savannah-dr', "window.BRICKHOUSE_HERO = 'spin'; window.BRICKHOUSE_STILL = true;", 'ex-savannah-dr.png']];
 
 function playwright() {

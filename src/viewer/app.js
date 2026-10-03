@@ -339,7 +339,10 @@ function heroStep(now){ const dt=Math.min(0.033,heroLast?(now-heroLast)/1000:0.0
   if(busy||drag){ theta=goal.theta=HERO_VIEW.t+tilt.t; phi=goal.phi=HERO_VIEW.p+tilt.p; }
   return busy||!!drag; }
 const GROWN=['plant','sub','lawn','fence'];
-function topStory(){ const ops=curDesign.ops||[], bases=ops.filter(o=>o.op==='walls'&&!o.context&&(o.base||0)>0).map(o=>o.base);
+function topStory(){ // a design with lift-off roofs lifts those, showing the floors under them
+  const L=R.stats.liftoff||[], roofs=L.filter(n=>/roof/i.test(n));
+  if(L.length) return R.parts.filter(p=>(roofs.length?roofs:[L[0]]).includes(p.liftoff));
+  const ops=curDesign.ops||[], bases=ops.filter(o=>o.op==='walls'&&!o.context&&(o.base||0)>0).map(o=>o.base);
   const built=R.parts.filter(p=>!GROWN.includes((ops[p.op]||{}).op));
   return bases.length?built.filter(p=>p.y>=Math.max(...bases)):built.filter(p=>(ops[p.op]||{}).op==='roof'); }
 // shadows are redrawn every frame here: between redraws a descending roof sits just under its own stale

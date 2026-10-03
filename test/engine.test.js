@@ -35,7 +35,7 @@ test('the Mini counts 2 courses as a story: its one-story walls enclose a floor'
   assert.match(compile({ name: 'x', plate: 24, phases: ['p'], ops: [] }).errors[0].msg, /plate must be 16, 32 or 48/);
 });
 
-for (const [name, pieces] of [['savannah-dr', 1266], ['634-unit-a', 826]]) {
+for (const [name, pieces] of [['savannah-dr', 1266], ['634-unit-a', 826], ['griffith-park', 2358]]) {
   test(`${name} compiles clean`, () => {
     const r = compile(load(name));
     assert.deepEqual(r.errors.map((e) => e.msg), []);
