@@ -44,6 +44,7 @@ canvas:active{cursor:grabbing}
 .tools{position:absolute;left:8px;top:8px;right:8px;display:flex;gap:6px;flex-wrap:wrap;pointer-events:none}
 .tools button{pointer-events:auto}
 .seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.seg:not(:has(> :not([hidden]))){display:none} /* a group whose buttons are all hidden (no lift-off roof) leaves no empty box */
 .seg button{border:0;background:none;padding:6px 10px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}
 .seg button[aria-pressed="true"]{color:var(--ink);background:var(--chip)}
 .modebadge{position:absolute;left:10px;bottom:60px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:13px;border-radius:7px;padding:3px 9px;display:none}
