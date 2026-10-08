@@ -285,7 +285,8 @@ closing gift that realtors give clients: a brick model of the house they just bo
 - `src/viewer/ldraw-parts.js`: real part geometry from the LDraw Parts Library (CC BY 4.0, credited in
   the viewer and file header) for the plant parts and the specialty parts (cheese slope, round bricks
   and plates, cone, bracket, side-stud brick, windows and their glass, arches, fence), at low detail;
-  plain bricks, plates and tiles stay boxes with drawn studs; `?ldraw=0` shows the simple shapes; `scripts/ldraw.js` regenerates it (`--lowres` uses
+  plain bricks, plates and tiles stay boxes with drawn studs; the round 1 x 1 plant pieces (the three-leaf sprig, the flower) turn
+  freely on their one stud, so each is drawn at its own angle, fixed by where it stands (`freeTurn`), not all facing one way; `?ldraw=0` shows the simple shapes; `scripts/ldraw.js` regenerates it (`--lowres` uses
   8-sided round primitives). The engine's stud layouts for those parts follow the LDraw files.
 - `scripts/`: `compile.js` (check a design), `design.js` (photos to design from the CLI),
   `bundle.js` (single-file HTML for sharing or publishing as a Claude artifact), `ldraw.js`,

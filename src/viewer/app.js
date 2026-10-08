@@ -100,6 +100,11 @@ function ldrawPose(p){ const def=SPECIAL[p.key]||{};
 // glass whose LDraw origin isn't its frame's: how far down (LDU) it sits in the frame
 const GLASS_DROP={ 60603: 8 };
 const LDRAW_TURN={ cheese:{N:0,E:1,S:2,W:3}, snot:{N:0,E:1,S:2,W:3}, bracket11:{S:0,W:1,N:2,E:3} };
+// Round 1 x 1 plant pieces (the three-leaf sprig, the flower) sit on a single stud and turn freely on it, so a builder
+// sets them every which way: each gets its own angle, fixed by where it stands, so a design always looks the same.
+const FREE_TURN={ sprig1:true, flower1:true };
+function freeTurn(p){ let h=Math.imul(p.x+1,73856093)^Math.imul(p.y+1,19349663)^Math.imul(p.z+1,83492791);
+  h=Math.imul(h^(h>>>16),0x45d9f3b); h^=h>>>16; return FREE_TURN[p.key]?(h>>>0)/4294967296*Math.PI*2:0; }
 // parts whose LDraw origin is the bottom of the part, not the top of its body
 const LDRAW_BOTTOM={ cheese:true };
 const folCache={};
@@ -158,7 +163,7 @@ function buildScene(){
   for(const p of R.parts){
     const cx=p.x+p.w/2-OFF, cz=p.z+p.d/2-OFF, y0=p.y*PH, hh=p.h*PH;
     if(ldrawGeo(p.no)){
-      const [lx,ly,lz,r]=ldrawPose(p); tmp.position.set(lx,ly,lz); tmp.scale.set(1,1,1); tmp.rotation.set(0,-r*Math.PI/2,0); tmp.updateMatrix();
+      const [lx,ly,lz,r]=ldrawPose(p); tmp.position.set(lx,ly,lz); tmp.scale.set(1,1,1); tmp.rotation.set(0,-r*Math.PI/2-freeTurn(p),0); tmp.updateMatrix();
       const geo=ldrawGeo(p.no), rec={p,m:tmp.matrix.clone()}, key=p.color.startsWith('Trans-')?'T':'O';
       if(!fol.has(geo)) fol.set(geo,{O:[],T:[]}); fol.get(geo)[key].push(rec); inst.push(rec); recOf.set(p.id,rec);
       const gg=p.glass&&ldrawGeo(p.glass.no); if(gg){ const g={p,m:rec.m.clone().multiply(new THREE.Matrix4().makeTranslation(0,-(GLASS_DROP[p.glass.no]||0)/20,0)),glass:true}; if(!fol.has(gg)) fol.set(gg,{O:[],T:[]}); fol.get(gg).T.push(g); inst.push(g); rec.extra=[g]; }
@@ -170,7 +175,7 @@ function buildScene(){
       tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,{S:0,N:Math.PI,E:Math.PI/2,W:-Math.PI/2}[p.dir]||0,0);
       tmp.updateMatrix(); const r={p,m:tmp.matrix.clone()}; ch.push(r); inst.push(r); recOf.set(p.id,r);
     } else if(p.shape==='leaves'||p.shape==='sprig'||p.shape==='flower'||p.shape==='swordleaf'){
-      tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,0,0); tmp.updateMatrix();
+      tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,-freeTurn(p),0); tmp.updateMatrix();
       const geo=foliageGeo(p), r={p,m:tmp.matrix.clone()}; if(!fol.has(geo)) fol.set(geo,{O:[],T:[]}); fol.get(geo).O.push(r); inst.push(r); recOf.set(p.id,r);
     } else { const sp=makeSpecial(p); sp.pos0=sp.obj.position.clone(); sp.rot0=sp.obj.rotation.y; sp.obj.userData.part=p; specials.push(sp); recOf.set(p.id,sp); }
   }
