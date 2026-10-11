@@ -527,7 +527,6 @@
     {
       "op": "floor",
       "phase": "Ground floor",
-      "kind": "tile",
       "color": "Tan"
     },
     {
