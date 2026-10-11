@@ -16,7 +16,7 @@ test('634-unit-a-mini compiles clean on the Mini\'s 16 x 16 plate, and under GoB
   const d = load('634-unit-a-mini'), r = compile(d);
   assert.deepEqual(r.errors.map((e) => e.msg), []);
   assert.deepEqual(r.warnings.map((e) => e.msg), []);
-  assert.equal(r.stats.pieces, 289);
+  assert.equal(r.stats.pieces, 288);
   assert.deepEqual([r.stats.plate, r.stats.baseThick], [16, 1], 'an ordinary plate, a plate thick');
   const g = compile({ ...clone(d), supplier: 'gobricks' }), plate = g.inventory.find((e) => e.kind === 'baseplate');
   assert.deepEqual([g.errors, g.warnings], [[], []]);
@@ -35,7 +35,7 @@ test('the Mini counts 2 courses as a story: its one-story walls enclose a floor'
   assert.match(compile({ name: 'x', plate: 24, phases: ['p'], ops: [] }).errors[0].msg, /plate must be 16, 32 or 48/);
 });
 
-for (const [name, pieces] of [['savannah-dr', 1266], ['634-unit-a', 826], ['griffith-park', 2358]]) {
+for (const [name, pieces] of [['savannah-dr', 1266], ['634-unit-a', 826], ['griffith-park', 2331]]) {
   test(`${name} compiles clean`, () => {
     const r = compile(load(name));
     assert.deepEqual(r.errors.map((e) => e.msg), []);
@@ -174,19 +174,64 @@ test('planting keeps to a few parts and colors, naming the plants that add the m
   assert.match(all.warnings.map((w) => w.msg).join(' '), new RegExp(`The planting uses ${all.stats.plantLots} different parts and colors, more than ${PLANT_LOTS}: .*\\(olive tree adds \\d+, shade tree adds \\d+`));
 });
 
-test('wall details hang on side-stud bricks set in the wall, and need them', () => {
+test('a leafy sprig turns to fan its leaves into open space, and one with nowhere to go is warned about', () => {
+  // its three leaves fan almost a stud over the cells on one side (north-east at rot 0), and it turns freely on its stud
+  const brick = (x, z) => ({ op: 'place', phase: 'p', part: 'brick:1x1', at: [x, 0, z], color: 'White' });
+  const sprig = (around) => compile({ name: 's', phases: ['p'], ops: [...around, { op: 'place', phase: 'p', part: 'sprig1', at: [10, 0, 10], color: 'Green' }] });
+  const walled = sprig([brick(11, 10), brick(10, 9)]); // bricks east and north: it fans south-west
+  assert.deepEqual([walled.warnings, walled.parts.find((p) => p.key === 'sprig1').rot], [[], 2]);
+  // a turn the design gives is kept when it's clear
+  const given = compile({ name: 's', phases: ['p'], ops: [{ op: 'place', phase: 'p', part: 'sprig1', at: [10, 0, 10], rot: 3, color: 'Green' }] });
+  assert.equal(given.parts[0].rot, 3);
+  const boxed = sprig([brick(11, 10), brick(10, 9), brick(9, 10), brick(10, 11)]);
+  assert.match(boxed.warnings.map((w) => w.msg).join(), /The plant plate round 1 x 1 with 3 leaves at \(10, 0, 10\) has no room: its leaves would cut into the brick 1 x 1 at/);
+  // shrubs side by side have nowhere to spread their facing leaves; a stud of room each and they're fine
+  const shrubs = (gap) => compile({ name: 'h', phases: ['p'], ops: [{ op: 'plant', phase: 'p', kind: 'shrub', at: [[10, 0, 10], [12 + gap, 0, 10]] }] });
+  assert.match(shrubs(0).warnings.map((w) => w.msg).join(), /The shrub at \(10, 0, 10\) has no room: its leaves would cut into the shrub at \(12, 0, 10\) \(and 1 more of these plants too\)/);
+  assert.deepEqual(shrubs(2).warnings, []);
+  // each sprig of a shrub standing alone fans outward, away from the others
+  const alone = shrubs(20).parts.filter((p) => p.key === 'sprig1' && p.copy === 0 && p.y === 3);
+  assert.deepEqual(alone.map((p) => [p.x - 10, p.z - 10, p.rot]).sort(), [[0, 0, 3], [0, 1, 2], [1, 0, 0], [1, 1, 1]]);
+});
+
+test('a plant bush\'s blades, a pine\'s branches and a palm\'s fronds take room past their cells too', () => {
+  // grasses under a low roof: the bush's blades stand 2 1/2 plates above it and spread almost a stud
+  const under = (y) => compile({ name: 'g', phases: ['p'], ops: [{ op: 'plant', phase: 'p', kind: 'grasses', at: [[10, 0, 10]] },
+    { op: 'place', phase: 'p', part: 'plate:4x4', at: [9, y, 9], color: 'White' }] });
+  assert.match(under(14).warnings.map((w) => w.msg).join(), /The grasses at \(10, 0, 10\) has no room: its blades would cut into the plate 4 x 4 at \(9, 14, 9\)/);
+  assert.deepEqual(under(16).warnings, []);
+  // a wall 24 plates tall at x, beside a plant at (10, 10)
+  const nextTo = (kind, x) => compile({ name: 'w', phases: ['p'], ops: [{ op: 'plant', phase: 'p', kind, at: [[10, 0, 10]] },
+    ...[0, 3, 6, 9, 12, 15, 18, 21].map((y) => ({ op: 'fill', phase: 'p', kind: 'brick', color: 'White', y, rects: [[x, 4, x, 16]] }))] }).warnings.map((w) => w.msg).join();
+  assert.match(nextTo('small pine', 12), /its branches would cut into/);
+  assert.equal(nextTo('small pine', 13), '');
+  assert.match(nextTo('palm', 14), /The palm at \(10, 0, 10\) has no room: its fronds would cut into the brick/);
+  assert.equal(nextTo('palm', 16), '');
+  // the palm: two palm tops a round brick apart, each with two opposite fronds clipped to its corner bars, pointing
+  // straight out (diagonally); the crown spreads 11 x 11 around the trunk
+  const palm = compile({ name: 'p', plate: 48, phases: ['p'], ops: [{ op: 'plant', phase: 'p', kind: 'palm', at: [[20, 0, 20]] }] });
+  const tops = palm.parts.filter((p) => p.key === 'palmtop'), fronds = palm.parts.filter((p) => p.key === 'swordleaf');
+  assert.deepEqual([tops.length, fronds.length, palm.warnings], [2, 4, []]);
+  assert.deepEqual(fronds.map((f) => [f.y, f.rot, tops.findIndex((t) => f.mount[0] === t.id)]), [[18, 0, 0], [18, 2, 0], [24, 1, 1], [24, 3, 1]]);
+  assert.deepEqual([Math.min(...fronds.map((f) => f.x)), Math.max(...fronds.map((f) => f.x + f.w - 1)), Math.min(...fronds.map((f) => f.z)), Math.max(...fronds.map((f) => f.z + f.d - 1))], [15, 25, 15, 25]);
+});
+
+test('wall details hang on side-stud bricks set in the wall, and need them; a lantern juts out of the wall on a plate', () => {
   const walls = { op: 'walls', phase: 'W', color: 'White', courses: [0, 3], base: 0, segments: [[4, 10, 14, 10], [4, 11, 4, 16], [14, 11, 14, 16], [5, 16, 13, 16]],
     openings: [{ cells: [6, 16, 6, 16], courses: [2, 2], fill: { part: 'snot', face: 'S' } }, { cells: [10, 16, 11, 16], courses: [3, 3], fill: { part: 'snot', face: 'S' } }] };
   const d = (details) => ({ name: 'd', phases: ['W', 'D'], ops: [walls, ...details.map((x) => ({ op: 'detail', phase: 'D', ...x }))] });
   const ok = compile(d([{ kind: 'lantern', at: [[6, 6, 16]] }, { kind: 'house number', at: [[10, 9, 16]] }]));
   assert.deepEqual([ok.errors, roofWarnings(ok)], [[], []]);
   const mounted = ok.parts.filter((p) => p.mount);
-  assert.deepEqual(mounted.map((p) => [p.name, p.z]), [['Bracket 1 x 1 - 1 x 1', 17], ['Tile 1 x 2 (on side studs)', 17]]);
-  // only the bracket hangs on the side stud; the lamp stands on the bracket's stud, and its cap on the cone
-  const lamp = ok.parts.filter((p) => p.x === 6 && p.z === 17).sort((a, b) => a.y - b.y);
-  assert.deepEqual(lamp.map((p) => [p.name, p.y]), [['Bracket 1 x 1 - 1 x 1', 6], ['Cone 1 x 1', 7], ['Plate round 1 x 1', 10]]);
-  assert.ok(ok.joints.some(([a, b]) => a === lamp[1].id && b === lamp[0].id), 'the cone is held by the bracket stud');
-  assert.equal(ok.inventory.filter((l) => l.no === '87087').reduce((a, l) => a + l.q, 0), 3);
+  assert.deepEqual(mounted.map((p) => [p.name, p.z]), [['Tile 1 x 2 (on side studs)', 17]]);
+  // a lantern's brick is built from plates instead: a black 1 x 2 plate juts a stud out of the wall at the bottom of
+  // the course, two 1 x 1 plates fill the course above it, and the lamp stands on the jutting stud, its cap on the cone
+  const lamp = ok.parts.filter((p) => p.x === 6 && (p.z === 16 || p.z === 17) && p.y >= 6 && p.y <= 10).sort((a, b) => a.y - b.y || a.z - b.z);
+  assert.deepEqual(lamp.map((p) => [p.name, p.color, p.y, p.z, p.d]), [['Plate 1 x 2', 'Black', 6, 16, 2], ['Plate 1 x 1', 'White', 7, 16, 1], ['Cone 1 x 1', 'Trans-Yellow', 7, 17, 1],
+    ['Plate 1 x 1', 'White', 8, 16, 1], ['Plate round 1 x 1', 'Black', 10, 17, 1]]);
+  assert.ok(ok.joints.some(([a, b]) => a === lamp[2].id && b === lamp[0].id), 'the cone is held by the jutting stud');
+  assert.ok(ok.joints.some(([a, b]) => a === lamp[1].id && b === lamp[0].id), 'the plate above holds the jutting plate in the wall');
+  assert.equal(ok.inventory.filter((l) => l.no === '87087').reduce((a, l) => a + l.q, 0), 2);
   assert.match(compile(d([{ kind: 'lantern', at: [[8, 6, 16]] }])).errors[0].msg, /No side-stud brick at \(8, 6, 16\)/);
   assert.match(compile(d([{ kind: 'house number', at: [[6, 6, 16]] }])).errors[0].msg, /two side-stud bricks side by side/);
 });
