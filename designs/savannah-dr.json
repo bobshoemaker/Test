@@ -237,6 +237,7 @@
        {"part":"tile:2x1", "color":"Red", "at":[0,2,3]},
        {"part":"plate:2x2", "color":"Red", "at":[0,5,1]}
      ]},
-    {"op":"floor", "phase":"Ground floor and garage", "note":"Floor tiles inside the walls (last, so it only fills what nothing else claimed), so no baseplate shows through the windows", "kind":"tile", "color":"Tan"}
+    {"op":"floor", "phase":"Ground floor and garage", "note":"Floor plates inside the house, studs up for furniture (last, so it only fills what nothing else claimed), so no baseplate shows through the windows", "color":"Tan", "rects":[[12,5,29,22]]},
+    {"op":"floor", "phase":"Ground floor and garage", "note":"A smooth garage floor", "kind":"tile", "color":"Tan", "rects":[[2,13,11,24]]}
   ]
 }

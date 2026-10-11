@@ -16,7 +16,7 @@ test('634-unit-a-mini compiles clean on the Mini\'s 16 x 16 plate, and under GoB
   const d = load('634-unit-a-mini'), r = compile(d);
   assert.deepEqual(r.errors.map((e) => e.msg), []);
   assert.deepEqual(r.warnings.map((e) => e.msg), []);
-  assert.equal(r.stats.pieces, 288);
+  assert.equal(r.stats.pieces, 284);
   assert.deepEqual([r.stats.plate, r.stats.baseThick], [16, 1], 'an ordinary plate, a plate thick');
   const g = compile({ ...clone(d), supplier: 'gobricks' }), plate = g.inventory.find((e) => e.kind === 'baseplate');
   assert.deepEqual([g.errors, g.warnings], [[], []]);
@@ -35,7 +35,7 @@ test('the Mini counts 2 courses as a story: its one-story walls enclose a floor'
   assert.match(compile({ name: 'x', plate: 24, phases: ['p'], ops: [] }).errors[0].msg, /plate must be 16, 32 or 48/);
 });
 
-for (const [name, pieces] of [['savannah-dr', 1266], ['634-unit-a', 826], ['griffith-park', 2331]]) {
+for (const [name, pieces] of [['savannah-dr', 1251], ['634-unit-a', 813], ['griffith-park', 2273]]) {
   test(`${name} compiles clean`, () => {
     const r = compile(load(name));
     assert.deepEqual(r.errors.map((e) => e.msg), []);
@@ -265,15 +265,19 @@ test('a door must meet the ground in front of it, and a garage door needs a driv
   assert.match(compile(door).errors.map((e) => e.msg).join(' '), /Opening kind "window"/);
 });
 
-test('the baseplate may not show inside a building, and a floor op tiles exactly the inside', () => {
+test('the baseplate may not show inside a building, and a floor op floors exactly the inside, studs up for furniture', () => {
   const walls = { op: 'walls', phase: 'a', color: 'White', courses: [0, 3], base: 0, segments: [[10, 10, 17, 10], [10, 15, 17, 15], [10, 11, 10, 14], [17, 11, 17, 14]] };
   const bare = compile({ name: 'b', phases: ['a'], ops: [walls] });
   assert.match(bare.warnings.map((w) => w.msg).join(' '), /baseplate shows inside a building at 24 studs/);
   const floored = compile({ name: 'f', phases: ['a'], ops: [walls, { op: 'floor', phase: 'a', color: 'Tan' }] });
   assert.doesNotMatch(floored.warnings.map((w) => w.msg).join(' '), /baseplate shows/);
-  const tiles = floored.parts.filter((p) => p.op === 1);
-  assert.equal(tiles.reduce((a, p) => a + p.w * p.d, 0), 24);
-  assert.ok(tiles.every((p) => p.x >= 11 && p.x + p.w <= 17 && p.z >= 11 && p.z + p.d <= 15 && p.y === 0));
+  const floor = floored.parts.filter((p) => p.op === 1);
+  assert.equal(floor.reduce((a, p) => a + p.w * p.d, 0), 24);
+  assert.ok(floor.every((p) => p.x >= 11 && p.x + p.w <= 17 && p.z >= 11 && p.z + p.d <= 15 && p.y === 0));
+  // plates, so a stud stands up on every cell for furniture; "kind": "tile" makes a smooth floor (a garage)
+  assert.deepEqual([floor.every((p) => p.kind === 'plate'), floor.reduce((a, p) => a + p.studs.length, 0)], [true, 24]);
+  const smooth = compile({ name: 's', phases: ['a'], ops: [walls, { op: 'floor', phase: 'a', color: 'Tan', kind: 'tile' }] }).parts.filter((p) => p.op === 1);
+  assert.deepEqual([smooth.every((p) => p.kind === 'tile'), smooth.reduce((a, p) => a + p.studs.length, 0)], [true, 0]);
   // a low garden wall is not a building: nothing inside it is flagged
   const garden = compile({ name: 'g', phases: ['a'], ops: [{ ...walls, courses: [0, 1] }] });
   assert.doesNotMatch(garden.warnings.map((w) => w.msg).join(' '), /baseplate shows/);

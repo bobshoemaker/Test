@@ -3452,7 +3452,6 @@
       "phase": "Main house",
       "liftoff": "Main floor",
       "color": "Medium Nougat",
-      "kind": "tile",
       "y": 15,
       "rects": [
         [
@@ -3474,7 +3473,6 @@
       "phase": "Bedroom wing over garage",
       "liftoff": "Bedroom wing",
       "color": "Medium Nougat",
-      "kind": "tile",
       "y": 15,
       "rects": [
         [

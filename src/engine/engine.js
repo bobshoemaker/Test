@@ -720,11 +720,12 @@ function compile(design){
         const level=new Map(); for(const r of op.rects) for(const [x,z] of rectCells(r)) level.set(x+','+z,op.color);
         const ids=pack(level,op.kind||'tile',op.y||0,meta); if((op.kind||'tile')==='tile') studTexture(ids,op,i,op.liftoff||op.assembly?0:0.15);
         mixColors(ids,op,op.color,i); break; }
-      case 'floor': { // every stud inside the buildings (within rects, if given) at height y
-        const lim=op.rects?new Set(op.rects.flatMap(r=>rectCells(r)).map(([x,z])=>x+','+z)):null, level=new Map();
+      case 'floor': { // every stud inside the buildings (within rects, if given) at height y: plates, so the floor
+        // shows studs all over for furniture to stand on, or tiles for a smooth floor ("kind": "tile", a garage)
+        const lim=op.rects?new Set(op.rects.flatMap(r=>rectCells(r)).map(([x,z])=>x+','+z)):null, level=new Map(), kind=op.kind||'plate';
         for(const k of insideCells()) if(!lim||lim.has(k)) level.set(k,op.color);
         if(!level.size) warnings.push({msg:'The floor op found no studs inside walls (it floors what walls at least '+STORY+' courses tall enclose)', op:i});
-        const fids=pack(level,op.kind||'tile',op.y||0,meta); if((op.kind||'tile')==='tile') studTexture(fids,op,i,0.08); break; }
+        const fids=pack(level,kind,op.y||0,meta); if(kind==='tile') studTexture(fids,op,i,0.08); break; }
       case 'lawn': { // bare ground made into a finished lawn: patches of lighter and darker green, tufts, a few flowers
         const T=LAWN[op.texture||'lawn']; if(!T){ errors.push({msg:`Lawn texture must be one of ${Object.keys(LAWN).join(', ')}`, op:i}); break; }
         const inside=insideCells(), area=[];
