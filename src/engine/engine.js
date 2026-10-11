@@ -27,6 +27,10 @@ const PACK_SIZES = {
 const H = {brick:3, plate:1, tile:1};
 const KIND_NAME = {brick:'Brick', plate:'Plate', tile:'Tile'};
 const KIND_COST = {brick:0.08, plate:0.05, tile:0.06};
+// Special parts. "reach": where a part is drawn past its own cells (leaves that fan out, blades that spread, fronds
+// that droop), measured from its LDraw geometry: [i, j, s0, s1] is a cell beside or above the part, in its own
+// layout at rot 0 like a footprint cell, taken from half plate s0 to half plate s1 counted from the part's bottom.
+// Nothing else may stand there (see the overhang check in compile).
 const SPECIAL = {
   cheese:{no:'54200', name:'Slope 30 1 x 1 x 2/3', w:1,d:1,h:2, studs:false, shape:'cheese', cost:0.07}, // 2/3 of a brick: 2 plates
   round1:{no:'3062b', name:'Brick round 1 x 1', w:1,d:1,h:3, shape:'cyl', diam:0.94, cost:0.06},
@@ -39,25 +43,43 @@ const SPECIAL = {
   arch41:{no:'3659', name:'Arch 1 x 4', w:4,d:1,h:3, shape:'arch', archTop:1, cost:0.10},
   win23:{no:'60593', name:'Window 1 x 2 x 3', w:2,d:1,h:9, shape:'window', glass:'60602', glassName:'Glass for window 1 x 2 x 3', cost:0.20},
   fence4:{no:'3633', name:'Fence 1 x 4 x 1', w:4,d:1,h:3, shape:'fence', studs:false, cost:0.10},
-  // palm top: a hub with four upright bars; fronds clip onto the bars
-  palmtop:{no:'2566', name:'Palm tree top', w:1,d:1,h:3, studs:false, shape:'palm', cost:0.30},
-  swordleaf:{no:'30239', name:'Plant leaves 6 x 5 swordleaf with clip', w:5,d:6,h:1, clip:true, shape:'swordleaf', cost:0.15},
+  // palm top: a hub a brick tall with a pin underneath (into the stud below), a stud on top and four bars standing
+  // up at its corners; fronds clip onto the bars
+  palmtop:{no:'2566', name:'Palm tree top', w:1,d:1,h:3, shape:'palm', cost:0.30,
+    reach:[[-1,-1,4,11],[0,-1,4,11],[1,-1,4,11],[-1,0,4,11],[1,0,4,11],[-1,1,4,11],[0,1,4,11],[1,1,4,11]]},
+  // a frond: its clip grips a bar at a palm top's corner and it fans straight out from there, diagonally (at rot 0 to
+  // the north-east, from the bar at corner "bar" of its 7 x 7 box), its sword leaves drooping; "cells": the cells of the
+  // box it takes at its own height, near the clip (the default is all of them)
+  swordleaf:{no:'30239', name:'Plant leaves 6 x 5 swordleaf with clip', w:7,d:7,h:1, clip:true, shape:'swordleaf', cost:0.15, bar:[2,5],
+    cells:[[2,2],[3,2],[4,2],[1,3],[2,3],[3,3],[4,3],[1,4],[2,4],[3,4],[4,4],[2,5],[3,5]],
+    reach:[[3,0,-7,-3],[4,0,-7,-3],[5,0,-6,-5],[6,0,-7,-5],[1,1,-7,-3],[2,1,-7,-2],[3,1,-4,-1],[4,1,-4,-1],[5,1,-6,-2],[6,1,-6,-5],
+      [0,2,-7,-3],[1,2,-6,-1],[2,2,-4,-1],[3,2,-2,-1],[4,2,-2,-1],[5,2,-4,-1],[6,2,-7,-3],[1,3,-3,-1],[2,3,-3,-1],[3,3,-3,-1],[4,3,-2,-1],
+      [5,3,-4,-1],[6,3,-7,-3],[1,4,-2,-1],[2,4,-3,-1],[3,4,-3,-1],[4,4,-4,-1],[5,4,-7,-2],[2,5,-2,-1],[3,5,-3,-1],[4,5,-6,-1],[5,5,-7,-3],[4,6,-7,-3]]},
   // foliage, laid out from the LDraw parts library (cells as [i, j] on the w x d footprint at rot 0):
   // "plant leaves" are flat branching stems with a stud on each tip. "at" is the stud a plant presses
   // them onto, "socks" every stud underneath that can grip, "tips" the studs on top.
-  leaves43:{no:'2423', name:'Plant leaves 4 x 3', w:3,d:4,h:1, shape:'leaves', at:[1,3], socks:[[1,3]], tips:[[1,3],[0,2],[2,2],[0,1],[2,1],[1,0]], cost:0.08},
+  // "gaps": cells of the footprint the branches leave open, where another plant's leaves may reach
+  leaves43:{no:'2423', name:'Plant leaves 4 x 3', w:3,d:4,h:1, shape:'leaves', at:[1,3], socks:[[1,3]], tips:[[1,3],[0,2],[2,2],[0,1],[2,1],[1,0]], gaps:[[0,0],[2,0]], cost:0.08},
   leaves65:{no:'2417', name:'Plant leaves 6 x 5', w:5,d:6,h:1, shape:'leaves', at:[2,3], socks:[[4,5],[0,5],[4,3],[2,3],[0,3],[2,0]],
-    tips:[[4,5],[3,5],[1,5],[0,5],[4,4],[0,4],[4,3],[2,3],[0,3],[3,2],[1,2],[3,1],[1,1],[2,0]], cost:0.12},
+    tips:[[4,5],[3,5],[1,5],[0,5],[4,4],[0,4],[4,3],[2,3],[0,3],[3,2],[1,2],[3,1],[1,1],[2,0]], gaps:[[0,0],[1,0],[3,0],[4,0],[0,1],[4,1],[0,2],[4,2],[2,5]], cost:0.12},
   // molded pine trees (LEGO's own conifers): a 2 x 2 base that presses onto studs, branches past it, no studs on top
-  pine4:{no:'3471', name:'Plant tree pine 4 x 4 x 6 2/3', w:4,d:4,h:20, studs:false, shape:'pine', socks:[[1,1],[2,1],[1,2],[2,2]], cost:0.60},
-  pine2:{no:'2435', name:'Plant tree pine small 2 x 2 x 4', w:2,d:2,h:12, studs:false, shape:'pine', cost:0.35},
-  bush224:{no:'6064', name:'Plant bush 2 x 2 x 4', w:2,d:2,h:12, studs:false, shape:'bush', cost:0.15},
-  sprig1:{no:'32607', name:'Plant plate round 1 x 1 with 3 leaves', w:1,d:1,h:1, shape:'sprig', cost:0.05},
+  pine4:{no:'3471', name:'Plant tree pine 4 x 4 x 6 2/3', w:4,d:4,h:20, studs:false, shape:'pine', socks:[[1,1],[2,1],[1,2],[2,2]], cost:0.60,
+    reach:[[1,-1,10,12],[2,-1,10,12],[-1,1,10,12],[4,1,10,12],[-1,2,10,12],[4,2,10,12],[1,4,10,12],[2,4,10,12]]},
+  pine2:{no:'2435', name:'Plant tree pine small 2 x 2 x 4', w:2,d:2,h:12, studs:false, shape:'pine', cost:0.35,
+    reach:[[0,-1,0,12],[1,-1,0,12],[-1,0,0,12],[2,0,0,12],[-1,1,0,12],[2,1,0,12],[0,2,0,12],[1,2,0,12],[-1,-1,4,5],[2,-1,4,5],[-1,2,4,5],[2,2,4,5]]},
+  // its blades spread almost a stud past its base all round and stand 2 1/2 plates above it
+  bush224:{no:'6064', name:'Plant bush 2 x 2 x 4', w:2,d:2,h:12, studs:false, shape:'bush', cost:0.15,
+    reach:[[-1,-1,7,23],[0,-1,2,28],[1,-1,2,28],[2,-1,7,23],[-1,0,2,28],[2,0,2,28],[-1,1,2,28],[2,1,2,28],[-1,2,7,23],[0,2,2,28],[1,2,2,28],[2,2,7,23],
+      [0,0,24,29],[1,0,24,29],[0,1,24,29],[1,1,24,29]]},
+  // three leaves fan out almost a stud over the neighbouring cells on one side (at rot 0, east, north-east and north),
+  // rising half a plate; it turns freely on its one stud ("turns"), so the compiler turns it to fan into open space
+  sprig1:{no:'32607', name:'Plant plate round 1 x 1 with 3 leaves', w:1,d:1,h:1, shape:'sprig', cost:0.05, turns:true, reach:[[1,0,1,2],[1,-1,1,2],[0,-1,1,2]]},
   flower1:{no:'33291', name:'Plate round 1 x 1 with flower edge', w:1,d:1,h:1, shape:'flower', cost:0.05},
   // Sideways building (SNOT): a brick with a stud on one side sits in a wall opening, facing out,
   // and wall details hang on that stud (the "detail" op). Mounted parts are drawn as small blocks.
   snot:{no:'87087', name:'Brick 1 x 1 with stud on 1 side', w:1,d:1,h:3, shape:'box', cost:0.08},
-  bracket11:{no:'36840', name:'Bracket 1 x 1 - 1 x 1', w:1,d:1,h:1, shape:'bracket', cost:0.06},
+  // (at rot 0 its upright stands at the north edge, a little past the cell, its stud pointing north)
+  bracket11:{no:'36840', name:'Bracket 1 x 1 - 1 x 1', w:1,d:1,h:1, shape:'bracket', cost:0.06, reach:[[0,-1,0,5]]},
   cone1:{no:'4589', name:'Cone 1 x 1', w:1,d:1,h:3, shape:'cyl', diam:0.9, cost:0.05},
   sidetile1:{no:'3070b', name:'Tile 1 x 1 (on a side stud)', w:1,d:1,h:3, studs:false, shape:'box', cost:0.05},
   sidetile2:{no:'3069b', name:'Tile 1 x 2 (on side studs)', w:2,d:1,h:3, studs:false, shape:'box', cost:0.06}
@@ -70,8 +92,9 @@ const GLASS_COST = 0.10, BASEPLATES = {16:{no:'91405', name:'Plate 16 x 16', col
 // Plant library for the "plant" op: sub-builds checked to stand on their own, placed by kind.
 // Offsets are from the plant's corner stud; "bloom" parts take the op's bloom color.
 const P=(part,color,x,y,z,dir)=>({part,color,at:[x,y,z],...(typeof dir==='number'?{rot:dir}:dir?{dir}:{})});
-// a swordleaf clipped onto the palm top at (cx, cz) (the plant's part number "on"), fanning out toward dir
-const FROND=(color,cx,y,cz,dir,on)=>{ const [x,z]={N:[cx-2,cz-6],S:[cx-2,cz+1],E:[cx+1,cz-2],W:[cx-6,cz-2]}[dir]; return {...P('swordleaf',color,x,y,z,'EW'.includes(dir)?1:0),dir,on}; };
+// a swordleaf clipped onto the bar at the dir corner (NE, SE, SW or NW) of the palm top at (cx, cz) (the plant's
+// part number "on"), fanning out that way: its box sits so its clip's corner lands on the bar
+const FROND=(color,cx,y,cz,dir,on)=>{ const [x,z]={NE:[cx-1,cz-5],SE:[cx-1,cz-1],SW:[cx-5,cz-1],NW:[cx-5,cz-5]}[dir]; return {...P('swordleaf',color,x,y,z,{NE:0,SE:1,SW:2,NW:3}[dir]),on}; };
 // a leaf clipped onto the stud at (cx, cz): its corner is placed so its middle hole lands there
 const LEAF=(part,color,cx,y,cz,rot=0)=>{ const [ax,az]=turnCell(SPECIAL[part],SPECIAL[part].at,rot); return P(part,color,cx-ax,y,cz-az,rot); };
 // the studs on top of that leaf, other than the one it's pressed onto: where fruit, flowers or sprigs go
@@ -83,12 +106,29 @@ const TIPS=(part,cx,cz,rot=0)=>{ const d=SPECIAL[part], [ax,az]=turnCell(d,d.at,
 // A trunk of n pieces stacked from the ground
 const TRUNK=(part,color,n)=>Array.from({length:n},(_,i)=>P(part,color,0,i*SPECIAL[part].h,0));
 // A canopy the way LEGO builds its trees: leaves turned a quarter each layer, each pressed onto a 1 x 1 round plate
-// on the middle of the one below, which lifts it a plate so the tips between show sprigs, flowers or fruit on every
-// other stud. layers: [part, color, rot] from the bottom, from height y on the stud at (0, 0); deco: [part, color]
-// pairs taken in turn (the first also crowns the top).
-const CANOPY=(y,layers,deco,spacer='Green')=>layers.flatMap(([part,color,rot],i)=>{ const top=i===layers.length-1, yy=y+i*2;
-  return [LEAF(part,color,0,yy,0,rot),top?P(deco[0][0],deco[0][1],0,yy+1,0):P('roundplate1',spacer,0,yy+1,0),
-    ...TIPS(part,0,0,rot).filter((c,k)=>k%2===0).map(([x,z],k)=>{ const [dp,dc]=deco[(k+i)%deco.length]; return P(dp,dc,x,yy+1,z); })]; });
+// on the middle of the one below, which lifts it a plate so the tips between show sprigs, flowers or fruit on about
+// every other stud. layers: [part, color, rot] from the bottom, from height y on the stud at (0, 0); deco: [part,
+// color] pairs taken in turn (the first also crowns the top). A leafy sprig's leaves fan over the cells on one side
+// of it and rise into the layer above, so a sprig goes only on a tip with a side clear of the leaves above and of the
+// other decorations (turned that way: outward); the others get the next decoration that fits, or none.
+const FAN_CELLS=r=>SPECIAL.sprig1.reach.map(c=>turnCell(SPECIAL.sprig1,c,r));
+const CANOPY=(y,layers,deco,spacer='Green')=>{
+  // the cells each layer of leaves covers, from the stud (0, 0): its footprint less the gaps between its branches
+  const cover=layers.map(([part,,rot])=>{ const d=SPECIAL[part], [ax,az]=turnCell(d,d.at,rot), gaps=new Set((d.gaps||[]).map(c=>turnCell(d,c,rot).join())), out=new Set();
+    for(let i=0;i<(rot%2?d.d:d.w);i++) for(let j=0;j<(rot%2?d.w:d.d);j++) if(!gaps.has(i+','+j)) out.add((i-ax)+','+(j-az)); return out; });
+  return layers.flatMap(([part,color,rot],i)=>{ const top=i===layers.length-1, yy=y+i*2, above=cover[i+1]||new Set(), tips=TIPS(part,0,0,rot);
+    const taken=new Set(['0,0']), fanned=new Set(), out=[LEAF(part,color,0,yy,0,rot)];
+    // a sprig's way out: the turn whose cells are clear (outward first)
+    const room=(x,z)=>[0,1,2,3].map(r=>({r,cells:FAN_CELLS(r).map(([a,b])=>(x+a)+','+(z+b))}))
+      .filter(f=>f.cells.every(k=>!taken.has(k)&&!fanned.has(k)&&!above.has(k)))
+      .sort((a,b)=>{ const o=f=>{ const [dx,dz]=[[1,-1],[1,1],[-1,1],[-1,-1]][f.r]; return dx*x+dz*z; }; return o(b)-o(a); })[0];
+    const put=(x,z,[dp,dc])=>{ if(fanned.has(x+','+z)) return false;
+      if(SPECIAL[dp]&&SPECIAL[dp].reach){ const f=room(x,z); if(!f) return false; f.cells.forEach(k=>fanned.add(k)); taken.add(x+','+z); out.push(P(dp,dc,x,yy+1,z,f.r)); return true; }
+      taken.add(x+','+z); out.push(P(dp,dc,x,yy+1,z)); return true; };
+    if(top) put(0,0,deco[0]); else out.push(P('roundplate1',spacer,0,yy+1,0));
+    let n=0; const most=Math.ceil(tips.length/2);
+    for(const [x,z] of tips){ if(n>=most) break; for(let t=0;t<deco.length;t++) if(put(x,z,deco[(n+i+t)%deco.length])){ n++; break; } }
+    return out; }); };
 const PLANT_LOTS = 16; // the most different parts and colors a design's planting may use
 const PLANTS = {
   // trees: a trunk, then "plant leaves" branches pointing different ways at stepped heights, with
@@ -110,8 +150,11 @@ const PLANTS = {
   'bougainvillea':{name:'Bougainvillea', parts:[P('roundbrick2','Green',0,0,0),P('roundbrick2','Green',0,3,0),LEAF('leaves43','Green',0,6,0,0),LEAF('leaves43','Magenta',1,6,1,2),
     ...TIPS('leaves43',0,0,0).map(([x,z],k)=>P('flower1',k%2?'Dark Pink':'Magenta',x,7,z)),...TIPS('leaves43',1,1,2).map(([x,z],k)=>P('flower1',k%2?'Magenta':'Dark Pink',x,7,z)),
     P('flower1','Magenta',0,7,0),P('flower1','Magenta',1,7,1)]},
-  'palm':{name:'Palm tree', parts:[P('roundplate2','Reddish Brown',0,0,0),...[1,4,7,10,13].map(y=>P('round1','Tan',0,y,0)),
-    P('roundplate1','Tan',0,16,0),P('palmtop','Tan',0,17,0),FROND('Green',0,17,0,'N',7),FROND('Bright Green',0,17,0,'S',7),FROND('Green',0,18,0,'E',7),FROND('Bright Green',0,18,0,'W',7)]},
+  // two palm tops a round brick apart, each with a pair of opposite fronds pointing straight out from its bars: four
+  // fronds on one palm top would cut into each other, and a frond turned any other way reaches the trunk with its clip
+  'palm':{name:'Palm tree', parts:[P('roundplate2','Reddish Brown',0,0,0),...[1,4,7,10].map(y=>P('round1','Tan',0,y,0)),
+    P('roundplate1','Tan',0,13,0),P('palmtop','Tan',0,14,0),P('round1','Tan',0,17,0),P('palmtop','Tan',0,20,0),
+    FROND('Green',0,18,0,'NE',6),FROND('Bright Green',0,18,0,'SW',6),FROND('Bright Green',0,24,0,'SE',8),FROND('Green',0,24,0,'NW',8)]},
   // conifers: LEGO's molded pines on a short trunk; the Italian cypress is a dark green column under a small pine
   'pine':{name:'Pine tree', parts:[P('roundbrick2','Reddish Brown',0,0,0),P('pine4','Green',-1,3,-1)]},
   'small pine':{name:'Small pine', parts:[P('roundplate2','Reddish Brown',0,0,0),P('pine2','Green',0,1,0)]},
@@ -129,8 +172,9 @@ const PLANTS = {
     P('flower1','bloom',0,4,0),P('flower1','bloom',1,4,1)]},
   'lavender':{name:'Lavender', parts:[P('plate:2x1','Reddish Brown',0,0,0),P('sprig1','Olive Green',0,1,0),P('sprig1','Olive Green',1,1,0),P('flower1','Medium Lavender',0,2,0),P('flower1','Medium Lavender',1,2,0)]},
   'succulents':{name:'Succulents', parts:[P('plate:2x2','Reddish Brown',0,0,0),P('sprig1','Olive Green',0,1,0),P('cheese','Sand Green',1,1,0,'E'),P('cheese','Sand Green',0,1,1,'S'),P('sprig1','Olive Green',1,1,1),P('flower1','Coral',0,2,0)]},
-  'flower bed':{name:'Flower bed', parts:[P('plate:4x2','Reddish Brown',0,0,0),...[0,1,2,3].flatMap(x=>[0,1].map(z=>(x+z)%2?P('sprig1','Green',x,1,z):P('flower1','bloom',x,1,z))),
-    ...[0,2].map(x=>P('flower1','bloom',x+1,2,0)),...[0,2].map(x=>P('flower1','bloom',x,2,1))]},
+  // leafy sprigs on the corners, fanning outward, and a second layer of flowers and sprigs over the middle
+  'flower bed':{name:'Flower bed', parts:[P('plate:4x2','Reddish Brown',0,0,0),...[[0,0],[3,0],[0,1],[3,1]].map(([x,z])=>P('sprig1','Green',x,1,z)),
+    ...[[1,0],[2,0],[1,1],[2,1]].map(([x,z])=>P('flower1','bloom',x,1,z)),P('flower1','bloom',1,2,0),P('sprig1','Green',2,2,0),P('sprig1','Green',1,2,1),P('flower1','bloom',2,2,1)]},
 };
 
 
@@ -207,14 +251,15 @@ function makePart(def,x,y,z,rot,color,meta){
       for(let q=leg?0:def.h-def.archTop;q<def.h;q++) occ.push([cx,cz,y+q]);
       if(leg) sockets.push([cx,cz]); studs.push([cx,cz]); }
   } else {
-    const set=L=>L?new Set(L.map(c=>turnCell(def,c,rot).join())):null, tips=set(def.tips), socks=set(def.socks||(def.at&&[def.at]));
-    for(let i=0;i<sw;i++) for(let j=0;j<sd;j++){ const cx=x+i, cz=z+j, k=i+','+j;
+    const set=L=>L?new Set(L.map(c=>turnCell(def,c,rot).join())):null, tips=set(def.tips), socks=set(def.socks||(def.at&&[def.at])), takes=set(def.cells);
+    for(let i=0;i<sw;i++) for(let j=0;j<sd;j++){ const cx=x+i, cz=z+j, k=i+','+j; if(takes&&!takes.has(k)) continue;
       for(let q=0;q<def.h;q++) occ.push([cx,cz,y+q]);
       if(def.clip) continue; // held by a clip on a bar, not by studs
       if(tips?tips.has(k):def.studs!==false&&(!socks||socks.has(k))) studs.push([cx,cz]);
       if(!socks||socks.has(k)) sockets.push([cx,cz]); }
   }
   p.occ=occ; p.sockets=sockets; p.studs=studs; p.studSet=new Set(studs.map(s=>s[0]+','+s[1]));
+  if(def.gaps) p.gapSet=new Set(def.gaps.map(c=>{ const [i,j]=turnCell(def,c,rot); return (x+i)+','+(z+j); }));
   return p;
 }
 function lineCells(s){
@@ -248,6 +293,8 @@ function compile(design){
   // wall bricks by cell and height (not course number: each walls op counts its courses from its own base)
   const wallCourse=new Map(); const wallPairs=new Set(); const wallCourses=new Set();
   const abutEdges=[], doors=[], windows=[];
+  // where a lantern goes: its side-stud brick is built as a lamp base instead (see the walls op)
+  const lampAt=new Map(); for(const op of design.ops||[]) if(op&&op.op==='detail'&&String(op.kind||'').toLowerCase()==='lantern') for(const a of op.at||[]) if(Array.isArray(a)) lampAt.set(a.join(','),op.color||'Black');
 
   const commit=p=>{ p.id=parts.length+1; parts.push(p); for(const v of p.occ) occ.set(K3(v[0],v[1],v[2]),p.id); return p; };
   const blocked=p=>{ for(const v of p.occ){ if(v[0]<0||v[1]<0||v[0]>=BASE||v[1]>=BASE) return -1; const o=occ.get(K3(v[0],v[1],v[2])); if(o) return o; } return 0; };
@@ -579,7 +626,13 @@ function compile(design){
           for(const o of opens) if(o.fill.part==='snot' && o.courses[0]===c){
             if(!'NSEW'.includes(o.fill.face||'-')||!o.fill.face) errors.push({msg:`A side-stud brick needs "face": "N", "S", "E" or "W" (the way its stud points)`, op:i});
             if(o.courses[1]!==o.courses[0]) errors.push({msg:`Side-stud bricks fill one course; the opening at (${o.line[0]}) spans ${o.courses[1]-o.courses[0]+1}`, op:i});
-            for(const [cx,cz] of o.line){ const q=place('snot',cx,y,cz,0,o.fill.color||op.color,meta,true); if(q) q.face=o.fill.face; } }
+            for(const [cx,cz] of o.line){
+              // a wall light: a 1 x 2 plate (black) at the bottom of the course juts a stud out of the wall, two 1 x 1
+              // plates in the wall's color fill the course above its inner half, and the lamp stands on its outer stud
+              const [fx,fz]={N:[0,-1],S:[0,1],E:[1,0],W:[-1,0]}[o.fill.face]||[0,0];
+              if(lampAt.has(cx+','+y+','+cz)&&(fx||fz)){ const base=place(fx?'plate:2x1':'plate:1x2',Math.min(cx,cx+fx),y,Math.min(cz,cz+fz),0,lampAt.get(cx+','+y+','+cz),meta,true);
+                if(base){ base.lamp=[cx,cz]; base.face=o.fill.face; for(const k of [1,2]) place('plate:1x1',cx,y+k,cz,0,o.fill.color||op.color,meta,true); } continue; }
+              const q=place('snot',cx,y,cz,0,o.fill.color||op.color,meta,true); if(q) q.face=o.fill.face; } }
           for(const o of opens) if(o.fill.part && o.fill.part!=='snot' && o.courses[0]===c){
             const along=o.cells[1]===o.cells[3], def=resolvePart(o.fill.part), span=o.line.length;
             if(def.w!==span||def.h!==(o.courses[1]-o.courses[0]+1)*3) errors.push({msg:`${def.name} doesn't fit the ${span}-stud, ${o.courses[1]-o.courses[0]+1}-course opening at (${o.line[0]})`, op:i});
@@ -689,12 +742,15 @@ function compile(design){
         if(baseColor!==T.ground) for(const [x,z] of area){ const k=x+','+z; if(!level.has(k)) level.set(k,T.ground); }
         pack(level,'plate',0,meta);
         // tufts and flowers, on a patch or on the baseplate
+        // (a tuft's leaves fan almost a stud over the neighbours on one side, so a tuft goes only where one side is open)
+        const clear=(a,b,y)=>a<0||b<0||a>=BASE||b>=BASE||!(occ.has(K3(a,b,y))||occ.has(K3(a,b,y+1)));
+        const open=(x,y,z)=>[0,1,2,3].some(r=>SPECIAL.sprig1.reach.every(c=>{ const [a,b]=turnCell(SPECIAL.sprig1,c,r); return clear(x+a,z+b,y); }));
         for(const [x,z] of area){ const u=hash(x,z,4), y=occ.has(K3(x,z,0))?1:0;
           if(u<T.flowers) place('flower1',x,y,z,0,T.bloom[Math.floor(hash(x,z,5)*T.bloom.length)],meta,false);
-          else if(u<T.flowers+T.tufts) place('sprig1',x,y,z,0,T.tuft[Math.floor(hash(x,z,6)*T.tuft.length)],meta,false); }
+          else if(u<T.flowers+T.tufts&&open(x,y,z)) place('sprig1',x,y,z,0,T.tuft[Math.floor(hash(x,z,6)*T.tuft.length)],meta,false); }
         break; }
-      case 'place': { const q=place(op.part,op.at[0],op.at[1],op.at[2],op.rot||0,op.color,meta,true); if(q&&op.dir) q.dir=op.dir; break; }
-      case 'places': for(const a of op.at){ const [x,y,z]=a.length===3?a:[a[0],op.y||0,a[1]]; const q=place(op.part,x,y,z,op.rot||0,op.color,meta,true); if(q&&op.dir) q.dir=op.dir; } break;
+      case 'place': { const q=place(op.part,op.at[0],op.at[1],op.at[2],op.rot||0,op.color,meta,true); if(q&&op.dir) q.dir=op.dir; if(q&&op.rot!=null) q.prefer=op.rot; break; }
+      case 'places': for(const a of op.at){ const [x,y,z]=a.length===3?a:[a[0],op.y||0,a[1]]; const q=place(op.part,x,y,z,op.rot||0,op.color,meta,true); if(q&&op.dir) q.dir=op.dir; if(q&&op.rot!=null) q.prefer=op.rot; } break;
       case 'fence': {
         const [x0,z0,x1,z1]=op.line, along=z0===z1, L=along?Math.abs(x1-x0)+1:Math.abs(z1-z0)+1;
         if(L%4) warnings.push({msg:`Fence run from (${x0}, ${z0}) is ${L} studs long, so ${L%4} studs stay open`, op:i});
@@ -704,20 +760,19 @@ function compile(design){
         const si=subs.length; subs.push({name:op.name, phase:op.phase, copies:op.copies.length, op:i, partIds:[]});
         op.copies.forEach((c,ci)=>op.parts.forEach((pp,pi)=>{
           const q=place(pp.part,c[0]+pp.at[0],c[1]+pp.at[1],c[2]+pp.at[2],pp.rot||0,pp.color,Object.assign({},meta,{sub:si,copy:ci,tpl:pi}),true);
-          if(q){ if(pp.dir) q.dir=pp.dir; if(pp.on!==undefined){ const h=subs[si].partIds.map(id=>parts[id-1]).find(o=>o.copy===ci&&o.tpl===pp.on); if(h) q.mount=[h.id]; }
+          if(q){ if(pp.dir) q.dir=pp.dir; if(pp.rot!=null) q.prefer=pp.rot; if(pp.on!==undefined){ const h=subs[si].partIds.map(id=>parts[id-1]).find(o=>o.copy===ci&&o.tpl===pp.on); if(h) q.mount=[h.id]; }
             subs[si].partIds.push(q.id); } }));
         break; }
       case 'detail': {
         const kind=String(op.kind||'').toLowerCase(), FACE={N:[0,-1],S:[0,1],E:[1,0],W:[-1,0]};
-        const hostAt=(x,y,z)=>{ const id=occ.get(K3(x,z,y)); const h=id&&parts[id-1]; return h&&h.key==='snot'&&h.y===y?h:null; };
+        const hostAt=(x,y,z)=>{ const id=occ.get(K3(x,z,y)); const h=id&&parts[id-1]; return h&&h.y===y&&(h.key==='snot'||(kind==='lantern'&&h.lamp&&h.lamp[0]===x&&h.lamp[1]===z))?h:null; };
         for(const at of op.at||[]){ const [x,y,z]=at, h=hostAt(x,y,z);
           if(!h){ errors.push({msg:`No side-stud brick at (${x}, ${y}, ${z}) for the ${kind}; put one in a wall opening with fill {"part":"snot","face":...}`, op:i}); continue; }
           const [dx,dz]=FACE[h.face]||[0,0], ox=x+dx, oz=z+dz, hosts=[h.id];
           const mount=(q)=>{ if(q) q.mount=hosts.slice(); return q; };
-          // lantern: a bracket clips its upright flange onto the side stud; its plate sticks out from the wall
-          // with a stud on top, and the lamp stands on that stud (a trans cone capped with a round plate)
-          if(kind==='lantern'){ const b=mount(place('bracket11',ox,y,oz,0,op.color||'Black',meta,true)); if(b) b.face=h.face;
-            place('cone1',ox,y+1,oz,0,op.glow||'Trans-Yellow',meta,true); place('roundplate1',ox,y+4,oz,0,op.color||'Black',meta,true); }
+          // lantern: the lamp (a trans cone capped with a round plate) stands on the stud of the plate jutting out of the
+          // wall where the side-stud brick would be (the walls op built it)
+          if(kind==='lantern'){ place('cone1',ox,y+1,oz,0,op.glow||'Trans-Yellow',meta,true); place('roundplate1',ox,y+4,oz,0,op.color||'Black',meta,true); }
           else if(kind==='house number'){
             const along=dx===0, h2=along?hostAt(x+1,y,z):hostAt(x,y,z+1);
             if(!h2||h2.face!==h.face){ errors.push({msg:`A house number needs two side-stud bricks side by side facing the same way, at (${x}, ${y}, ${z}) and the next stud ${along?'in x':'in z'}`, op:i}); continue; }
@@ -732,7 +787,7 @@ function compile(design){
         const si=subs.length; subs.push({name:def.name, phase:op.phase, copies:op.at.length, op:i, partIds:[]});
         op.at.forEach((c,ci)=>def.parts.forEach((pp,pi)=>{
           const q=place(pp.part,c[0]+pp.at[0],c[1]+pp.at[1],c[2]+pp.at[2],pp.rot||0,pp.color==='bloom'?(op.bloom||'Bright Pink'):pp.color,Object.assign({},meta,{sub:si,copy:ci,tpl:pi}),true);
-          if(q){ if(pp.dir) q.dir=pp.dir; if(pp.on!==undefined){ const h=subs[si].partIds.map(id=>parts[id-1]).find(o=>o.copy===ci&&o.tpl===pp.on); if(h) q.mount=[h.id]; }
+          if(q){ if(pp.dir) q.dir=pp.dir; if(pp.rot!=null) q.prefer=pp.rot; if(pp.on!==undefined){ const h=subs[si].partIds.map(id=>parts[id-1]).find(o=>o.copy===ci&&o.tpl===pp.on); if(h) q.mount=[h.id]; }
             subs[si].partIds.push(q.id); } }));
         break; }
       default: errors.push({msg:`Unknown operation "${op.op}"`, op:i});
@@ -741,6 +796,56 @@ function compile(design){
   });
 
   for(const p of parts){ const op=design.ops[p.op]; if(op&&op.context) p.context=true; }
+
+  // ---------- overhangs: leaves, blades and fronds drawn past their cells ----------
+  // A part with "reach" (see SPECIAL) takes room beside or above its cells. Nothing else may stand there, and two
+  // overhangs may not share it, or the model shows one piece cutting through another (it couldn't be built that
+  // way). A leafy round plate turns freely on its stud, so it's turned to fan into open space, outward from its plant
+  // when it has the choice; whatever still runs into something is warned about.
+  const fan=new Map(); // "x,z,half plate" -> the part whose overhang is there
+  const linked=new Map(); // a part and what it hangs on (a frond's clip around the palm top's bar) don't count
+  for(const p of parts) for(const h of p.mount||[]){ for(const [a,b] of [[p.id,h],[h,p.id]]){ if(!linked.has(a)) linked.set(a,new Set()); linked.get(a).add(b); } }
+  const reachCells=(p,rot)=>{ const def=SPECIAL[p.key]; return def.reach.map(([i,j,s0,s1])=>{ const [a,b]=turnCell(def,[i,j],rot); return [p.x+a,p.z+b,2*p.y+s0,2*p.y+s1]; }); };
+  const inWay=(p,cells,others)=>{ const hit=new Set(), own=id=>id===p.id||(linked.has(p.id)&&linked.get(p.id).has(id));
+    for(const [x,z,s0,s1] of cells){ if(x<0||z<0||x>=BASE||z>=BASE) continue;
+      for(let s=s0;s<=s1;s++){ const id=occ.get(K3(x,z,Math.floor(s/2))), q=id&&parts[id-1];
+        if(q&&!own(id)&&!(q.gapSet&&q.gapSet.has(x+','+z))) hit.add(id);
+        const o=others&&fan.get(x+','+z+','+s); if(o&&!own(o)) hit.add(o); } }
+    return hit; };
+  const stake=(p,cells)=>{ for(const [x,z,s0,s1] of cells) for(let s=s0;s<=s1;s++){ const k=x+','+z+','+s; if(!fan.has(k)) fan.set(k,p.id); } };
+  const clashes=new Map(); // op -> [{p, hit}]: what each part's overhang runs into (outside its own plant, when it can say)
+  const ownPlant=(p,q)=>p.sub!==undefined&&q.sub===p.sub&&q.copy===p.copy;
+  const clash=(p,hit)=>{ const ids=[...hit], out=ids.filter(id=>!ownPlant(p,parts[id-1])); if(!clashes.has(p.op)) clashes.set(p.op,[]); clashes.get(p.op).push({p,hit:out.length?out:ids}); };
+  const over=parts.filter(p=>SPECIAL[p.key]&&SPECIAL[p.key].reach);
+  // parts set the way they're built first (a bracket by the side it faces)
+  for(const p of over.filter(p=>!SPECIAL[p.key].turns)){ const f=p.key==='bracket11'&&(p.face||p.dir), r=f?{S:0,W:1,N:2,E:3}[f]:p.rot, cells=reachCells(p,r), hit=inWay(p,cells,true); if(hit.size) clash(p,hit); stake(p,cells); }
+  // then the ones that turn: those with the fewest open ways first; each takes the turn its design gave it when that's
+  // clear, else fans outward from the middle of its plant, with a turn picked by where it stands for the rest (so a
+  // lawn's tufts face every which way)
+  const mid=new Map(); for(const p of parts) if(p.sub!==undefined&&p.copy!==undefined){ const k=p.sub+'|'+p.copy, m=mid.get(k)||[1e9,-1e9,1e9,-1e9];
+    mid.set(k,[Math.min(m[0],p.x),Math.max(m[1],p.x+p.w),Math.min(m[2],p.z),Math.max(m[3],p.z+p.d)]); }
+  const FAN_DIR=[[1,-1],[1,1],[-1,1],[-1,-1]]; // the way the leaves fan at rot 0..3 (north-east, south-east, ...)
+  const turners=over.filter(p=>SPECIAL[p.key].turns).map(p=>({p,open:[0,1,2,3].filter(r=>!inWay(p,reachCells(p,r),false).size).length}));
+  turners.sort((a,b)=>a.open-b.open||a.p.id-b.p.id);
+  for(const {p} of turners){ const m=p.sub!==undefined&&mid.get(p.sub+'|'+p.copy), cx=p.x+0.5, cz=p.z+0.5;
+    const h=((Math.imul(p.x+7,73856093)^Math.imul(p.y+3,19349663)^Math.imul(p.z+5,83492791))>>>0)%4;
+    const out=r=>m?FAN_DIR[r][0]*(cx-(m[0]+m[1])/2)+FAN_DIR[r][1]*(cz-(m[2]+m[3])/2):0;
+    const order=[0,1,2,3].map(k=>(k+h)%4).sort((a,b)=>out(b)-out(a)); if(p.prefer!==undefined) order.unshift(p.prefer);
+    let best=null;
+    for(const r of order){ const cells=reachCells(p,r), hit=inWay(p,cells,true); if(!best||hit.size<best.hit.size) best={r,cells,hit}; if(!hit.size) break; }
+    p.rot=best.r;
+    // a lawn's tuft with no room to spread its leaves is a little flower instead
+    if(best.hit.size&&design.ops[p.op]&&design.ops[p.op].op==='lawn'){ const T=LAWN[design.ops[p.op].texture||'lawn']||LAWN.lawn, f=resolvePart('flower1');
+      Object.assign(p,{key:'flower1',kind:'flower1',no:f.no,name:f.name,shape:f.shape,cost:f.cost,rot:0,color:T.bloom[(p.x+p.z)%T.bloom.length]}); continue; }
+    // (what's in its way: every way it could turn, so a plant hemmed in by a wall names the wall)
+    if(best.hit.size) clash(p,new Set([0,1,2,3].flatMap(r=>[...inWay(p,reachCells(p,r),true)])));
+    stake(p,best.cells); }
+  for(const [opi,list] of clashes){ const op=design.ops[opi]||{}, plant=op.op==='plant', first=list[0], p=first.p, q=parts[first.hit[0]-1];
+    const what=x=>{ const o=design.ops[x.op]; return o&&o.op==='plant'&&x.copy!==undefined?`the ${String(o.kind).toLowerCase()} at (${o.at[x.copy].join(', ')})`:`the ${x.name.toLowerCase()} at (${x.x}, ${x.y}, ${x.z})`; };
+    const who=plant&&p.copy!==undefined?`The ${String(op.kind).toLowerCase()} at (${op.at[p.copy].join(', ')})`:`The ${p.name.toLowerCase()} at (${p.x}, ${p.y}, ${p.z})`;
+    const more=plant?new Set(list.map(c=>c.p.copy)).size-1:list.length-1;
+    const its={sprig1:'its leaves',swordleaf:'its fronds',bush224:'its blades',pine2:'its branches',pine4:'its branches'}[p.key]||'it';
+    warnings.push({msg:`${who} has no room: ${its} would cut into ${ownPlant(p,q)?'the rest of it':what(q)}${more>0?` (and ${more} more ${plant?'of these plants':'of its parts'} too)`:''}. Leaves, blades and fronds reach past a plant's base (see the plant list): give it that room from walls, roofs, fences and other plants`, op:opi}); }
   // Lift-off roofs: ops sharing a "liftoff" name are built on their own, like a sub-build, and set
   // on the house as one piece (the manual shows them that way). They rest on the walls, gripping only
   // a few locating studs, so their plates needn't sit on studs as the house goes up.

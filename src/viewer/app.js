@@ -82,51 +82,56 @@ function ldrawGeo(no){ if(!USE_LDRAW||typeof LDRAW_PARTS==='undefined'||!LDRAW_P
   const q=new Int16Array(u8.buffer), f=new Float32Array(q.length), s=1/(20*LDRAW_PARTS.q);
   for(let k=0;k<q.length;k+=3){ f[k]=q[k]*s; f[k+1]=-q[k+1]*s; f[k+2]=q[k+2]*s; }
   const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(f,3)); g.computeVertexNormals(); return ldrawCache[no]=g; }
+// where a frond's clip grips the palm top's bar: the corner "bar" of its box, turned with it
+function swordBar(p){ const def=SPECIAL.swordleaf, [u,v]=def.bar, w=def.w, d=def.d, r=p.rot||0;
+  const [a,b]=[[u,v],[d-v,u],[w-u,d-v],[v,w-u]][r]; return [p.x+a,p.z+b]; }
 // Where a part's LDraw origin sits, and which way it turns: [x, y, z, quarter turns]
 function ldrawPose(p){ const def=SPECIAL[p.key]||{};
-  if(p.shape==='swordleaf'){ // clipped on one corner bar of the palm top, fanning out toward dir
-    const r={N:0,E:1,S:2,W:3}[p.dir||'N'], c=[[p.x+2.5,p.z+6],[p.x,p.z+2.5],[p.x+2.5,p.z],[p.x+6,p.z+2.5]][r], bar=[[0.5,0],[0,0.5],[-0.5,0],[0,-0.5]][r];
-    return [c[0]+bar[0]-OFF,(p.y+0.5)*PH,c[1]+bar[1]-OFF,r]; }
-  if(p.shape==='palm'||p.key==='bush224') return [p.x+p.w/2-OFF,p.y*PH,p.z+p.d/2-OFF,0]; // drawn up from the base
+  if(p.shape==='swordleaf'){ // its clip grips the palm top's bar at the "bar" corner of its box and it fans straight
+    // out from there, diagonally (an eighth turn more than its rot); LDraw's origin is 1 1/2 studs out from the clip
+    const r=p.rot||0, b=swordBar(p), d=[[1,-1],[1,1],[-1,1],[-1,-1]][r], k=1.5/Math.SQRT2;
+    return [b[0]+d[0]*k-OFF,(p.y+0.5)*PH,b[1]+d[1]*k-OFF,r+0.5]; }
+  if(p.shape==='palm') return [p.x+0.5-OFF,(p.y+p.h)*PH,p.z+0.5-OFF,0]; // origin on top of its body: its pin hangs into the stud below, its bars stand up
+  if(p.key==='bush224') return [p.x+p.w/2-OFF,p.y*PH,p.z+p.d/2-OFF,0]; // drawn up from the base
   if(p.shape==='pine') return [p.x+p.w/2-OFF,(p.y+1)*PH,p.z+p.d/2-OFF,0]; // its base plate hangs a plate below LDraw's origin
   if(def.at){ const a=turnCell(def,def.at,p.rot); return [p.x+a[0]+0.5-OFF,(p.y+1)*PH,p.z+a[1]+0.5-OFF,p.rot||0]; }
   // a standard part: LDraw's origin is the middle of the top of its body; a quarter turn per "rot" (the
   // long side of windows, arches and fences runs along x at rot 0), and slopes and side studs by "dir"/"face"
+  // (a part that turns freely on its stud, like a leafy sprig, is drawn at the turn the compiler gave it)
   const turn=LDRAW_TURN[p.key], d=p.dir||p.face;
-  const r=turn&&d?turn[d]:(p.rot||0)%2;
+  const r=turn&&d?turn[d]:def.turns?(p.rot||0):(p.rot||0)%2;
   return [p.x+p.w/2-OFF,(LDRAW_BOTTOM[p.key]?p.y:p.y+p.h)*PH,p.z+p.d/2-OFF,r]; }
 // quarter turns for parts that face a way: the slope's low side, the side stud, the bracket's plate
 // (LDraw's slope runs down toward -z and its side stud points to -z; the bracket's plate reaches +z)
 // glass whose LDraw origin isn't its frame's: how far down (LDU) it sits in the frame
 const GLASS_DROP={ 60603: 8 };
 const LDRAW_TURN={ cheese:{N:0,E:1,S:2,W:3}, snot:{N:0,E:1,S:2,W:3}, bracket11:{S:0,W:1,N:2,E:3} };
-// Round 1 x 1 plant pieces (the three-leaf sprig, the flower) sit on a single stud and turn freely on it, so a builder
-// sets them every which way: each gets its own angle, fixed by where it stands, so a design always looks the same.
-const FREE_TURN={ sprig1:true, flower1:true };
-function freeTurn(p){ let h=Math.imul(p.x+1,73856093)^Math.imul(p.y+1,19349663)^Math.imul(p.z+1,83492791);
-  h=Math.imul(h^(h>>>16),0x45d9f3b); h^=h>>>16; return FREE_TURN[p.key]?(h>>>0)/4294967296*Math.PI*2:0; }
+// A flower plate turns freely on its stud. Its four knobs stick out a tenth of a stud past its sides, into whatever is
+// next to it, unless they point into its corners: so it's set an eighth of a turn round, where it fits its cell exactly.
+// (The leafy sprig turns too, but its leaves fan to one side: the compiler turns it toward open space, its rot.)
+const FREE_TURN={ flower1:Math.PI/4 };
+function freeTurn(p){ return FREE_TURN[p.key]||0; }
 // parts whose LDraw origin is the bottom of the part, not the top of its body
 const LDRAW_BOTTOM={ cheese:true };
 const folCache={};
-function foliageGeo(p){ const key=`${p.shape}|${p.key}|${p.w}x${p.d}|${p.dir||''}`; if(folCache[key]) return folCache[key];
+function foliageGeo(p){ const key=`${p.shape}|${p.key}|${p.w}x${p.d}|${p.dir||''}|${p.shape==='swordleaf'?p.rot:''}`; if(folCache[key]) return folCache[key];
   const items=[], H=PH*0.9, def=SPECIAL[p.key]||{};
   if(p.shape==='leaves'){ // stems between the tips, and a boss under each tip's stud
     const tr=c=>p.w!==def.w?[c[1],c[0]]:c, at=c=>{ const [i,j]=tr(c); return [i+0.5-p.w/2,j+0.5-p.d/2]; };
     for(const [a,b] of def.branches||[]){ const [x0,z0]=at(a), [x1,z1]=at(b), L=Math.hypot(x1-x0,z1-z0);
       const g=new THREE.BoxGeometry(0.34,H*0.55,L); g.rotateY(Math.atan2(x1-x0,z1-z0)); g.translate((x0+x1)/2,H*0.3,(z0+z1)/2); items.push([g]); }
     for(const c of def.tips||[]){ const [x,z]=at(c), g=new THREE.CylinderGeometry(0.34,0.34,H,12); g.translate(x,H/2,z); items.push([g]); }
-  } else if(p.shape==='sprig'){ // a round plate with three almond leaves reaching out
+  } else if(p.shape==='sprig'){ // a round plate with three almond leaves fanning out to one side (east to north at rot 0)
     const pl=new THREE.CylinderGeometry(0.42,0.44,H,14); pl.translate(0,H/2,0); items.push([pl]);
-    for(let k=0;k<3;k++){ const a=Math.PI/6+k*Math.PI*2/3; items.push([place3(almondGeo(1.05,0.78,0.04,0.02,8,0.5),Math.sin(a)*0.15,H*0.3,Math.cos(a)*0.15,a)]); }
+    for(let k=0;k<3;k++){ const a=Math.PI/2+k*Math.PI/4; items.push([place3(almondGeo(1.05,0.6,0.04,0.02,8,0.5),Math.sin(a)*0.15,H*0.3,Math.cos(a)*0.15,a)]); }
   } else if(p.shape==='flower'){ // a round plate with four round knobs on its edge
     const pl=new THREE.CylinderGeometry(0.4,0.4,H,16); pl.translate(0,H/2,0); items.push([pl]);
     for(let k=0;k<4;k++){ const a=k*Math.PI/2+Math.PI/4, n=new THREE.CylinderGeometry(0.21,0.21,H*0.8,12); n.translate(Math.cos(a)*0.45,H*0.4,Math.sin(a)*0.45); items.push([n]); }
-  } else if(p.shape==='swordleaf'){ // a fan of sword leaves from the clip at the trunk side, out across the footprint
-    const out=Math.max(p.w,p.d), clip=out/2, ry={N:0,E:-Math.PI/2,S:Math.PI,W:Math.PI/2}[p.dir||'N'];
+  } else if(p.shape==='swordleaf'){ // a fan of sword leaves from the clip on the palm top's bar, diagonally out
     const cl=new THREE.BoxGeometry(0.5,0.5,0.5); cl.translate(0,0.25,0); items.push([cl]);
-    for(let k=0;k<6;k++){ const f=(k-2.5)/2.5*1.15, L=out*(k%2?0.84:0.98);
+    for(let k=0;k<6;k++){ const f=(k-2.5)/2.5*1.15, L=5.6*(k%2?0.84:0.98);
       items.push([place3(almondGeo(L,0.5,0.45,0.7,8),0,0.25,0,Math.PI+f)]); }
-    const merged=mergeGeos(items); merged.translate(0,0,clip); merged.rotateY(ry); return folCache[key]=merged;
+    const [bx,bz]=swordBar(p), merged=mergeGeos(items); merged.rotateY(-((p.rot||0)+0.5)*Math.PI/2); merged.translate(bx-p.x-p.w/2,0,bz-p.z-p.d/2); return folCache[key]=merged;
   }
   return folCache[key]=mergeGeos(items); }
 
@@ -175,7 +180,7 @@ function buildScene(){
       tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,{S:0,N:Math.PI,E:Math.PI/2,W:-Math.PI/2}[p.dir]||0,0);
       tmp.updateMatrix(); const r={p,m:tmp.matrix.clone()}; ch.push(r); inst.push(r); recOf.set(p.id,r);
     } else if(p.shape==='leaves'||p.shape==='sprig'||p.shape==='flower'||p.shape==='swordleaf'){
-      tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,-freeTurn(p),0); tmp.updateMatrix();
+      tmp.position.set(cx,y0,cz); tmp.scale.set(1,1,1); tmp.rotation.set(0,-(p.shape==='sprig'?(p.rot||0)*Math.PI/2:0)-freeTurn(p),0); tmp.updateMatrix();
       const geo=foliageGeo(p), r={p,m:tmp.matrix.clone()}; if(!fol.has(geo)) fol.set(geo,{O:[],T:[]}); fol.get(geo).O.push(r); inst.push(r); recOf.set(p.id,r);
     } else { const sp=makeSpecial(p); sp.pos0=sp.obj.position.clone(); sp.rot0=sp.obj.rotation.y; sp.obj.userData.part=p; specials.push(sp); recOf.set(p.id,sp); }
   }
@@ -214,9 +219,9 @@ function makeSpecial(p){
   } else if(p.shape==='pine'){ // a molded pine: a short base, then tiers of branches narrowing to the tip
     const r=p.w/2, n=p.w>2?4:3; put(new THREE.CylinderGeometry(0.7,0.7,PH*1.5,12),0,PH*0.75,0);
     for(let i=0;i<n;i++){ const hi=(H-PH*1.5)/n*1.35, rr=r*(1-i/(n+0.6)); put(new THREE.ConeGeometry(rr,hi,12),0,PH*1.5+(H-PH*1.5)/n*i+hi/2,0); }
-  } else if(p.shape==='palm'){ // palm top: a hub with four upright bars (fronds clip onto them)
-    put(new THREE.CylinderGeometry(0.34,0.34,PH,12),0,PH/2,0);
-    const bar=new THREE.CylinderGeometry(0.11,0.11,H-PH*0.5,8); for(const [bx,bz] of [[0.3,0.3],[-0.3,0.3],[0.3,-0.3],[-0.3,-0.3]]) put(bar,bx,PH*0.5+(H-PH*0.5)/2,bz);
+  } else if(p.shape==='palm'){ // palm top: a hub a brick tall with four bars standing up at its corners (fronds clip onto them)
+    put(new THREE.CylinderGeometry(0.6,0.6,H,12),0,H/2,0);
+    const bar=new THREE.CylinderGeometry(0.11,0.11,PH*2.5,8); for(const [bx,bz] of [[0.5,0.5],[-0.5,0.5],[0.5,-0.5],[-0.5,-0.5]]) put(bar,bx,H+PH*1.25,bz);
   }
   if(shapes.length) add(mergeGeos(shapes),main,0,0,0);
   g.position.set(p.x+p.w/2-OFF,p.y*PH,p.z+p.d/2-OFF);

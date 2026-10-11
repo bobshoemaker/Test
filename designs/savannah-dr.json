@@ -170,7 +170,7 @@
     {"op":"fence", "phase":"Backyard, pergola and fence", "color":"Reddish Brown", "line":[0,1,0,12]},
     {"op":"fence", "phase":"Backyard, pergola and fence", "color":"Reddish Brown", "line":[31,1,31,12]},
 
-    {"op":"sub", "phase":"Palm trees", "name":"Palm tree", "copies":[[12,0,26],[30,0,22]],
+    {"op":"sub", "phase":"Palm trees", "name":"Palm tree", "copies":[[12,0,26],[30,0,23]],
      "parts":[
        {"part":"roundplate2", "color":"Dark Tan", "at":[0,0,0]},
        {"part":"round1", "color":"Reddish Brown", "at":[0,1,0]},

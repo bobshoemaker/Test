@@ -32,8 +32,9 @@ closing gift that realtors give clients: a brick model of the house they just bo
   real LEGO foliage the way LEGO's own sets build it: trees on round-brick trunks under deep canopies of
   "plant leaves" 6 x 5 and 4 x 3 turned a quarter each layer and lifted a plate apart, with sprigs, flowers or
   fruit on the tips (`CANOPY`), about as tall as a two-story house; LEGO's molded pines (3471, 2435) for
-  conifers (GoBricks doesn't make them); leafy and flower-edged round plates; a palm top with swordleaf fronds
-  clipped to its bars; one shared palette (Reddish Brown trunks, bases and soil, a few greens) so kinds share
+  conifers (GoBricks doesn't make them); leafy and flower-edged round plates; palms of two palm tops a round brick
+  apart, each with two swordleaf fronds clipped to its corner bars pointing straight out (four on one would cut into
+  each other, and a frond turned any other way reaches the trunk with its clip); one shared palette (Reddish Brown trunks, bases and soil, a few greens) so kinds share
   parts, and a warning when a design's planting passes 16 different parts and colors (`PLANT_LOTS`), naming the
   plants that add the most, a `lawn` op that
   finishes bare ground (irregular patches of lighter and darker plates, grass tufts, a few flowers;
@@ -41,7 +42,17 @@ closing gift that realtors give clients: a brick model of the house they just bo
   square; `"lot": false` for a building alone, as most unit tests are), hints (never
   blocking) for big open stretches of plain tile, a lattice fence (3633) whose top is smooth, so nothing stacks on it (a tall fence stands on a course of bricks), a fixture library for roofs (skylight, HVAC unit,
   vents, solar panel, hatch, chimney), manual step grouping (one layer a step, like a big LEGO set: split evenly past
-  20 pieces, a step under 6 joins its neighbour), and the inventory.
+  20 pieces, a step under 6 joins its neighbour), and the inventory. Nothing may cut through anything as drawn: parts
+  drawn past their cells carry their overhang, measured from the LDraw geometry in half plates (`reach`: a leafy
+  sprig's leaves fan almost a stud over one side, a plant bush's blades and a small pine's branches spread past their
+  base, fronds droop), which nothing else may take and no two overhangs share (a plant leaves layer's open cells,
+  `gaps`, may be reached into). A leafy sprig turns freely on its stud, so the compiler turns it toward open space
+  (outward from its plant, or a turn the design gave it); a canopy puts sprigs only on tips with room; a lawn tuft goes
+  only where it can fan (one left with no room becomes a flower); anything else "has no room" and is warned about,
+  naming what it runs into. Library plants alone are clean (tested), so their spread (SPEC) is the room to leave.
+  A wall lantern is built where its side-stud brick would be: a black 1 x 2 plate juts a stud out of the wall at the
+  bottom of the course, under two 1 x 1 plates, and the lamp stands on it (a bracket on the side stud was drawn sunk
+  into the wall and couldn't be built).
   Parts must be easy to buy: `src/engine/parts-availability.js` (built by `scripts/availability.js`
   from Rebrickable's database downloads) says how many LEGO sets have included each part in each
   color and when; a part in a color is easy to get with 6+ sets, the latest 2018 or later. The packer
@@ -285,13 +296,17 @@ closing gift that realtors give clients: a brick model of the house they just bo
 - `src/viewer/ldraw-parts.js`: real part geometry from the LDraw Parts Library (CC BY 4.0, credited in
   the viewer and file header) for the plant parts and the specialty parts (cheese slope, round bricks
   and plates, cone, bracket, side-stud brick, windows and their glass, arches, fence), at low detail;
-  plain bricks, plates and tiles stay boxes with drawn studs; the round 1 x 1 plant pieces (the three-leaf sprig, the flower) turn
-  freely on their one stud, so each is drawn at its own angle, fixed by where it stands (`freeTurn`), not all facing one way; `?ldraw=0` shows the simple shapes; `scripts/ldraw.js` regenerates it (`--lowres` uses
+  plain bricks, plates and tiles stay boxes with drawn studs; the three-leaf sprig is drawn at the turn the compiler gave it (all
+  four quarter turns: its leaves fan to one side), the flower plate an eighth of a turn round (`freeTurn`), where its knobs point into
+  its corners and it fits its cell; the palm top's origin is on top of its body (its peg hangs into the stud below) and a frond's clip
+  sits on the palm top's bar; `?ldraw=0` shows the simple shapes; `scripts/ldraw.js` regenerates it (`--lowres` uses
   8-sided round primitives). The engine's stud layouts for those parts follow the LDraw files.
 - `scripts/`: `compile.js` (check a design), `design.js` (photos to design from the CLI),
   `bundle.js` (single-file HTML for sharing or publishing as a Claude artifact), `ldraw.js`,
   `availability.js` (rebuild the availability table; rerun now and then as LEGO releases sets),
-  `landing.js` (re-render the landing page's sample pictures), `gobricks.js` (rebuild the GoBricks table: ten matcher requests, replies cached in `.gobricks-cache/`).
+  `landing.js` (re-render the landing page's sample pictures), `gobricks.js` (rebuild the GoBricks table: ten matcher requests, replies cached in `.gobricks-cache/`),
+  `clips.js` (checks that no two parts of a design cut through each other as the viewer draws them, triangle against triangle;
+  rerun after changing a part's geometry, pose or `reach`; needs Playwright).
 
 ## Commands
 
@@ -302,6 +317,7 @@ closing gift that realtors give clients: a brick model of the house they just bo
                                               # BRICKHOUSE_PASSWORD puts the site behind a password (hosting: docs/deploy.md)
                                               # an organization-scoped key also needs BRICKHOUSE_ANTHROPIC_WORKSPACE_ID
     node scripts/compile.js designs/634-unit-a.json --steps
+    node scripts/clips.js designs/griffith-park.json  # nothing drawn cuts through anything (Playwright)
     node scripts/design.js a.jpg b.jpg --target 1200 --out designs/new.json
     node scripts/design.js a.jpg b.jpg --plan plan.png --parts --effort high --out designs/generated/x.json
                                               # plan first, then four parts; drafts, renders and overlays saved next to --out
@@ -368,7 +384,7 @@ before changing API parameters.
   A supplier without its own baseplate gets a neutral one it sells, and the lawn op lays a full layer of grass.
   Brickwith's part-list upload doesn't know the 1 x 2 x 3 window (60593), so the catalog leaves it out.
 - Plain bricks, plates and tiles are drawn as boxes with studs (no underside or logo). Sideways building is limited to side-stud bricks
-  in wall openings with a few details hung on them (lantern, house number, plaque, vent); mounted
+  in wall openings with a few details hung on them (house number, plaque, vent; a lantern juts out on a plate instead); mounted
   parts are drawn as small blocks.
 - Finding the house from photos and a 60 cm aerial alone isn't reliable yet: for 157 Brisbane St Claude picked a
   neighbour twice (145, then 133 Brisbane), and LA County's parcel records corrected it both times. The parcel
